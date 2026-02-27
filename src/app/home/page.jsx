@@ -247,8 +247,14 @@ export default function HomePage() {
                     더보기
                   </button>
                 </div>
-                {/* [MOD] PC 화면(lg)에서 2x2 배열을 위해 grid 속성 추가 */}
-                <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-x-4 lg:gap-y-6">
+                {/* [MOD] 모바일 화면에서는 가로 스크롤로, PC 화면(lg)에서는 2x2 배열 grid 유지 */}
+                <div
+                  className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 -mx-5 relative lg:static lg:overflow-x-visible lg:pb-0 lg:snap-none lg:pl-0 lg:scroll-pl-0 lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-x-4 lg:gap-y-6 lg:flex-col lg:flex-wrap"
+                  onMouseDown={(e) => onDragStart(e, 'routes')}
+                  onMouseLeave={() => onDragEnd('routes')}
+                  onMouseUp={() => onDragEnd('routes')}
+                  onMouseMove={(e) => onDragMove(e, 'routes')}
+                >
                   {[
                     {
                       img: "/images/jeju-beach.png",
@@ -266,25 +272,45 @@ export default function HomePage() {
                       img: "/images/jeju-beach.png",
                       text: "애월 해안도로 드라이브",
                     },
+                    {
+                      img: "/images/jeju-forest.png",
+                      text: "사려니숲길 아침 산책",
+                    },
                   ].map((item, index) => (
-                    // [MOD] PC 화면에서 썸네일 아래에 텍스트가 오도록 lg:flex-col 배치 적용
+                    // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
                     <div
                       key={index}
-                      className="flex items-center lg:flex-col lg:items-start gap-4 lg:gap-3 group cursor-pointer"
+                      className={`flex flex-col w-[140px] lg:w-auto flex-shrink-0 lg:flex-shrink cursor-pointer group snap-start lg:snap-align-none lg:items-start gap-3 ${index === 4 ? 'lg:hidden' : ''}`}
+                      onClickCapture={(e) => {
+                        if (dragState.current['routes']?.dragged) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
+                      }}
                     >
-                      <div className="w-20 h-20 lg:w-full lg:h-32 rounded-xl overflow-hidden relative flex-shrink-0 lg:flex-shrink">
+                      <div className="w-[140px] h-[140px] lg:w-full lg:h-32 rounded-xl overflow-hidden relative bg-[#f5f5f5]">
                         <Image
                           src={item.img}
                           alt="route"
                           fill
+                          draggable={false}
                           className="object-cover group-hover:scale-110 transition-transform"
                         />
                       </div>
-                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0">
+                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0 break-keep">
                         {item.text}
                       </p>
                     </div>
                   ))}
+
+                  {/* [ADD] 모바일 가로 스크롤 마지막 "더보기" 요소 추가 (PC에서는 숨김) */}
+                  <div className="flex flex-col gap-3 w-[100px] lg:hidden flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4">
+                    <div className="w-14 h-14 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
+                      <ChevronRight className="w-6 h-6 text-[#6d818f]" />
+                    </div>
+                    <span className="text-[14px] font-medium text-[#6d818f] mt-1">더보기</span>
+                  </div>
                 </div>
               </div>
 
@@ -298,8 +324,14 @@ export default function HomePage() {
                     더보기
                   </button>
                 </div>
-                {/* [MOD] PC 화면(lg)에서 2x2 배열을 위해 grid-cols-2 적용 */}
-                <div className="grid grid-cols-2 lg:grid-cols-2 gap-4 lg:gap-x-4 lg:gap-y-6">
+                {/* [MOD] 모바일 화면에서는 가로 스크롤로, PC 화면(lg)에서는 2x2 배열 grid-cols-2 적용 */}
+                <div
+                  className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 -mx-5 relative lg:static lg:overflow-x-visible lg:pb-0 lg:snap-none lg:pl-0 lg:scroll-pl-0 lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-x-4 lg:gap-y-6 lg:flex-col lg:flex-wrap"
+                  onMouseDown={(e) => onDragStart(e, 'restaurants')}
+                  onMouseLeave={() => onDragEnd('restaurants')}
+                  onMouseUp={() => onDragEnd('restaurants')}
+                  onMouseMove={(e) => onDragMove(e, 'restaurants')}
+                >
                   {[
                     {
                       img: "/images/jeju-beach.png",
@@ -317,25 +349,45 @@ export default function HomePage() {
                       img: "/images/jeju-beach.png",
                       text: "해운대 오션뷰 감성 숙소 모음",
                     },
+                    {
+                      img: "/images/jeju-hill.png",
+                      text: "황리단길 핫플레이스 투어",
+                    },
                   ].map((item, index) => (
-                    // [MOD] PC 화면에서 썸네일 아래에 텍스트가 오도록 lg:flex-col 유지
+                    // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
                     <div
                       key={index}
-                      className="flex flex-col lg:items-start gap-3 group cursor-pointer"
+                      className={`flex flex-col w-[140px] lg:w-auto flex-shrink-0 lg:flex-shrink cursor-pointer group snap-start lg:snap-align-none lg:items-start gap-3 ${index === 4 ? 'lg:hidden' : ''}`}
+                      onClickCapture={(e) => {
+                        if (dragState.current['restaurants']?.dragged) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
+                      }}
                     >
-                      <div className="w-full h-28 lg:h-32 rounded-xl overflow-hidden relative">
+                      <div className="w-[140px] h-[140px] lg:w-full lg:h-32 rounded-xl overflow-hidden relative bg-[#f5f5f5]">
                         <Image
                           src={item.img}
                           alt="restaurant"
                           fill
+                          draggable={false}
                           className="object-cover group-hover:scale-110 transition-transform"
                         />
                       </div>
-                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0">
+                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0 break-keep">
                         {item.text}
                       </p>
                     </div>
                   ))}
+
+                  {/* [ADD] 모바일 가로 스크롤 마지막 "더보기" 요소 추가 (PC에서는 숨김) */}
+                  <div className="flex flex-col gap-3 w-[100px] lg:hidden flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4">
+                    <div className="w-14 h-14 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
+                      <ChevronRight className="w-6 h-6 text-[#6d818f]" />
+                    </div>
+                    <span className="text-[14px] font-medium text-[#6d818f] mt-1">더보기</span>
+                  </div>
                 </div>
               </div>
             </div>
