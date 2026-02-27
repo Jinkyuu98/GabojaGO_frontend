@@ -66,7 +66,8 @@ export const StepLayout = ({
 
           {/* Content Section */}
           <div
-            className={`flex-1 flex flex-col ${contentBgColor} px-5 pt-8 pb-32 lg:pb-8 overflow-y-auto`}
+            // [MOD] PC 환경에서 fixedFooter가 적용되었을 때 하단 콘텐츠가 여백에 가려지지 않도록 패딩(lg:pb-32) 추가
+            className={`flex-1 flex flex-col ${contentBgColor} px-5 pt-8 pb-32 ${fixedFooter ? "lg:pb-32" : "lg:pb-8"} overflow-y-auto`}
           >
             <div className="flex-none">{children}</div>
 
