@@ -117,14 +117,14 @@ export default function HomePage() {
               가보자<span className="text-[#7a28fa]">GO</span>
             </h1>
             <button
-              className="bg-[#7a28fa] text-white px-5 py-2.5 lg:px-6 lg:py-3 rounded-full text-[14px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all"
+              // [MOD] 여행 일정 데이터가 없을 경우 버튼 숨기기 (PC, 모바일 공통)
+              className={`bg-[#111111] text-white px-5 py-2.5 lg:px-6 lg:py-3 rounded-full text-[14px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all ${!hasTripData ? "hidden" : ""}`}
               onClick={() => {
-                resetTravelData(); // [ADD] 기존 입력 데이터 초기화
-                setTravelData({ creationType: "ai" });
-                router.push("/onboarding/location");
+                // [MOD] 바로 AI 일정 생성으로 넘어가지 않고 ActionSheet를 띄우도록 수정
+                setIsActionSheetOpen(true);
               }}
             >
-              AI 일정 생성
+              일정 생성하기
             </button>
           </div>
         </header>
@@ -135,12 +135,9 @@ export default function HomePage() {
             <p className="text-[#898989] text-[15px]">여행 일정을 불러오는 중입니다...</p>
           </div>
         ) : hasTripData ? (
-          <div className="lg:grid lg:grid-cols-12 lg:gap-10 px-5">
+          <div className="lg:grid lg:grid-cols-12 lg:gap-8 px-5">
             {/* Main Travel Card Column */}
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
-              <h2 className="hidden lg:block text-[20px] font-bold text-[#111] mb-2">
-                나의 진행 중인 여행
-              </h2>
               <div className="flex flex-col gap-4">
                 {ongoingTrips.map((trip) => {
                   // [ADD] 동행자 데이터에 '가족과, 연인과' 등의 서술어가 없는 경우
@@ -154,7 +151,7 @@ export default function HomePage() {
                   return (
                     <div
                       key={trip.iPK}
-                      className="bg-[#eaf1f7] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-md transition-shadow"
+                      className="bg-[#eaf1f7] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-"
                       onClick={() => router.push(`/trips/${trip.iPK}`)}
                     >
                       {/* Trip Info */}
@@ -239,18 +236,19 @@ export default function HomePage() {
             </div>
 
             {/* Side Content Column - Popular Lists */}
-            <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-12 lg:gap-14 mt-12 lg:mt-0">
+            <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-12 lg:gap-16 mt-12 lg:mt-0 lg:border lg:border-[#e5eef4] lg:p-6 lg:rounded-2xl">
               {/* Popular Travel Routes */}
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-[18px] lg:text-[20px] font-bold text-[#111111]">
                     인기 여행 코스 TOP10
                   </h2>
-                  <button className="text-[14px] font-semibold text-[#7a28fa]">
-                    전체보기
+                  <button className="text-[14px] font-semibold text-[#999999]">
+                    더보기
                   </button>
                 </div>
-                <div className="flex flex-col gap-4">
+                {/* [MOD] PC 화면(lg)에서 2x2 배열을 위해 grid 속성 추가 */}
+                <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-x-4 lg:gap-y-6">
                   {[
                     {
                       img: "/images/jeju-beach.png",
@@ -264,12 +262,17 @@ export default function HomePage() {
                       img: "/images/jeju-forest.png",
                       text: "제주 비밀의 숲 힐링 코스",
                     },
+                    {
+                      img: "/images/jeju-beach.png",
+                      text: "애월 해안도로 드라이브",
+                    },
                   ].map((item, index) => (
+                    // [MOD] PC 화면에서 썸네일 아래에 텍스트가 오도록 lg:flex-col 배치 적용
                     <div
                       key={index}
-                      className="flex items-center gap-4 group cursor-pointer"
+                      className="flex items-center lg:flex-col lg:items-start gap-4 lg:gap-3 group cursor-pointer"
                     >
-                      <div className="w-20 h-20 rounded-2xl overflow-hidden relative flex-shrink-0">
+                      <div className="w-20 h-20 lg:w-full lg:h-32 rounded-xl overflow-hidden relative flex-shrink-0 lg:flex-shrink">
                         <Image
                           src={item.img}
                           alt="route"
@@ -277,7 +280,7 @@ export default function HomePage() {
                           className="object-cover group-hover:scale-110 transition-transform"
                         />
                       </div>
-                      <p className="text-[15px] font-bold text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors">
+                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0">
                         {item.text}
                       </p>
                     </div>
@@ -291,26 +294,36 @@ export default function HomePage() {
                   <h2 className="text-[18px] lg:text-[20px] font-bold text-[#111111]">
                     실시간 인기 맛집
                   </h2>
-                  <button className="text-[14px] font-semibold text-[#7a28fa]">
-                    전체보기
+                  <button className="text-[14px] font-semibold text-[#999999]">
+                    더보기
                   </button>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
+                {/* [MOD] PC 화면(lg)에서 2x2 배열을 위해 grid-cols-2 적용 */}
+                <div className="grid grid-cols-2 lg:grid-cols-2 gap-4 lg:gap-x-4 lg:gap-y-6">
                   {[
                     {
-                      img: "/images/restaurant-1.png",
-                      text: "맛있는 초밥집 도쿄",
+                      img: "/images/jeju-beach.png",
+                      text: "금릉해변과 카페 맛집 코스",
                     },
                     {
-                      img: "/images/restaurant-2.png",
-                      text: "정통 파스타 인 로마",
+                      img: "/images/jeju-hill.png",
+                      text: "제주 오름과 먹방 숙소 추천",
+                    },
+                    {
+                      img: "/images/jeju-forest.png",
+                      text: "제주 비밀의 숲 힐링 코스",
+                    },
+                    {
+                      img: "/images/jeju-beach.png",
+                      text: "해운대 오션뷰 감성 숙소 모음",
                     },
                   ].map((item, index) => (
+                    // [MOD] PC 화면에서 썸네일 아래에 텍스트가 오도록 lg:flex-col 유지
                     <div
                       key={index}
-                      className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-4 group cursor-pointer"
+                      className="flex flex-col lg:items-start gap-3 group cursor-pointer"
                     >
-                      <div className="w-full lg:w-20 h-28 lg:h-20 rounded-2xl overflow-hidden relative">
+                      <div className="w-full h-28 lg:h-32 rounded-xl overflow-hidden relative">
                         <Image
                           src={item.img}
                           alt="restaurant"
@@ -318,7 +331,7 @@ export default function HomePage() {
                           className="object-cover group-hover:scale-110 transition-transform"
                         />
                       </div>
-                      <p className="text-[15px] font-bold text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors">
+                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0">
                         {item.text}
                       </p>
                     </div>
@@ -408,8 +421,9 @@ export default function HomePage() {
               ))}
             </div>
           </div>
-        )}
-      </div>
+        )
+        }
+      </div >
 
       <ActionSheet
         isOpen={isActionSheetOpen}
