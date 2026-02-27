@@ -54,7 +54,14 @@ export default function DateSelectionPage() {
             {startDate && endDate && (
               <span className="text-[15px] font-semibold text-[#7a28fa] tracking-[-0.5px]">
                 {format(startDate, "M월 d일", { locale: ko })} ~{" "}
-                {format(endDate, "d일", { locale: ko })}
+                {/* [MOD] 시작 월과 종료 월이 다를 경우(년도 포함) 종료일에도 월을 표시하도록 수정 */}
+                {format(
+                  endDate,
+                  startDate.getMonth() === endDate.getMonth() && startDate.getFullYear() === endDate.getFullYear()
+                    ? "d일"
+                    : "M월 d일",
+                  { locale: ko }
+                )}
               </span>
             )}
           </div>
