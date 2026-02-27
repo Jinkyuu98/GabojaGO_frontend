@@ -35,7 +35,7 @@ export default function LocationInputPage() {
       }
     >
       <TextInput
-        placeholder="예) 제주도, 오사카, 다낭"
+        placeholder="예) 제주도, 경주, 부산"
         value={location}
         onChange={(e) => setLocation(e.target.value)}
         onEnter={handleNext}

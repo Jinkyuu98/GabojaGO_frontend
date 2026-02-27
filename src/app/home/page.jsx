@@ -16,12 +16,21 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState("전체");
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
   const [hasTripData, setHasTripData] = useState(false);
+  const [isBrowseMode, setIsBrowseMode] = useState(false);
   const [ongoingTrips, setOngoingTrips] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // [ADD] 컴포넌트 마운트 시 최초 1회 실행되는 useEffect
   // 진행 중인 일정을 백엔드로부터 불러오는 로직을 포함
   useEffect(() => {
+    // [ADD] 브라우즈(둘러보기) 모드 체크
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "browse") {
+      setIsBrowseMode(true);
+      setIsLoading(false);
+      return;
+    }
+
     const fetchSchedules = async () => {
       try {
         setIsLoading(true);
@@ -117,14 +126,19 @@ export default function HomePage() {
               가보자<span className="text-[#7a28fa]">GO</span>
             </h1>
             <button
-              // [MOD] 여행 일정 데이터가 없을 경우 버튼 숨기기 (PC, 모바일 공통)
-              className={`bg-[#111111] text-white px-5 py-2.5 lg:px-6 lg:py-3 rounded-full text-[14px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all ${!hasTripData ? "hidden" : ""}`}
+              // [MOD] 둘러보기 모드일 때 "AI 일정 생성"으로 노출, 둘 다 아니면(일정 데이터 없는 로그인 유저) 숨김
+              className={`bg-[#111111] text-white px-5 py-2.5 lg:px-6 lg:py-3 rounded-full text-[14px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all ${!hasTripData && !isBrowseMode ? "hidden" : ""}`}
               onClick={() => {
-                // [MOD] 바로 AI 일정 생성으로 넘어가지 않고 ActionSheet를 띄우도록 수정
-                setIsActionSheetOpen(true);
+                if (isBrowseMode) {
+                  // [MOD] 둘러보기 모드(AI 일정 생성 버튼)에서는 바텀시트를 건너뛰고 바로 진입
+                  router.push("/onboarding/location");
+                } else {
+                  // [MOD] 일정 생성하기 버튼일 때는 ActionSheet를 띄움
+                  setIsActionSheetOpen(true);
+                }
               }}
             >
-              일정 생성하기
+              {isBrowseMode ? "AI 일정 생성" : "일정 생성하기"}
             </button>
           </div>
         </header>
@@ -133,6 +147,70 @@ export default function HomePage() {
         {isLoading ? (
           <div className="flex justify-center items-center py-20 min-h-[50vh]">
             <p className="text-[#898989] text-[15px]">여행 일정을 불러오는 중입니다...</p>
+          </div>
+        ) : isBrowseMode ? (
+          <div className="flex flex-col gap-16 px-5 mt-1 lg:gap-24">
+            {/* [ADD] 둘러보기 모드: Empty State 카드 없이 인기 코스 리스트만 노출 */}
+            <div className="flex flex-col gap-10 lg:gap-24 pb-8 pt-6">
+              {[
+                { title: "제주도 인기 여행 코스", items: [{ img: "/images/jeju-beach.png", text: "금릉해변과 카페 맛집 코스" }, { img: "/images/jeju-hill.png", text: "제주 오름과 먹방 숙소 추천" }, { img: "/images/jeju-forest.png", text: "제주 비밀의 숲 힐링 코스" }, { img: "/images/jeju-beach.png", text: "애월 해안도로 드라이브" }, { img: "/images/jeju-hill.png", text: "성산일출봉 해돋이 투어" }, { img: "/images/jeju-forest.png", text: "안돌오름 비밀의 숲 산책" }, { img: "/images/jeju-beach.png", text: "우도 당일치기 자전거 코스" }, { img: "/images/jeju-hill.png", text: "한라산 영실코스 등반" }] },
+                { title: "부산 인기 여행 코스", items: [{ img: "/images/restaurant-1.png", text: "해운대 오션뷰 감성 숙소 모음" }, { img: "/images/restaurant-2.png", text: "광안리 야경과 함께하는 디너" }, { img: "/images/restaurant-1.png", text: "부산 로컬 맛집 투어 코스" }, { img: "/images/restaurant-2.png", text: "청사포 조개구이 먹방 코스" }, { img: "/images/restaurant-1.png", text: "흰여울문화마을 산책로 코스" }, { img: "/images/restaurant-2.png", text: "송도 해상케이블카 뷰 맛집" }, { img: "/images/restaurant-1.png", text: "기장 해동용궁사 힐링 코스" }, { img: "/images/restaurant-2.png", text: "서면 전포 카페거리 투어" }] },
+                { title: "경주 인기 여행 코스", items: [{ img: "/images/jeju-hill.png", text: "황리단길 핫플 카페 투어" }, { img: "/images/jeju-forest.png", text: "야경이 예쁜 동궁과 월지 코스" }, { img: "/images/jeju-beach.png", text: "불국사부터 시작하는 역사 탐방" }, { img: "/images/restaurant-1.png", text: "경주월드 어뮤즈먼트 코스" }, { img: "/images/jeju-hill.png", text: "대릉원 사진 명소 탐방 코스" }, { img: "/images/jeju-forest.png", text: "첨성대 핑크뮬리 스냅 코스" }, { img: "/images/jeju-beach.png", text: "보문관광단지 호수 산책" }, { img: "/images/restaurant-1.png", text: "교촌마을 한옥 체험과 맛집" }] },
+              ].map((section, idx) => (
+                <div key={idx} className="flex flex-col gap-6">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[18px] lg:text-[24px] font-bold text-[#111111]">
+                      {section.title}
+                    </h2>
+                    <ChevronRight size={20} className="text-[#abb1b9] cursor-pointer" />
+                  </div>
+                  <div
+                    className="flex gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 lg:pl-0 lg:scroll-pl-0 -mx-5 lg:mx-0 relative cursor-grab active:cursor-grabbing"
+                    onMouseDown={(e) => onDragStart(e, idx)}
+                    onMouseLeave={() => onDragEnd(idx)}
+                    onMouseUp={() => onDragEnd(idx)}
+                    onMouseMove={(e) => onDragMove(e, idx)}
+                  >
+                    {section.items.map((item, itemIdx) => (
+                      <div
+                        key={itemIdx}
+                        className={`gap-3 w-[140px] lg:w-[220px] flex-shrink-0 cursor-pointer group snap-start flex-col ${itemIdx >= 5 ? 'hidden lg:flex' : 'flex'}`}
+                        onClickCapture={(e) => {
+                          if (dragState.current[idx]?.dragged) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                          }
+                          router.push(`/trips/popular/${idx}-${itemIdx}`)
+                        }}
+                      >
+                        <div className="w-[140px] h-[140px] lg:w-[220px] lg:h-[220px] rounded-2xl overflow-hidden relative bg-[#f5f5f5]">
+                          <Image
+                            src={item.img}
+                            alt="course thumbnail"
+                            fill
+                            draggable={false}
+                            className="object-cover group-hover:scale-110 transition-transform"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <p className="text-[16px] lg:text-[20px] font-medium lg:font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors break-keep mt-1 lg:mt-2">
+                          {item.text}
+                        </p>
+                      </div>
+                    ))}
+                    <div className="flex flex-col gap-3 w-[100px] lg:w-[140px] flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4 lg:pt-8">
+                      <div className="w-14 h-14 lg:w-16 lg:h-16 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
+                        <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 text-[#6d818f]" />
+                      </div>
+                      <span className="text-[14px] lg:text-[16px] font-medium text-[#6d818f] mt-1 lg:mt-2">더보기</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : hasTripData ? (
           <div className="lg:grid lg:grid-cols-12 lg:gap-8 px-5">

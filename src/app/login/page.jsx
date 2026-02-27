@@ -88,7 +88,7 @@ function LoginContent() {
   // [ADD] 각 경로로의 이동을 처리하는 핸들러 함수들
   const handleSignup = () => router.push("/signup"); // 회원가입 페이지 이동
   const handleCreateItinerary = () => router.push("/onboarding/location"); // 일정 생성 시작
-  const handleBrowse = () => router.push("/home"); // 비로그인 둘러보기
+  const handleBrowse = () => router.push("/home?mode=browse"); // 비로그인 둘러보기
 
   return (
     // [ADD] 모바일 뷰포트 레이아웃을 위한 컨테이너
@@ -184,7 +184,7 @@ function LoginContent() {
                   {/* 둘러보기 버튼 */}
                   <button
                     onClick={handleBrowse}
-                    className="w-full h-[60px] bg-white border-2 border-[#f2f4f6] text-[#111111] rounded-2xl text-[16px] font-bold flex items-center justify-center hover:bg-[#f2f4f6] transition-all"
+                    className="w-full h-[60px] bg-white border-2 border-[#e5e5e5] text-[#111111] rounded-2xl text-[16px] font-bold flex items-center justify-center hover:border-2 hover:border-[#7a28fa] hover:text-[#7a28fa] transition-all"
                   >
                     둘러보기
                   </button>
