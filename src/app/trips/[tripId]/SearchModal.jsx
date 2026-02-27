@@ -164,21 +164,19 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md">
-            <div className="bg-white w-[1240px] h-[820px] rounded-3xl shadow-2xl flex flex-col overflow-hidden relative animate-in fade-in zoom-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+            <div className="bg-white w-[90vw] max-w-[1240px] h-[90vh] max-h-[820px] rounded-3xl shadow-2xl flex flex-col overflow-hidden relative animate-in fade-in zoom-in duration-300">
                 {/* Header */}
                 <div className="px-8 py-5 border-b border-[#f2f4f6] flex items-center justify-between bg-white z-10">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-[#7a28fa]/10 rounded-xl flex items-center justify-center">
-                            <Image src="/icons/search.svg" alt="search" width={20} height={20} className="invert-[35%] sepia-[80%] saturate-[5000%] hue-rotate-[250deg]" />
-                        </div>
+
                         <div>
                             <h2 className="text-xl font-bold text-[#111111] leading-tight">장소 등록</h2>
-                            <p className="text-sm text-[#898989] font-medium">{day}일차 일정에 추가할 장소를 검색하세요</p>
+                            <p className="pt-1 text-md text-[#898989] font-medium">{day}일차 일정에 추가할 장소를 검색하세요</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2.5 hover:bg-gray-100 rounded-full transition-all group">
-                        <Image src="/icons/close.svg" alt="close" width={28} height={28} className="group-hover:rotate-90 transition-transform duration-300" />
+                        <Image src="/icons/close-icon.svg" alt="close" width={16} height={16} className="group-hover:rotate-90 transition-transform duration-300 w-5 h-5" />
                     </button>
                 </div>
 
@@ -194,7 +192,7 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     placeholder="장소명, 주소 검색"
-                                    className="flex-1 bg-transparent text-[16px] font-semibold text-[#111111] placeholder:text-[#abb1b9] outline-none"
+                                    className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
                                 />
                             </div>
                         </div>
@@ -234,8 +232,7 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full opacity-20">
-                                    <Image src="/icons/search.svg" alt="search" width={64} height={64} className="mb-4" />
-                                    <p className="text-lg font-medium">어디로 떠나시나요?</p>
+                                    <p className="text-md font-medium">찾고 싶으신 장소를 검색해 보세요!</p>
                                 </div>
                             )}
                         </div>
@@ -291,7 +288,7 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                         )}
 
                         {!selectedPlace && !isLoading && (
-                            <div className="absolute top-10 left-10 bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl shadow-lg border border-white/50 z-10 animate-in fade-in slide-in-from-left-4 duration-700">
+                            <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl shadow-lg border border-white/50 z-10 animate-in fade-in slide-in-from-left-4 duration-700">
                                 <p className="text-[#111111] font-bold text-base flex items-center gap-2">
                                     <span className="text-xl">🗺️</span> 왼쪽 목록에서 장소를 선택해 위치를 확인하세요
                                 </p>
