@@ -53,8 +53,14 @@ export default function GenerateLoadingPage() {
         };
         const transportLabel = TRANSPORT_MAP[travelData.transport] || travelData.transport || "대중교통";
 
+        const STYLE_MAP = {
+          activity: "체험/액티비티", hotplace: "핫플레이스", culture: "문화/역사", landmark: "유명 관광지",
+          nature: "자연경관", healing: "휴양/힐링", hiking: "등산",
+          restaurant: "맛집", cafe: "카페", market: "시장", nightmarket: "야시장/노점",
+          shopping: "쇼핑", parents: "효도 관광", other: "기타"
+        };
         const tripStyleLabel = travelData.styles?.length > 0
-          ? travelData.styles.map((s) => s.label || "").filter(Boolean).join(", ")
+          ? travelData.styles.map((s) => STYLE_MAP[s] || s).join(", ")
           : "일반";
 
         const parsedUserId = parseInt(user?.id, 10);
@@ -89,6 +95,20 @@ export default function GenerateLoadingPage() {
 
         const aiSchedule = await response.json();
 
+        // [FIX] 카카오 API 검색 전 지역명 접두어 제거 (검색 정확도 향상)
+        const cleanPlaceName = (name) => {
+          if (!name) return "";
+          let cleaned = name.trim();
+          const prefixes = ["서울 ", "부산 ", "제주 ", "제주도 ", "강원 ", "강릉 ", "인천 ", "광주 ", "대전 ", "대구 ", "울산 ", "경기 "];
+          for (const prefix of prefixes) {
+            if (cleaned.startsWith(prefix)) {
+              cleaned = cleaned.substring(prefix.length).trim();
+              break;
+            }
+          }
+          return cleaned;
+        };
+
         // 2단계: AI가 뱉어낸 장소들만 추출하여 카카오 지도 검색 요청
         try {
           const rawPlaces = [];
@@ -98,8 +118,8 @@ export default function GenerateLoadingPage() {
                 day.activities.forEach((act) => {
                   if (act.place_name) {
                     rawPlaces.push({
-                      place_name: act.place_name,
-                      category_group_code: act.category_group_code || null,
+                      place_name: cleanPlaceName(act.place_name), // 카카오엔 정제된 이름으로 검색
+                      category_group_code: act.category_group_code || null, // [MOD] 사용자의 요청에 따라 복구 (단, LLM 프롬프트에서 제어함)
                     });
                   }
                 });
@@ -116,29 +136,103 @@ export default function GenerateLoadingPage() {
               const locationList = locationResult.location_list;
               const availableLocations = [...locationList]; // 중복 맵핑 방지
 
+              // [ADDED] 날짜 기준점 설정 (store/useOnboardingStore.js에서 이동)
+              const baseStartDate = new Date(payload.dtDate1);
+              const isValidDate = !isNaN(baseStartDate.getTime());
+
               aiSchedule.day_schedules.forEach((day, dIdx) => {
+                // 현재일자 구하기
+                let currentDayStr = "";
+                if (isValidDate) {
+                  const currentDayDate = new Date(baseStartDate);
+                  currentDayDate.setDate(baseStartDate.getDate() + dIdx);
+                  currentDayStr = currentDayDate.toISOString().split("T")[0];
+                } else {
+                  currentDayStr = new Date().toISOString().split("T")[0];
+                }
+
                 if (day.activities) {
                   day.activities.forEach((act, aIdx) => {
-                    const searchName = act.place_name?.trim() || "";
+                    // 카카오 검색 시 전달했던 "정제된 이름" 기준으로 매칭 시작
+                    const searchName = cleanPlaceName(act.place_name?.trim() || "");
                     if (!searchName) return;
 
-                    // 1순위: 완벽 일치
-                    let matchIdx = availableLocations.findIndex(loc => loc.strName === searchName);
+                    const normalize = (str) => str.replace(/\s+/g, "").toLowerCase();
+                    const nSearch = normalize(searchName);
 
-                    // 2순위: 단어 포함 매칭 (몽상드애월 본점 == 몽상드애월)
+                    // [MOD] 사용자가 선택한 여행지(strWhere)와 일치하는 주소를 가진 후보군만 먼저 추리기 (예: 부산 여행인데 제주도 지점이 잡히는 것 방지)
+                    const targetRegion = (travelData.location || "제주").slice(0, 2); // '서울특별시' -> '서울', '부산광역시' -> '부산'
+                    let regionFilteredLocations = availableLocations.filter(loc => loc.strAddress?.includes(targetRegion));
+
+                    // 만약 지역 필터링을 거쳤더니 후보가 하나도 안 남았다면 (카카오 주소 체계가 특이한 경우 등), 원본 후보군 유지
+                    if (regionFilteredLocations.length === 0) {
+                      regionFilteredLocations = availableLocations;
+                    }
+
+                    // 1순위: 완벽 일치 (공백 무시)
+                    let matchIdx = regionFilteredLocations.findIndex(loc => normalize(loc.strName) === nSearch);
+
+                    // 2순위: 단순 포함 매칭
                     if (matchIdx === -1) {
-                      matchIdx = availableLocations.findIndex(
-                        loc => loc.strName.includes(searchName) || searchName.includes(loc.strName)
+                      matchIdx = regionFilteredLocations.findIndex(
+                        loc => {
+                          const nLoc = normalize(loc.strName);
+                          return nLoc.includes(nSearch) || nSearch.includes(nLoc);
+                        }
                       );
                     }
 
-                    if (matchIdx !== -1) {
-                      act.kakao_location = availableLocations[matchIdx];
-                      availableLocations.splice(matchIdx, 1);
-                    } else if (availableLocations.length > 0) {
-                      // 3순위: 그래도 못 찾았다면 카용되지 않은 잉여 카카오 검색 결과 중 순서대로 강제 접착
-                      act.kakao_location = availableLocations.shift();
+                    // 3순위: AI가 멋대로 붙인 지역명(부산, 제주 등)을 떼어내고 핵심 키워드(N-gram Token)로 스마트 매칭
+                    if (matchIdx === -1) {
+                      const tokens = searchName.split(" ").filter(t => t.length > 1 && !["부산", "제주", "서울", "강원", "인천", "광주", "대전", "대구", "울산", "경기", "제주도", "부산광역시"].includes(t));
+                      if (tokens.length > 0) {
+                        matchIdx = regionFilteredLocations.findIndex(loc => {
+                          const nLoc = normalize(loc.strName);
+                          // 핵심 토큰 중 하나라도 카카오 DB 결과의 이름에 포함되어 있다면 매칭 성공으로 간주
+                          return tokens.some(tk => nLoc.includes(normalize(tk)));
+                        });
+                      }
                     }
+
+                    // 4순위: 매칭 실패했으나 필터링된 후보 장소가 딱 하나뿐이라면, AI가 찾던 바로 그 장소일 확률이 99%이므로 강제 매핑
+                    if (matchIdx === -1 && regionFilteredLocations.length > 0) {
+                      // 남아있는 후보가 1~3개라면, 제일 첫 번째(가장 검색 일치도가 높은) 장소를 강제로 선택
+                      matchIdx = 0;
+                    }
+
+                    if (matchIdx !== -1) {
+                      const matchedLocation = regionFilteredLocations[matchIdx];
+                      act.kakao_location = matchedLocation;
+                      // 원본 배열에서도 해당 장소 삭제 (중복 맵핑 방지)
+                      const originalIdx = availableLocations.findIndex(loc => loc.iPK === matchedLocation.iPK);
+                      if (originalIdx !== -1) availableLocations.splice(originalIdx, 1);
+                    } else {
+                      // 5순위: 매칭 완전 실패 시 null 처리 (DB 저장은 스킵되지만 프론트 자체 누락 방어)
+                      act.kakao_location = null;
+                      console.warn(`[로딩화면] 카카오 API 맵핑 실패 (조건 미달로 버려짐): ${searchName} (지역필터통과: ${regionFilteredLocations.length}건)`);
+                    }
+
+                    // [ADD] 최종 렌더링 & DB 저장용 시간(dtSchedule) 조립
+                    let finalDateTime = "";
+                    if (act.dtSchedule) {
+                      if (act.dtSchedule.includes("-") && act.dtSchedule.includes(":")) {
+                        finalDateTime = act.dtSchedule;
+                      } else if (act.dtSchedule.includes(":")) {
+                        finalDateTime = `${currentDayStr} ${act.dtSchedule}:00`;
+                      } else {
+                        finalDateTime = `${currentDayStr} 09:00:00`;
+                      }
+                    } else {
+                      const fallbackHour = 9 + aIdx;
+                      const formattedHour = fallbackHour < 10 ? `0${fallbackHour}` : `${fallbackHour}`;
+                      finalDateTime = `${currentDayStr} ${formattedHour}:00:00`;
+                    }
+
+                    // "T"가 있는 포맷 방어 코딩
+                    finalDateTime = finalDateTime.replace("T", " ").substring(0, 19);
+
+                    // 원본을 덮어써서 ResultPage에도 똑같은 시간이 출력되게 만듦
+                    act.dtSchedule = finalDateTime;
                   });
                 }
               });

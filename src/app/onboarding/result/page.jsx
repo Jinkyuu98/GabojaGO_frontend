@@ -118,7 +118,7 @@ export default function ResultPage() {
     ...MOCK_TRIP,
     days: generatedTripData.day_schedules?.map((dayObj) => ({
       places: dayObj.activities?.map((act) => ({
-        name: act.place_name,
+        name: act.kakao_location?.strName || act.place_name,
         time: act.dtSchedule ? act.dtSchedule.split(' ')[1]?.substring(0, 5) : "",
         duration: act.strMemo || "방문",
         kakao: act.kakao_location || null // 실제 지도 렌더링에 사용할 카카오 API 데이터

@@ -122,60 +122,27 @@ export const useOnboardingStore = create(
           // 2) 로딩 화면에서 미리 병합해 둔 카카오 API(kakao_location) 데이터를 그대로 읽어 자식 테이블(Location)에 적재
           if (iScheduleFK && state.generatedTripData?.day_schedules) {
             try {
-              // [ADD] 여행 시작 기준일 생성 (유효하지 않은 날짜 대비 방어 코드 포함)
-              const baseStartDate = new Date(payload.dtDate1);
-              const isValidDate = !isNaN(baseStartDate.getTime());
-
               for (let dIdx = 0; dIdx < state.generatedTripData.day_schedules.length; dIdx++) {
                 const dayObj = state.generatedTripData.day_schedules[dIdx];
                 if (!Array.isArray(dayObj.activities)) continue;
-
-                // [ADD] 현재 Day의 날짜 (YYYY-MM-DD 형식) 식별
-                let currentDayStr = "";
-                if (isValidDate) {
-                  const currentDayDate = new Date(baseStartDate);
-                  currentDayDate.setDate(baseStartDate.getDate() + dIdx);
-                  currentDayStr = currentDayDate.toISOString().split("T")[0];
-                } else {
-                  currentDayStr = new Date().toISOString().split("T")[0];
-                }
 
                 for (let aIdx = 0; aIdx < dayObj.activities.length; aIdx++) {
                   const act = dayObj.activities[aIdx];
                   const loc = act.kakao_location; // 파이프라인(generate-loading)에서 미리 합쳐진 객체
 
                   if (loc && loc.iPK) {
-                    // [MOD] AI가 제공한 시간 데이터(dtSchedule)를 백엔드가 요구하는 형식(YYYY-MM-DD HH:MM:SS)으로 보장
-                    let finalDateTime = "";
-
-                    if (act.dtSchedule) {
-                      // case 1: "YYYY-MM-DD HH:MM..." 형식이면 그대로 채택
-                      if (act.dtSchedule.includes("-") && act.dtSchedule.includes(":")) {
-                        finalDateTime = act.dtSchedule;
-                      }
-                      // case 2: "10:30" 처럼 시간만 있다면 Base 날짜와 조합
-                      else if (act.dtSchedule.includes(":")) {
-                        finalDateTime = `${currentDayStr} ${act.dtSchedule}:00`;
-                      } else {
-                        // case 3: 예상치 못한 기타 형식일 경우 Fallback
-                        finalDateTime = `${currentDayStr} 09:00:00`;
-                      }
-                    } else {
-                      // [ADD] AI가 아예 시간을 안 준 경우: 09:00 부터 1시간씩 증가시켜 일괄 동일 시간 저장 방지 (순서 보장)
-                      const fallbackHour = 9 + aIdx; // 09:00, 10:00, 11:00...
-                      const formattedHour = fallbackHour < 10 ? `0${fallbackHour}` : `${fallbackHour}`;
-                      finalDateTime = `${currentDayStr} ${formattedHour}:00:00`;
+                    try {
+                      await addScheduleLocation({
+                        iScheduleFK: iScheduleFK,
+                        iLocationFK: loc.iPK,
+                        dtSchedule: act.dtSchedule, // [MOD] generate-loading 단계에서 완성된 최종 시간 그대로 사용
+                        strMemo: act.strMemo || "방문",
+                      });
+                    } catch (innerErr) {
+                      console.error(`[saveTrip] 개별 장소 저장 실패: ${act.place_name}`, innerErr);
                     }
-
-                    // [FIX] 최종 포맷의 길이나 형식(T 제거 등)을 백엔드의 DateTime 필드에 맞게 트리밍
-                    finalDateTime = finalDateTime.replace("T", " ").substring(0, 19);
-
-                    await addScheduleLocation({
-                      iScheduleFK: iScheduleFK,
-                      iLocationFK: loc.iPK,
-                      dtSchedule: finalDateTime,
-                      strMemo: act.strMemo || "방문",
-                    });
+                  } else {
+                    console.warn(`[saveTrip] 카카오 iPK 누락으로 저장 스킵됨: ${act.place_name}`);
                   }
                 }
               }

@@ -188,7 +188,7 @@ export default function TripDetailPage() {
               newDays[dayIdx].places.push({
                 name: locItem.location.strName,
                 time: timeStr,
-                duration: "1시간",
+                duration: locItem.strMemo || "1시간", // [MOD] 하드코딩된 '1시간' 대신 DB에 저장된 strMemo 표출
                 latitude: parseFloat(locItem.location.ptLatitude || 0),
                 longitude: parseFloat(locItem.location.ptLongitude || 0)
               });
