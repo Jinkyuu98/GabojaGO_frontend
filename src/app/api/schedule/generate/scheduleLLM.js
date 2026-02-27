@@ -1,4 +1,5 @@
-import { ChatOpenAI } from "@langchain/openai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+// import { ChatOpenAI } from "@langchain/openai"; // [MOD] 기존 OpenAI 코드 주석 처리
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { ScheduleResponseSchema } from "./scheduleModel.js";
@@ -8,11 +9,19 @@ import { ScheduleResponseSchema } from "./scheduleModel.js";
  */
 export class ScheduleGPT {
     constructor() {
-        // LLM 초기화 (예: 모델명이 환경 변수에 저장되어 있다고 가정)
-        // Python 버전의 vision_llm/LLM TripGPT를 상속받은 것을 바닐라 JS로 통합 구현
+        // [MOD] 기존 OpenAI 코드 주석 처리 보존
+        /*
         this.llm = new ChatOpenAI({
             modelName: process.env.LLM_MODEL_SCHEDULE || "gpt-4o-mini",
-            // temperature: 0.7, (일부 모델에서 미지원하므로 주석 처리 또는 기본 동작 위임)
+            // temperature: 0.7,
+        });
+        */
+
+        // [MOD] OpenAI에서 Google Gemini 모델로 교체 (Next.js 가 기본적으로 .env.local을 로드함)
+        this.llm = new ChatGoogleGenerativeAI({
+            model: "gemini-3-flash-preview", // [FIX] Google 모델은 modelName이 아닌 model 파라미터 사용
+            apiKey: process.env.GOOGLE_API_KEY,
+            // temperature: 0.7,
         });
 
         // Zod 스키마를 이용한 Output Parser 생성 (PydanticOutputParser 대체)
@@ -41,13 +50,25 @@ export class ScheduleGPT {
 5. 'strMemo'는 해당 장소에서 수행할 구체적인 활동이나 추천 메뉴 등을 15자 내외로 핵심만 요약해라.
 6. 모든 출력은 반드시 한국어로 작성해라.`;
 
-        // LangChain 프롬프트 템플릿: format_instructions를 부분 적용(partial)하여 생성
+        // [MOD] 기존 OpenAI 프롬프트 템플릿 주석 보존 (테마 추가)
+        /*
         const prompt = ChatPromptTemplate.fromMessages([
             ["system", systemPrompt],
             ["system", "{format_instructions}"],
             [
                 "human",
-                "위치: {strWhere}, 기간: {dtDate1}~{dtDate2}, 동행: {strWithWho}, 교통: {strTransport}, 총예산: {nTotalBudget}원(교통:{nTransportRatio}, 숙박:{nLodgingRatio}, 식비:{nFoodRatio})",
+                "위치: {strWhere}, 기간: {dtDate1}~{dtDate2}, 동행: {strWithWho}, 교통: {strTransport}, 테마: {strTripStyle}, 총예산: {nTotalBudget}원(교통:{nTransportRatio}, 숙박:{nLodgingRatio}, 식비:{nFoodRatio})",
+            ],
+        ]);
+        */
+
+        // [FIX] Gemini는 시스템 메시지가 여러 개 연달아 오면 에러를 뱉으므로 하나의 배열 요소로 문자열 템플릿을 합칩니다.
+        // [ADD] 테마(strTripStyle) 프롬프트에 추가
+        const prompt = ChatPromptTemplate.fromMessages([
+            ["system", `${systemPrompt}\n\n{format_instructions}`],
+            [
+                "human",
+                "위치: {strWhere}, 기간: {dtDate1}~{dtDate2}, 동행: {strWithWho}, 교통: {strTransport}, 테마: {strTripStyle}, 총예산: {nTotalBudget}원(교통:{nTransportRatio}, 숙박:{nLodgingRatio}, 식비:{nFoodRatio})",
             ],
         ]);
 

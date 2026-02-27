@@ -68,6 +68,7 @@ export default function GenerateLoadingPage() {
           strWhere: travelData.location || "제주도",
           strWithWho: companionLabel,
           strTransport: transportLabel,
+          strTripStyle: tripStyleLabel, // [ADD] 여행 테마 추가
           nTotalPeople: travelData.peopleCount || 1,
           nTotalBudget: calculateTotalBudget(travelData.budget),
           nAlarmRatio: 25,

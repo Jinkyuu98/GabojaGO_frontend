@@ -10,6 +10,7 @@ export const ScheduleRequestSchema = z.object({
     strWhere: z.string().describe("여행지 (location)"),
     strWithWho: z.string().describe("동행자 (companion)"),
     strTransport: z.string().describe("교통수단 (transport)"),
+    strTripStyle: z.string().describe("여행테마"), // [ADD] 여행 테마 추가
     nTotalPeople: z.number().int().default(1).describe("인원수"),
     nTotalBudget: z.number().int().default(0).describe("총 예산"),
     nAlarmRatio: z.number().int().default(25).describe("알림 비율"),
