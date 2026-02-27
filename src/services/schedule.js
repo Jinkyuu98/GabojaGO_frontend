@@ -21,10 +21,10 @@ export const requestScheduleLocations = async (data) => {
 
 /**
  * 일정 목록 조회 API
- * @param {string} status - 조회할 일정 상태 (예: "a", "b", "c")
+ * @param {string} status - 조회할 일정 상태 (예: "A", "B", "C")
  * @returns {Promise}
  */
-export const getScheduleList = async (status = "") => {
+export const getScheduleList = async (status = "A") => {
     const url = status ? `/schedule/list?chStatus=${status}` : "/schedule/list";
     const res = await api.get(url);
     return res.data;

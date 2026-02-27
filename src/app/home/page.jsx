@@ -19,25 +19,41 @@ export default function HomePage() {
   const [ongoingTrips, setOngoingTrips] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // [ADD] 컴포넌트 마운트 시 최초 1회 실행되는 useEffect
+  // 진행 중인 일정을 백엔드로부터 불러오는 로직을 포함
   useEffect(() => {
     const fetchSchedules = async () => {
       try {
         setIsLoading(true);
-        const res = await getScheduleList("B");
-        if (res?.schedule_list) {
-          const ongoing = res.schedule_list.filter(trip => trip.chStatus?.toUpperCase() === "B");
-          setOngoingTrips(ongoing);
-          setHasTripData(ongoing.length > 0);
-        }
+        // [MOD] 백엔드에서 chStatus 값을 필수로 요구하므로, "A" 상태의 일정을 호출
+        // 사용자의 일정 중 "A" (진행 중 또는 예정된 상태) 필터링
+        const resA = await getScheduleList("A");
+
+        // [MOD] API 응답 데이터를 확인하여 빈 배열 또는 다른 구조로 반환되는지 확인
+        console.log("resA:", resA);
+
+        // [ADD] 실제 배열 데이터 추출. 없을 경우 빈 배열 값 할당 처리
+        const listA = resA?.schedule_list || [];
+        const ongoing = [...listA];
+
+        console.log("ongoing trips:", ongoing);
+
+        // [ADD] 화면에 띄울 진행 중인 여행지 데이터를 상태 변수로 저장
+        setOngoingTrips(ongoing);
+        // [ADD] 여행 데이터가 1개 이상 있는지 체크하는 boolean 변수 세팅
+        setHasTripData(ongoing.length > 0);
       } catch (err) {
+        // [FIX] 데이터 가져오기 실패 시 오류 콘솔 출력
         console.error("일정 목록 조회 실패:", err);
       } finally {
+        // [ADD] 성공, 에러 여부 상관없이 로딩 상태는 false로 변경
         setIsLoading(false);
       }
     };
     fetchSchedules();
   }, []);
 
+  // [ADD] 백엔드에서 받아온 Date(ISO형식 등) 문자열을 YYYY.MM.DD 형식으로 변경하는 헬퍼 함수
   const formatDateRange = (start, end) => {
     if (!start) return "";
     const cleanStart = start.split("T")[0].replace(/-/g, ".");
@@ -45,10 +61,11 @@ export default function HomePage() {
     const cleanEnd = end.split("T")[0].replace(/-/g, ".");
     const startYear = cleanStart.split(".")[0];
     const endYear = cleanEnd.split(".")[0];
+    // [MOD] 시작 연도와 종료 연도가 같을 경우 종료 연도는 생략 처리
     return startYear === endYear ? `${cleanStart} ~ ${cleanEnd.substring(5)}` : `${cleanStart} ~ ${cleanEnd}`;
   };
 
-  // 드래그 스크롤 상태를 각 인덱스별로 관리하는 Ref
+  // [ADD] 하단 인기 여행 코스의 가로 스크롤을 드래그로 조작하기 위한 상태값을 저장하는 Ref
   const dragState = useRef({});
 
   const onDragStart = (e, idx) => {
@@ -126,6 +143,8 @@ export default function HomePage() {
               </h2>
               <div className="flex flex-col gap-4">
                 {ongoingTrips.map((trip) => {
+                  // [ADD] 동행자 데이터에 '가족과, 연인과' 등의 서술어가 없는 경우
+                  // 자연스럽게 '와/과 함께'를 붙여주는 텍스트 전처리
                   const companionText = trip.strWithWho
                     ? ["친구와", "연인과", "가족과", "부모님과", "친구", "연인", "가족", "부모님"].includes(trip.strWithWho)
                       ? `${trip.strWithWho} 함께`
