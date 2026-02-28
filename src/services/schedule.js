@@ -76,3 +76,14 @@ export const addScheduleExpense = async (data) => {
     const res = await api.post("/schedule/expense/append", data);
     return res.data;
 };
+
+// [ADD] 장소 삭제 API 추가
+/**
+ * 일정 내 장소 삭제 API
+ * @param {number} iScheduleLocationPK - 삭제할 장소의 PK
+ * @returns {Promise}
+ */
+export const removeScheduleLocation = async (iScheduleLocationPK) => {
+    const res = await api.post(`/schedule/location/remove`, { iScheduleLocationPK });
+    return res.data;
+};

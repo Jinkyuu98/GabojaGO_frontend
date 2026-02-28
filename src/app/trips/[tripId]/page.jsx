@@ -8,6 +8,8 @@ import { clsx } from "clsx";
 import SearchModal from "./SearchModal";
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
+import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
+import { removeScheduleLocation } from "../../../services/schedule"; // [ADD] 장소 삭제 API 추가
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -186,6 +188,7 @@ export default function TripDetailPage() {
               const timeStr = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
 
               newDays[dayIdx].places.push({
+                id: locItem.iPK || locItem.iScheduleLocationPK, // [ADD] 장소 삭제 시 필요한 PK값 매핑
                 name: locItem.location.strName,
                 time: timeStr,
                 duration: locItem.strMemo || "1시간", // [MOD] 하드코딩된 '1시간' 대신 DB에 저장된 strMemo 표출
@@ -495,6 +498,24 @@ export default function TripDetailPage() {
     }
   };
 
+  // [ADD] 장소 삭제 이벤트 핸들러 추가
+  const handleDeletePlace = async (placeId) => {
+    if (!placeId) {
+      alert("삭제할 장소 정보가 없습니다.");
+      return;
+    }
+    if (window.confirm("정말 이 장소를 삭제하시겠습니까?")) {
+      try {
+        await removeScheduleLocation(placeId);
+        alert("장소가 삭제되었습니다.");
+        window.location.reload();
+      } catch (err) {
+        console.error("장소 삭제 실패:", err);
+        alert("장소 삭제 중 오류가 발생했습니다.");
+      }
+    }
+  };
+
   const renderTabContent = () => {
     return (
       <>
@@ -517,13 +538,14 @@ export default function TripDetailPage() {
                       <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
                         {place.name}
                       </h3>
-                      <Image
-                        src="/icons/dots-menu.svg"
-                        alt="menu"
-                        width={18}
-                        height={4}
-                        className="flex-shrink-0"
-                      />
+                      {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
+                      <button
+                        onClick={() => handleDeletePlace(place.id)}
+                        className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                        title="장소 삭제"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
