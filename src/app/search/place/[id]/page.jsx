@@ -291,31 +291,42 @@ export default function SearchPlaceDetailPage() {
                     try {
                       // [FIX] 앱에서는 로컬스토리지 데이터를 사용하므로 서버 DB에 장소가 없을 수 있음
                       // 일정 추가 전에 registerPlace로 장소를 먼저 등록 (이미 등록된 경우 무시)
+                      // [FIX] 백엔드가 기대하는 필드명(iPK, strName 등)으로 변환하여 전송
+                      // [FIX] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송
+                      const registerPayload = {
+                        iPK: placeData.id,
+                        strName: placeData.name,
+                        strAddress: placeData.address,
+                        strGroupName: placeData.category || "",
+                        strGroupCode: placeData.groupCode || "",
+                        strGroupDetail: placeData.groupDetail || "",
+                        strPhone: placeData.phone || "",
+                        strLink: placeData.link || "",
+                        chCategory: placeData.chCategory || "",
+                        ptLatitude: String(placeData.latitude),
+                        ptLongitude: String(placeData.longitude),
+                      };
+                      console.log("🔍 [DEBUG] registerPlace payload:", JSON.stringify(registerPayload));
                       try {
-                        await registerPlace({
-                          id: placeData.id,
-                          name: placeData.name,
-                          address: placeData.address,
-                          category: placeData.category,
-                          latitude: placeData.latitude,
-                          longitude: placeData.longitude,
-                          phone: placeData.phone,
-                          link: placeData.link,
-                        });
+                        const registerResult = await registerPlace(registerPayload);
+                        console.log("✅ [DEBUG] registerPlace 성공:", registerResult);
                       } catch (e) {
-                        console.warn("Place registration skipped (may already exist):", e);
+                        console.error("❌ [DEBUG] registerPlace 실패:", e.response?.status, e.response?.data, e);
                       }
 
-                      await addScheduleLocation({
+                      const schedulePayload = {
                         iPK: 0,
                         iScheduleFK: parseInt(tripId),
                         iLocationFK: placeData.id,
                         dtSchedule: dateParam,
                         strMemo: ""
-                      });
+                      };
+                      console.log("🔍 [DEBUG] addScheduleLocation payload:", JSON.stringify(schedulePayload));
+                      await addScheduleLocation(schedulePayload);
                       router.push(`/trips/${tripId}`);
                     } catch (error) {
                       console.error("Failed to add place to schedule:", error);
+                      console.error("❌ [DEBUG] error.response:", error.response?.status, error.response?.data);
                       alert("일정에 장소를 추가하지 못했습니다.");
                     }
                   }}
@@ -330,15 +341,19 @@ export default function SearchPlaceDetailPage() {
                       try {
                         // [ADD] 장소 등록 API 호출 (PC 버전과 동일하게 개별 예외 처리)
                         try {
+                          // [FIX] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송
                           await registerPlace({
-                            id: placeData.id,
-                            name: placeData.name,
-                            address: placeData.address,
-                            category: placeData.category,
-                            latitude: placeData.latitude,
-                            longitude: placeData.longitude,
-                            phone: placeData.phone,
-                            link: placeData.link,
+                            iPK: placeData.id,
+                            strName: placeData.name,
+                            strAddress: placeData.address,
+                            strGroupName: placeData.category || "",
+                            strGroupCode: placeData.groupCode || "",
+                            strGroupDetail: placeData.groupDetail || "",
+                            strPhone: placeData.phone || "",
+                            strLink: placeData.link || "",
+                            chCategory: placeData.chCategory || "",
+                            ptLatitude: String(placeData.latitude),
+                            ptLongitude: String(placeData.longitude),
                           });
                         } catch (e) {
                           console.error(
