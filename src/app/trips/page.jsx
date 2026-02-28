@@ -21,23 +21,21 @@ const TripCard = ({ trip, onClick, isLast }) => {
     if (!trip.dtDate1) return "날짜 없음";
     const formatDate = (dateStr) => {
       if (!dateStr) return "";
-      return dateStr.split("T")[0].replace(/-/g, ".");
+      // [MOD] YYYY-MM-DD 형태에서 YY.MM.DD 형태로 변환
+      const [year, month, day] = dateStr.split("T")[0].split("-");
+      return `${year.slice(2)}.${month}.${day}`;
     };
     const start = formatDate(trip.dtDate1);
     if (!trip.dtDate2) return start;
     const end = formatDate(trip.dtDate2);
-    const startYear = start.split(".")[0];
-    const endYear = end.split(".")[0];
-    if (startYear === endYear) {
-      return `${start} ~ ${end.substring(5)}`;
-    } else {
-      return `${start} ~ ${end}`;
-    }
+    // [MOD] 시작일과 종료일이 같든 다르든 전체 포맷 유지 (ex: 26.03.16 ~ 26.03.19)
+    return `${start} ~ ${end}`;
   })();
 
+  // [MOD] 콤마(",") 기준으로 split 하여 태그 배열 생성, 없으면 빈 배열
   const tags = trip.strTripStyle
     ? trip.strTripStyle.split(",").map(t => t.trim()).filter(Boolean)
-    : trip.tags || ["자연", "맛집", "카페", "쇼핑"];
+    : [];
 
   return (
     <>
