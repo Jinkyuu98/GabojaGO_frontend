@@ -90,3 +90,16 @@ export const removeScheduleLocation = async (iScheduleLocationPK) => {
     });
     return res.data;
 };
+
+// [ADD] 장소 수정 API 추가
+/**
+ * 일정 내 장소 일시 및 메모 수정 API
+ * @param {Object} data - { iPK, iScheduleFK, iLocationFK, dtSchedule, strMemo }
+ * @returns {Promise}
+ */
+export const modifyScheduleLocation = async (data) => {
+    console.log("🚨 [장소 수정 백엔드 전송 직전 페이로드 검사]", JSON.stringify(data));
+    const res = await api.post("/schedule/location/modify", data);
+    return res.data;
+};
+

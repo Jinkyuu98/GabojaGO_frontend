@@ -9,7 +9,7 @@ import SearchModal from "./SearchModal";
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
 import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
-import { removeScheduleLocation } from "../../../services/schedule"; // [ADD] 장소 삭제 API 추가
+import { removeScheduleLocation, modifyScheduleLocation } from "../../../services/schedule"; // [MOD] 장소 삭제/수정 API 추가
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -137,6 +137,7 @@ export default function TripDetailPage() {
   };
 
   const [apiTrip, setApiTrip] = useState(null);
+  const [editingPlace, setEditingPlace] = useState(null); // [ADD] 장소 수정 모달 상태
 
   useEffect(() => {
     const fetchTrip = async () => {
@@ -193,7 +194,8 @@ export default function TripDetailPage() {
                 time: timeStr,
                 duration: locItem.strMemo || "1시간", // [MOD] 하드코딩된 '1시간' 대신 DB에 저장된 strMemo 표출
                 latitude: parseFloat(locItem.location.ptLatitude || 0),
-                longitude: parseFloat(locItem.location.ptLongitude || 0)
+                longitude: parseFloat(locItem.location.ptLongitude || 0),
+                fullItem: locItem // [ADD] 수정을 위해 원본 데이터 추가
               });
             });
           }
@@ -434,6 +436,31 @@ export default function TripDetailPage() {
     }
   };
 
+  const getMinMaxDateTime = () => {
+    if (!trip || (!trip.dtDate1 && !trip.startDate)) return { min: undefined, max: undefined };
+    try {
+      const start = new Date(trip.dtDate1 || trip.startDate);
+      const end = new Date(trip.dtDate2 || trip.endDate);
+
+      const formatLocal = (date, isEnd) => {
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = isEnd ? "23" : "00";
+        const min = isEnd ? "59" : "00";
+        return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+      };
+
+      return {
+        min: formatLocal(start, false),
+        max: formatLocal(end, true)
+      };
+    } catch {
+      return { min: undefined, max: undefined };
+    }
+  };
+  const { min: minDateTime, max: maxDateTime } = getMinMaxDateTime();
+
   useEffect(() => {
     const h = window.innerHeight;
     const max = h * 0.95;
@@ -498,6 +525,106 @@ export default function TripDetailPage() {
     }
   };
 
+  // [ADD] 장소 수정 모달 오픈 핸들러
+  const handleEditPlace = (place) => {
+    let dtFormatted = "";
+    if (place.fullItem?.dtSchedule) {
+      dtFormatted = place.fullItem.dtSchedule.replace(" ", "T").substring(0, 16);
+    } else {
+      dtFormatted = formatApiDate(selectedDay).replace(" ", "T").substring(0, 16);
+    }
+
+    setEditingPlace({
+      ...place,
+      editDtSchedule: dtFormatted,
+      editMemo: place.duration === "1시간" && !place.fullItem?.strMemo ? "" : (place.fullItem?.strMemo || place.duration)
+    });
+  };
+
+  // [ADD] 장소 수정 제출 핸들러
+  const handleSubmitEdit = async () => {
+    try {
+      const payload = {
+        iPK: editingPlace.id,
+        iScheduleFK: editingPlace.fullItem?.iScheduleFK || parseInt(tripId),
+        iLocationFK: editingPlace.fullItem?.iLocationFK,
+        dtSchedule: editingPlace.editDtSchedule.replace("T", " ") + ":00",
+        strMemo: editingPlace.editMemo
+      };
+
+      await modifyScheduleLocation(payload);
+      alert("수정되었습니다.");
+      setEditingPlace(null);
+
+      // 상태 갱신
+      setApiTrip(prev => {
+        if (!prev) return prev;
+
+        // 1. 모든 장소 평탄화 및 내용 업데이트
+        let allPlaces = prev.days.flatMap(day => day.places);
+        allPlaces = allPlaces.map(p => {
+          if (p.id === editingPlace.id) {
+            const updated = { ...p };
+            const timeParts = payload.dtSchedule.split(" ");
+            updated.time = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
+            updated.duration = payload.strMemo || "1시간";
+            if (updated.fullItem) {
+              updated.fullItem.dtSchedule = payload.dtSchedule;
+              updated.fullItem.strMemo = payload.strMemo;
+            }
+            return updated;
+          }
+          return p;
+        });
+
+        // 2. 여행 시작/종료일에 맞춰 dayIdx 재계산 준비
+        const start = prev.dtDate1 || prev.startDate;
+        const end = prev.dtDate2 || prev.endDate;
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+        const diffDays = Math.floor((endUtc - startUtc) / (1000 * 3600 * 24)) + 1;
+        const dayCount = (diffDays > 0 && !isNaN(diffDays)) ? diffDays : 1;
+
+        // 3. 기존 records 보존하면서 newDays 배열 초기화
+        const newDays = Array.from({ length: dayCount }, (_, idx) => ({
+          places: [],
+          records: prev.days[idx]?.records || []
+        }));
+
+        // 4. 장소들을 알맞은 일차(dayIdx)에 분배
+        allPlaces.forEach(loc => {
+          if (!loc.fullItem?.dtSchedule) return;
+          const locDate = new Date(loc.fullItem.dtSchedule.split(" ")[0].replace(/-/g, "/"));
+          const locUtc = Date.UTC(locDate.getFullYear(), locDate.getMonth(), locDate.getDate());
+          let dayIdx = Math.floor((locUtc - startUtc) / (1000 * 3600 * 24));
+
+          if (dayIdx < 0) dayIdx = 0;
+          if (dayIdx >= dayCount) dayIdx = dayCount - 1;
+          if (isNaN(dayIdx)) dayIdx = 0;
+
+          newDays[dayIdx].places.push(loc);
+        });
+
+        // 5. 시간 순 정렬
+        newDays.forEach(day => {
+          day.places.sort((a, b) => {
+            const timeA = a.time || "00:00";
+            const timeB = b.time || "00:00";
+            return timeA.localeCompare(timeB);
+          });
+        });
+
+        return { ...prev, days: newDays };
+      });
+
+    } catch (err) {
+      console.error("장소 수정 실패:", err);
+      alert("장소 수정 중 오류가 발생했습니다.");
+    }
+  };
+
   // [ADD] 장소 삭제 이벤트 핸들러 추가
   const handleDeletePlace = async (placeId) => {
     console.log("=== handleDeletePlace 호출됨 ===");
@@ -551,14 +678,23 @@ export default function TripDetailPage() {
                       <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
                         {place.name}
                       </h3>
-                      {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
-                      <button
-                        onClick={() => handleDeletePlace(place.id)}
-                        className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                        title="장소 삭제"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEditPlace(place)}
+                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                          title="일정/메모 수정"
+                        >
+                          <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                        </button>
+                        {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
+                        <button
+                          onClick={() => handleDeletePlace(place.id)}
+                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                          title="장소 삭제"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
@@ -1150,6 +1286,46 @@ export default function TripDetailPage() {
           )}
         </div>
       </div>
+
+      {/* [ADD] PC/Mobile 공통 장소 수정 모달 */}
+      {editingPlace && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm bg-white rounded-xl p-5 shadow-lg">
+            <h3 className="text-[17px] font-bold text-[#111] mb-4">장소 일정/메모 수정</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">장소명</label>
+                <input type="text" value={editingPlace.name} disabled className="w-full bg-gray-100 border border-gray-200 rounded-lg p-2.5 text-[15px] text-[#888]" />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">일시</label>
+                <input
+                  type="datetime-local"
+                  value={editingPlace.editDtSchedule}
+                  min={minDateTime}
+                  max={maxDateTime}
+                  onChange={(e) => setEditingPlace({ ...editingPlace, editDtSchedule: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">메모</label>
+                <input
+                  type="text"
+                  value={editingPlace.editMemo}
+                  onChange={(e) => setEditingPlace({ ...editingPlace, editMemo: e.target.value })}
+                  placeholder="예: 1시간, 점심 식사 등"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setEditingPlace(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">취소</button>
+              <button onClick={handleSubmitEdit} className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PC Search Modal */}
       <SearchModal
