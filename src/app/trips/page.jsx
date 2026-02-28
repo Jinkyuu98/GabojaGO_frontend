@@ -103,11 +103,22 @@ export default function TripsListPage() {
     const fetchSchedules = async () => {
       try {
         setIsLoading(true);
-        // 백엔드가 이미 전체 목록을 반환하므로 1번만 호출하여 트래픽 최적화
-        const res = await getScheduleList();
+        // [DEL] 백엔드가 이미 전체 목록을 반환하므로 1번만 호출하여 트래픽 최적화 (기본값이 'A'이므로 누락발생)
+        // const res = await getScheduleList();
+
+        // [MOD] A(예정), B(진행 중), C(과거 기록) 상태의 일정을 모두 불러오도록 병렬 호출
+        const [resA, resB, resC] = await Promise.all([
+          getScheduleList("a"),
+          getScheduleList("b"),
+          getScheduleList("c"),
+        ]);
 
         // 방어 로직: 혹시 모를 중복 방관을 위해 iPK 기준 유니크 처리
-        const allTrips = res?.schedule_list || [];
+        const allTrips = [
+          ...(resA?.schedule_list || []),
+          ...(resB?.schedule_list || []),
+          ...(resC?.schedule_list || []),
+        ];
         const uniqueTrips = Array.from(new Map(allTrips.map(trip => [trip.iPK, trip])).values());
 
         setScheduleList(uniqueTrips);
@@ -124,12 +135,44 @@ export default function TripsListPage() {
     setIsActionSheetOpen(true);
   };
 
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+
+  // [MOD] 현재 접속 날짜 기준으로 과거 일정인 경우 일정 탭에서 제외
   const itineraryTrips = scheduleList
-    .filter((trip) => trip.chStatus?.toUpperCase() === "A" || trip.chStatus?.toUpperCase() === "B")
+    .filter((trip) => {
+      // [FIX] A, B 문자열 누락된 따옴표 추가
+      const isStatusAB = trip.chStatus?.toUpperCase() === 'A' || trip.chStatus?.toUpperCase() === 'B';
+
+      if (trip.dtDate2) {
+        // [FIX] T, - 문자열 누락된 따옴표 추가
+        const endDateStr = trip.dtDate2.split('T')[0];
+        const endDate = new Date(endDateStr.replace(/\./g, '-'));
+        endDate.setHours(0, 0, 0, 0);
+        if (endDate < todayDate) return false; // 종료일 지남
+      }
+      return true;
+    })
     .reverse();
 
+  // [MOD] 현재 접속 날짜 기준으로 과거 일정을 기록 탭에 추가 포함
   const recordTrips = scheduleList
-    .filter((trip) => trip.chStatus?.toUpperCase() === "C")
+    .filter((trip) => {
+      // [FIX] C 문자열 누락된 따옴표 추가
+      const isStatusC = trip.chStatus?.toUpperCase() === 'C';
+      if (isStatusC) return true;
+
+      // [FIX] A, B 문자열 누락된 따옴표 추가
+      const isStatusAB = trip.chStatus?.toUpperCase() === 'A' || trip.chStatus?.toUpperCase() === 'B';
+      if (isStatusAB && trip.dtDate2) {
+        // [FIX] T, - 문자열 누락된 따옴표 추가
+        const endDateStr = trip.dtDate2.split('T')[0];
+        const endDate = new Date(endDateStr.replace(/\./g, '-'));
+        endDate.setHours(0, 0, 0, 0);
+        if (endDate < todayDate) return true; // 종료일 지남
+      }
+      return false;
+    })
     .reverse();
 
   const displayTrips = activeTab === "itinerary" ? itineraryTrips : recordTrips;
