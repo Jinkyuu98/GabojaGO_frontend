@@ -69,11 +69,12 @@ export default function SearchInputPage() {
   // [ADD] 서버 데이터(LocationModel Map)를 프론트엔드용 배열로 변환
   const transformServerData = (data, keyword) => {
     if (!data) return [];
-    // FastAPI 응답은 키가 인덱스인 객체 맵 형식일 수 있으므로 배열로 변환
-    const items =
-      typeof data === "object" && !Array.isArray(data)
-        ? Object.values(data)
-        : data;
+
+    // [MOD] 장소 검색 API의 응답 규격이 {"location_list": [...]} 형태일 수 있으므로 이를 우선 추출
+    let items = data.location_list || data;
+    if (typeof items === "object" && !Array.isArray(items)) {
+      items = Object.values(items);
+    }
 
     // [MOD] 실제 백엔드 API 응답 필드명(strName, strAddress 등)에 맞게 변환 및 카테고리 필터 적용
     return items

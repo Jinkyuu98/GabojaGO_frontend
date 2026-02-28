@@ -116,8 +116,15 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
             setIsLoading(true);
             try {
                 const response = await searchPlaces(searchQuery);
-                const items = response.data || [];
-                const transformed = Object.values(items).slice(0, 15).map((item) => ({
+
+                // [MOD] 장소 검색 API의 응답 규격이 {"location_list": [...]} 형태일 수 있으므로 이를 우선 추출
+                const data = response.data || {};
+                let items = data.location_list || data;
+                if (typeof items === "object" && !Array.isArray(items)) {
+                    items = Object.values(items);
+                }
+
+                const transformed = items.slice(0, 15).map((item) => ({
                     id: item.iPK,
                     name: item.strName,
                     address: item.strAddress,
