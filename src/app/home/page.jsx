@@ -47,10 +47,30 @@ export default function HomePage() {
 
         console.log("ongoing trips:", ongoing);
 
-        // [ADD] 화면에 띄울 진행 중인 여행지 데이터를 상태 변수로 저장
-        setOngoingTrips(ongoing);
+        // [ADD] 화면에 띄울 진행 중인 여행지 데이터를 상태 변수로 저장 (과거 제외, 가장 빠른 일정 1개만)
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+
+        const upcomingTrips = ongoing
+          .filter((trip) => {
+            if (!trip.dtDate2) return true; // 종료일 없으면 일단 미래로 간주
+            const endDateStr = trip.dtDate2.split('T')[0];
+            const endDate = new Date(endDateStr.replace(/\./g, '-'));
+            endDate.setHours(0, 0, 0, 0);
+            return endDate >= todayDate; // 과거(종료일이 오늘보다 이전)면 필터링
+          })
+          .sort((a, b) => {
+            // [MOD] 시작일(dtDate1) 기준으로 오름차순 정렬 (가장 가까운 미래순)
+            if (!a.dtDate1) return 1;
+            if (!b.dtDate1) return -1;
+            return new Date(a.dtDate1) - new Date(b.dtDate1);
+          });
+
+        const singleUpcomingTrip = upcomingTrips.length > 0 ? [upcomingTrips[0]] : [];
+
+        setOngoingTrips(singleUpcomingTrip);
         // [ADD] 여행 데이터가 1개 이상 있는지 체크하는 boolean 변수 세팅
-        setHasTripData(ongoing.length > 0);
+        setHasTripData(singleUpcomingTrip.length > 0);
       } catch (err) {
         // [FIX] 데이터 가져오기 실패 시 오류 콘솔 출력
         console.error("일정 목록 조회 실패:", err);
@@ -228,7 +248,7 @@ export default function HomePage() {
 
                   return (
                     <div
-                      key={trip.iPK}
+                      key={trip.iPK || "single-trip"}
                       className="bg-[#eaf1f7] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-"
                       onClick={() => router.push(`/trips/${trip.iPK}`)}
                     >
