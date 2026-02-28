@@ -662,51 +662,61 @@ export default function TripDetailPage() {
         {selectedTab === "일정" && (
           <div className="flex flex-col gap-6">
             {currentDayPlaces.length > 0 ? (
-              currentDayPlaces.map((place, idx) => (
-                <div key={idx} className="flex items-start gap-3.5">
-                  <div className="flex flex-col items-center gap-2 pt-1">
-                    <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
-                      {idx + 1}
+              <>
+                {currentDayPlaces.map((place, idx) => (
+                  <div key={idx} className="flex items-start gap-3.5">
+                    <div className="flex flex-col items-center gap-2 pt-1">
+                      <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
+                        {idx + 1}
+                      </div>
+                      {idx < currentDayPlaces.length - 1 && (
+                        <div className="w-[1px] h-5 bg-[rgba(229,235,241,0.7)]" />
+                      )}
                     </div>
-                    {idx < currentDayPlaces.length - 1 && (
-                      <div className="w-[1px] h-5 bg-[rgba(229,235,241,0.7)]" />
-                    )}
-                  </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-5 mb-2">
-                      <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
-                        {place.name}
-                      </h3>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-5 mb-2">
+                        <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
+                          {place.name}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditPlace(place)}
+                            className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                            title="일정/메모 수정"
+                          >
+                            <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                          </button>
+                          {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
+                          <button
+                            onClick={() => handleDeletePlace(place.id)}
+                            className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                            title="장소 삭제"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEditPlace(place)}
-                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                          title="일정/메모 수정"
-                        >
-                          <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-                        </button>
-                        {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
-                        <button
-                          onClick={() => handleDeletePlace(place.id)}
-                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                          title="장소 삭제"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
+                          {place.time || "10:00"}
+                        </span>
+                        <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
+                          {place.duration || "1시간"}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
-                        {place.time || "10:00"}
-                      </span>
-                      <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
-                        {place.duration || "1시간"}
-                      </span>
-                    </div>
                   </div>
+                ))}
+                <div className="flex justify-center mt-2 mb-4">
+                  <button
+                    onClick={handleAddPlaceClick}
+                    className="px-4 py-2 bg-white border border-[#d1d5db] text-[#555] text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm tracking-[-0.06px]"
+                  >
+                    장소 추가
+                  </button>
                 </div>
-              ))
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
                 <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
@@ -727,6 +737,7 @@ export default function TripDetailPage() {
           </div>
         )}
 
+        {/* --- 기록 탭 --- */}
         {selectedTab === "기록" && (
           <div className="flex flex-col gap-5">
             {currentDayRecords.length > 0 && (
@@ -818,224 +829,231 @@ export default function TripDetailPage() {
               </div>
             )}
           </div>
-        )}
+        )
+        }
 
-        {selectedTab === "비용" && (
-          trip.budget && Object.keys(trip.budget).length > 0 ? (
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center justify-between gap-5">
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold text-[#111111]">
-                    비용 {trip.budget.total.toLocaleString()}원
-                  </span>
-                  <Image
-                    src="/icons/edit-purple.svg"
-                    alt="edit"
-                    width={15}
-                    height={15}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
-                    onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
-                  >
-                    영수증 등록
-                  </button>
-                  <span className="text-sm font-semibold text-[#8e8e93]">
-                    내역
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-[1px] bg-[#f2f4f6]" />
-
-              <div className="flex flex-col gap-4">
-                <h3 className="text-base font-semibold text-[#111111] tracking-[-0.5px]">
-                  사용 금액
-                </h3>
-                <div className="flex gap-6 items-center">
-                  <div className="relative w-[159px] h-[159px] flex-shrink-0">
+        {
+          selectedTab === "비용" && (
+            trip.budget && Object.keys(trip.budget).length > 0 ? (
+              <div className="flex flex-col gap-6">
+                <div className="flex items-center justify-between gap-5">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-semibold text-[#111111]">
+                      비용 {trip.budget.total.toLocaleString()}원
+                    </span>
                     <Image
-                      src="/icons/donut-chart.svg"
-                      alt="chart"
-                      width={159}
-                      height={159}
+                      src="/icons/edit-purple.svg"
+                      alt="edit"
+                      width={15}
+                      height={15}
                     />
-                    <span className="absolute top-[66px] right-[10px] text-[13px] font-semibold text-white">
-                      62%
-                    </span>
-                    <span className="absolute top-[93px] left-[11px] text-[13px] font-semibold text-white">
-                      25%
-                    </span>
-                    <span className="absolute top-[34px] left-[12px] text-[13px] font-semibold text-white">
-                      12%
-                    </span>
-                    <span className="absolute top-[13px] left-[47px] text-[13px] font-semibold text-white">
-                      6%
-                    </span>
                   </div>
-
-                  <div className="flex-1 flex flex-col gap-2">
-                    <div className="flex items-center justify-between gap-4 mb-1">
-                      <span className="text-xs text-[#abb1b9]">카테고리</span>
-                      <span className="text-xs text-[#abb1b9]">사용 금액</span>
-                    </div>
-                    <div className="h-[1px] bg-[#f2f4f6]" />
-                    {trip.budget.spent.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between gap-4"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-2.5 h-2.5 rounded-full"
-                            style={{ backgroundColor: item.color }}
-                          />
-                          <span className="text-sm text-[#556574]">
-                            {item.category}
-                          </span>
-                        </div>
-                        <span
-                          className={clsx(
-                            "text-sm font-semibold",
-                            item.category === "식비"
-                              ? "text-[#ff0909]"
-                              : "text-[#111111]",
-                          )}
-                        >
-                          {item.amount.toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-3">
+                    <button
+                      className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
+                      onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
+                    >
+                      영수증 등록
+                    </button>
+                    <span className="text-sm font-semibold text-[#8e8e93]">
+                      내역
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3">
-                  <Image
-                    src="/icons/danger.svg"
-                    alt="warning"
-                    width={15}
-                    height={14}
-                  />
-                  <span className="text-[13px] font-medium text-[#ff0909]">
-                    예상 비용을 초과한 사용 금액이 있어요
-                  </span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-              <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                {"비용을 설정하고\n사용 내역을 기록해 보세요"}
-              </p>
-              <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">비용 설정</button>
-            </div>
-          )
-        )}
+                <div className="h-[1px] bg-[#f2f4f6]" />
 
-        {selectedTab === "준비물" && (
-          trip.checklist && trip.checklist.length > 0 ? (
-            <div className="flex flex-col gap-4 pt-1">
-              <div className="flex items-center justify-between gap-5">
-                <span className="text-sm font-semibold text-[#111111]">
-                  준비물 {trip.checklist.length}개
-                </span>
-                <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                  준비물 추가
-                </span>
-              </div>
-
-              <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
-                {trip.checklist.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-[18px] h-[18px] rounded cursor-pointer">
-                        <Image
-                          src="/icons/checkbox-unchecked.svg"
-                          alt="checkbox"
-                          width={18}
-                          height={18}
-                        />
-                      </div>
-                      <span className="text-base text-[#111111] tracking-[-0.4px]">
-                        {item.name}
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-base font-semibold text-[#111111] tracking-[-0.5px]">
+                    사용 금액
+                  </h3>
+                  <div className="flex gap-6 items-center">
+                    <div className="relative w-[159px] h-[159px] flex-shrink-0">
+                      <Image
+                        src="/icons/donut-chart.svg"
+                        alt="chart"
+                        width={159}
+                        height={159}
+                      />
+                      <span className="absolute top-[66px] right-[10px] text-[13px] font-semibold text-white">
+                        62%
+                      </span>
+                      <span className="absolute top-[93px] left-[11px] text-[13px] font-semibold text-white">
+                        25%
+                      </span>
+                      <span className="absolute top-[34px] left-[12px] text-[13px] font-semibold text-white">
+                        12%
+                      </span>
+                      <span className="absolute top-[13px] left-[47px] text-[13px] font-semibold text-white">
+                        6%
                       </span>
                     </div>
-                    <Image
-                      src="/icons/dots-menu.svg"
-                      alt="menu"
-                      width={18}
-                      height={4}
-                    />
+
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-4 mb-1">
+                        <span className="text-xs text-[#abb1b9]">카테고리</span>
+                        <span className="text-xs text-[#abb1b9]">사용 금액</span>
+                      </div>
+                      <div className="h-[1px] bg-[#f2f4f6]" />
+                      {trip.budget.spent.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between gap-4"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-sm text-[#556574]">
+                              {item.category}
+                            </span>
+                          </div>
+                          <span
+                            className={clsx(
+                              "text-sm font-semibold",
+                              item.category === "식비"
+                                ? "text-[#ff0909]"
+                                : "text-[#111111]",
+                            )}
+                          >
+                            {item.amount.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
+
+                  <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3">
+                    <Image
+                      src="/icons/danger.svg"
+                      alt="warning"
+                      width={15}
+                      height={14}
+                    />
+                    <span className="text-[13px] font-medium text-[#ff0909]">
+                      예상 비용을 초과한 사용 금액이 있어요
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-              <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                {"아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요"}
-              </p>
-              <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">준비물 추가</button>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
+                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                  {"비용을 설정하고\n사용 내역을 기록해 보세요"}
+                </p>
+                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">비용 설정</button>
+              </div>
+            )
           )
-        )}
+        }
 
-        {selectedTab === "동행자" && (
-          trip.companions && trip.companions.length > 0 ? (
-            <div className="flex flex-col gap-4 pt-1">
-              <div className="flex items-center justify-between gap-5">
-                <span className="text-sm font-semibold text-[#111111]">
-                  등록된 동행자 {trip.companions.length}명
-                </span>
-                <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                  동행자 초대
-                </span>
-              </div>
+        {
+          selectedTab === "준비물" && (
+            trip.checklist && trip.checklist.length > 0 ? (
+              <div className="flex flex-col gap-4 pt-1">
+                <div className="flex items-center justify-between gap-5">
+                  <span className="text-sm font-semibold text-[#111111]">
+                    준비물 {trip.checklist.length}개
+                  </span>
+                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
+                    준비물 추가
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {trip.companions.map((companion) => (
-                  <div
-                    key={companion.id}
-                    className="flex items-center gap-3 bg-white rounded-lg border border-[#f2f4f6] px-4 py-3"
-                  >
-                    <div className="w-5 h-5 flex-shrink-0">
+                <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
+                  {trip.checklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-[18px] h-[18px] rounded cursor-pointer">
+                          <Image
+                            src="/icons/checkbox-unchecked.svg"
+                            alt="checkbox"
+                            width={18}
+                            height={18}
+                          />
+                        </div>
+                        <span className="text-base text-[#111111] tracking-[-0.4px]">
+                          {item.name}
+                        </span>
+                      </div>
                       <Image
-                        src="/icons/profile.svg"
-                        alt="profile"
-                        width={20}
-                        height={20}
+                        src="/icons/dots-menu.svg"
+                        alt="menu"
+                        width={18}
+                        height={4}
                       />
                     </div>
-                    <span className="text-sm text-[#111111] font-medium truncate">
-                      {companion.name}
-                    </span>
-                    {companion.isOwner && (
-                      <Image
-                        src="/icons/crown.svg"
-                        alt="owner"
-                        width={14}
-                        height={10}
-                        className="ml-auto flex-shrink-0"
-                      />
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-              <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                {"아직 등록된 동행자가 없어요\n함께 여행할 사람을 추가해 보세요"}
-              </p>
-              <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
+                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                  {"아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요"}
+                </p>
+                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">준비물 추가</button>
+              </div>
+            )
           )
-        )}
+        }
+
+        {
+          selectedTab === "동행자" && (
+            trip.companions && trip.companions.length > 0 ? (
+              <div className="flex flex-col gap-4 pt-1">
+                <div className="flex items-center justify-between gap-5">
+                  <span className="text-sm font-semibold text-[#111111]">
+                    등록된 동행자 {trip.companions.length}명
+                  </span>
+                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
+                    동행자 초대
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {trip.companions.map((companion) => (
+                    <div
+                      key={companion.id}
+                      className="flex items-center gap-3 bg-white rounded-lg border border-[#f2f4f6] px-4 py-3"
+                    >
+                      <div className="w-5 h-5 flex-shrink-0">
+                        <Image
+                          src="/icons/profile.svg"
+                          alt="profile"
+                          width={20}
+                          height={20}
+                        />
+                      </div>
+                      <span className="text-sm text-[#111111] font-medium truncate">
+                        {companion.name}
+                      </span>
+                      {companion.isOwner && (
+                        <Image
+                          src="/icons/crown.svg"
+                          alt="owner"
+                          width={14}
+                          height={10}
+                          className="ml-auto flex-shrink-0"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
+                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                  {"아직 등록된 동행자가 없어요\n함께 여행할 사람을 추가해 보세요"}
+                </p>
+                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
+              </div>
+            )
+          )
+        }
       </>
     );
   };
