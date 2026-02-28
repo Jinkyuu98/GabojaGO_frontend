@@ -28,6 +28,9 @@ export default function SearchPlaceDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
   const [showReviews, setShowReviews] = useState(false); // [ADD] 리뷰 영역 표시 여부 상태
+  // [ADD] 일시/메모 입력 state - 사용자가 직접 일자와 메모를 입력하여 장소 등록 가능
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [memo, setMemo] = useState("");
 
   // [ADD] 바텀시트 드래그 상태 관리
   const [dragY, setDragY] = useState(0); // [MOD] 초기 높이를 전체 확장 상태(0)로 복구
@@ -58,6 +61,13 @@ export default function SearchPlaceDetailPage() {
     }
     setIsLoading(false);
   }, [id]);
+
+  // [ADD] dateParam 기반 일시 기본값 설정
+  useEffect(() => {
+    if (dateParam) {
+      setScheduleDate(dateParam.replace(" ", "T").substring(0, 16));
+    }
+  }, [dateParam]);
 
   // [ADD] 지도 초기화 및 마커 표시
   const initMap = () => {
@@ -286,54 +296,79 @@ export default function SearchPlaceDetailPage() {
             {/* [ADD] 리뷰보기 및 찜하기 버튼 */}
             <div className="flex flex-col gap-2 mt-2">
               {tripId ? (
-                <button
-                  onClick={async () => {
-                    try {
-                      // [FIX] 앱에서는 로컬스토리지 데이터를 사용하므로 서버 DB에 장소가 없을 수 있음
-                      // 일정 추가 전에 registerPlace로 장소를 먼저 등록 (이미 등록된 경우 무시)
-                      // [FIX] 백엔드가 기대하는 필드명(iPK, strName 등)으로 변환하여 전송
-                      // [FIX] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송
-                      const registerPayload = {
-                        iPK: placeData.id,
-                        strName: placeData.name,
-                        strAddress: placeData.address,
-                        strGroupName: placeData.category || "",
-                        strGroupCode: placeData.groupCode || "",
-                        strGroupDetail: placeData.groupDetail || "",
-                        strPhone: placeData.phone || "",
-                        strLink: placeData.link || "",
-                        chCategory: placeData.chCategory || "",
-                        ptLatitude: String(placeData.latitude),
-                        ptLongitude: String(placeData.longitude),
-                      };
-                      console.log("🔍 [DEBUG] registerPlace payload:", JSON.stringify(registerPayload));
+                <>
+                  {/* [ADD] 일시/메모 입력 영역 - 사용자가 직접 일자와 메모를 입력 */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-[#6e6e6e]">📅 일시</label>
+                      <input
+                        type="datetime-local"
+                        value={scheduleDate}
+                        onChange={(e) => setScheduleDate(e.target.value)}
+                        className="w-full h-[44px] px-3 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[14px] text-[#111111] font-medium transition-all"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-[#6e6e6e]">📝 메모</label>
+                      <input
+                        type="text"
+                        value={memo}
+                        onChange={(e) => setMemo(e.target.value)}
+                        placeholder="메모를 입력하세요"
+                        className="w-full h-[44px] px-3 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[14px] text-[#111111] font-medium placeholder:text-[#abb1b9] transition-all"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={async () => {
                       try {
-                        const registerResult = await registerPlace(registerPayload);
-                        console.log("✅ [DEBUG] registerPlace 성공:", registerResult);
-                      } catch (e) {
-                        console.error("❌ [DEBUG] registerPlace 실패:", e.response?.status, e.response?.data, e);
-                      }
+                        // [FIX] 앱에서는 로컬스토리지 데이터를 사용하므로 서버 DB에 장소가 없을 수 있음
+                        // 일정 추가 전에 registerPlace로 장소를 먼저 등록 (이미 등록된 경우 무시)
+                        // [FIX] 백엔드가 기대하는 필드명(iPK, strName 등)으로 변환하여 전송
+                        // [FIX] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송
+                        const registerPayload = {
+                          iPK: placeData.id,
+                          strName: placeData.name,
+                          strAddress: placeData.address,
+                          strGroupName: placeData.category || "",
+                          strGroupCode: placeData.groupCode || "",
+                          strGroupDetail: placeData.groupDetail || "",
+                          strPhone: placeData.phone || "",
+                          strLink: placeData.link || "",
+                          chCategory: placeData.chCategory || "",
+                          ptLatitude: String(placeData.latitude),
+                          ptLongitude: String(placeData.longitude),
+                        };
+                        console.log("🔍 [DEBUG] registerPlace payload:", JSON.stringify(registerPayload));
+                        try {
+                          const registerResult = await registerPlace(registerPayload);
+                          console.log("✅ [DEBUG] registerPlace 성공:", registerResult);
+                        } catch (e) {
+                          console.error("❌ [DEBUG] registerPlace 실패:", e.response?.status, e.response?.data, e);
+                        }
 
-                      const schedulePayload = {
-                        iPK: 0,
-                        iScheduleFK: parseInt(tripId),
-                        iLocationFK: placeData.id,
-                        dtSchedule: dateParam,
-                        strMemo: ""
-                      };
-                      console.log("🔍 [DEBUG] addScheduleLocation payload:", JSON.stringify(schedulePayload));
-                      await addScheduleLocation(schedulePayload);
-                      router.push(`/trips/${tripId}`);
-                    } catch (error) {
-                      console.error("Failed to add place to schedule:", error);
-                      console.error("❌ [DEBUG] error.response:", error.response?.status, error.response?.data);
-                      alert("일정에 장소를 추가하지 못했습니다.");
-                    }
-                  }}
-                  className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:opacity-90 active:scale-[0.98] transition-all"
-                >
-                  이 장소를 일정에 추가하기
-                </button>
+                        // [MOD] 사용자가 입력한 일시/메모를 사용하여 장소 등록
+                        const schedulePayload = {
+                          iPK: 0,
+                          iScheduleFK: parseInt(tripId),
+                          iLocationFK: placeData.id,
+                          dtSchedule: scheduleDate.replace("T", " ") + ":00",
+                          strMemo: memo
+                        };
+                        console.log("🔍 [DEBUG] addScheduleLocation payload:", JSON.stringify(schedulePayload));
+                        await addScheduleLocation(schedulePayload);
+                        router.push(`/trips/${tripId}`);
+                      } catch (error) {
+                        console.error("Failed to add place to schedule:", error);
+                        console.error("❌ [DEBUG] error.response:", error.response?.status, error.response?.data);
+                        alert("일정에 장소를 추가하지 못했습니다.");
+                      }
+                    }}
+                    className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:opacity-90 active:scale-[0.98] transition-all"
+                  >
+                    이 장소를 일정에 추가하기
+                  </button>
+                </>
               ) : (
                 !isSaved && (
                   <button

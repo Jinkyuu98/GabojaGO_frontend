@@ -1,7 +1,14 @@
 import axios from "axios";
 
+// [MOD] CORS 우회: 클라이언트(브라우저)에서는 Next.js 프록시(/proxy) 경로 사용,
+// 서버 사이드에서는 직접 백엔드 URL 사용
+const isServer = typeof window === "undefined";
+const baseURL = isServer
+  ? (process.env.API_URL || "http://localhost:8000")
+  : "/proxy";
+
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000",
+  baseURL,
 });
 
 api.interceptors.request.use((config) => {

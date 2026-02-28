@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { searchPlaces } from "../../../services/place";
+import { searchPlaces, registerPlace } from "../../../services/place";
 import { addScheduleLocation } from "../../../services/schedule";
 
 const HighlightText = ({ text, keyword }) => {
@@ -29,6 +29,9 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
     const [isLoading, setIsLoading] = useState(false);
     const [selectedPlace, setSelectedPlace] = useState(null);
     const [isAdding, setIsAdding] = useState(false);
+    // [ADD] 일시/메모 입력 state 추가 - 사용자가 직접 일자와 메모를 입력하여 장소 등록 가능
+    const [scheduleDate, setScheduleDate] = useState("");
+    const [memo, setMemo] = useState("");
 
     const mapRef = useRef(null);
     const mapInstance = useRef(null);
@@ -58,6 +61,9 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
             setSearchQuery("");
             setSearchResults([]);
             setSelectedPlace(null);
+            // [ADD] 모달 닫힐 때 일시/메모 초기화
+            setScheduleDate("");
+            setMemo("");
             if (markerRef.current) markerRef.current.setMap(null);
             markerRef.current = null;
         }
@@ -105,6 +111,13 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
         }
     }, [selectedPlace]);
 
+    // [ADD] 장소 선택 시 기본 일시를 해당 일차 날짜로 설정
+    useEffect(() => {
+        if (selectedPlace && formattedDate) {
+            setScheduleDate(formattedDate.replace(" ", "T").substring(0, 16));
+        }
+    }, [selectedPlace, formattedDate]);
+
     // Search Logic
     useEffect(() => {
         const fetchResults = async () => {
@@ -151,14 +164,39 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
         if (!selectedPlace || isAdding) return;
         setIsAdding(true);
         try {
+            // [ADD] 장소를 먼저 백엔드 DB에 등록 (이미 등록된 경우에도 안전)
+            try {
+                await registerPlace({
+                    iPK: selectedPlace.id,
+                    strName: selectedPlace.name,
+                    strAddress: selectedPlace.address,
+                    strGroupName: selectedPlace.category || "",
+                    strGroupCode: "",
+                    strGroupDetail: "",
+                    strPhone: selectedPlace.phone || "",
+                    strLink: selectedPlace.link || "",
+                    chCategory: "",
+                    ptLatitude: String(selectedPlace.latitude),
+                    ptLongitude: String(selectedPlace.longitude),
+                });
+            } catch (e) {
+                console.error("registerPlace 실패 (이미 등록된 장소일 수 있음):", e);
+            }
+
+            // [MOD] 사용자가 입력한 일시/메모를 사용하여 장소 등록
             await addScheduleLocation({
                 iPK: 0,
                 iScheduleFK: parseInt(tripId),
                 iLocationFK: selectedPlace.id,
-                dtSchedule: formattedDate,
-                strMemo: ""
+                dtSchedule: scheduleDate.replace("T", " ") + ":00",
+                strMemo: memo
             });
-            onAddSuccess();
+            // [MOD] 추가된 장소 정보를 콜백으로 전달하여 리로드 없이 즉시 반영
+            onAddSuccess({
+                place: selectedPlace,
+                dtSchedule: scheduleDate.replace("T", " ") + ":00",
+                strMemo: memo
+            });
             onClose();
         } catch (error) {
             console.error("Failed to add place:", error);
@@ -252,44 +290,69 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
 
                         {/* Overlay Info Card */}
                         {selectedPlace && (
-                            <div className="absolute bottom-10 left-10 right-10 bg-white/90 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_24px_48px_rgba(0,0,0,0.12)] border border-white flex items-end justify-between animate-in slide-in-from-bottom-5 duration-500 z-10">
-                                <div className="flex-1 max-w-[60%]">
-                                    <span className="text-[14px] font-bold text-[#7a28fa] mb-3 block">{selectedPlace.category}</span>
-                                    <h3 className="text-[28px] font-semibold text-[#111111] mb-3 truncate leading-tight">{selectedPlace.name}</h3>
-                                    <div className="flex flex-col gap-2">
-                                        <p className="text-[#6e6e6e] text-[16px] font-medium flex items-center gap-2">
-                                            <span className="opacity-50 text-xl">📍</span> {selectedPlace.address}
-                                        </p>
-                                        {selectedPlace.phone && (
-                                            <p className="text-[#898989] text-[15px] flex items-center gap-2">
-                                                <span className="opacity-50 text-xl">📞</span> {selectedPlace.phone}
+                            <div className="absolute bottom-10 left-10 right-10 bg-white/90 backdrop-blur-xl p-8 rounded-[32px] shadow-[0_24px_48px_rgba(0,0,0,0.12)] border border-white flex flex-col animate-in slide-in-from-bottom-5 duration-500 z-10">
+                                <div className="flex items-end justify-between">
+                                    <div className="flex-1 max-w-[60%]">
+                                        <span className="text-[14px] font-bold text-[#7a28fa] mb-3 block">{selectedPlace.category}</span>
+                                        <h3 className="text-[28px] font-semibold text-[#111111] mb-3 truncate leading-tight">{selectedPlace.name}</h3>
+                                        <div className="flex flex-col gap-2">
+                                            <p className="text-[#6e6e6e] text-[16px] font-medium flex items-center gap-2">
+                                                <span className="opacity-50 text-xl">📍</span> {selectedPlace.address}
                                             </p>
+                                            {selectedPlace.phone && (
+                                                <p className="text-[#898989] text-[15px] flex items-center gap-2">
+                                                    <span className="opacity-50 text-xl">📞</span> {selectedPlace.phone}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col gap-3 min-w-[220px]">
+                                        {selectedPlace.link && (
+                                            <a
+                                                href={selectedPlace.link}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="h-14 border-2 border-[#111111] text-[#111111] rounded-2xl flex items-center justify-center font-medium text-base hover:bg-gray-50 transition-all"
+                                            >
+                                                상세 정보 보기
+                                            </a>
                                         )}
+                                        <button
+                                            onClick={handleAddPlace}
+                                            disabled={isAdding}
+                                            className="h-16 bg-[#111111] text-white rounded-2xl text-md font-medium hover:bg-[#333333] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-black/10 flex items-center justify-center gap-3"
+                                        >
+                                            {isAdding ? (
+                                                <div className="w-5 h-5 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                "일정에 추가"
+                                            )}
+                                        </button>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-3 min-w-[220px]">
-                                    {selectedPlace.link && (
-                                        <a
-                                            href={selectedPlace.link}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="h-14 border-2 border-[#111111] text-[#111111] rounded-2xl flex items-center justify-center font-medium text-base hover:bg-gray-50 transition-all"
-                                        >
-                                            상세 정보 보기
-                                        </a>
-                                    )}
-                                    <button
-                                        onClick={handleAddPlace}
-                                        disabled={isAdding}
-                                        className="h-16 bg-[#111111] text-white rounded-2xl text-md font-medium hover:bg-[#333333] active:scale-[0.98] transition-all disabled:opacity-50 shadow-xl shadow-black/10 flex items-center justify-center gap-3"
-                                    >
-                                        {isAdding ? (
-                                            <div className="w-5 h-5 border-3 border-white/20 border-t-white rounded-full animate-spin" />
-                                        ) : (
-                                            "일정에 추가"
-                                        )}
-                                    </button>
+                                {/* [ADD] 일시/메모 입력 영역 - 사용자가 직접 일자와 메모를 입력 */}
+                                <div className="flex gap-4 mt-5 pt-5 border-t border-[#f2f4f6] w-full">
+                                    <div className="flex flex-col gap-1.5 flex-1">
+                                        <label className="text-[13px] font-semibold text-[#6e6e6e]">📅 일시</label>
+                                        <input
+                                            type="datetime-local"
+                                            value={scheduleDate}
+                                            onChange={(e) => setScheduleDate(e.target.value)}
+                                            className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                                        />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 flex-1">
+                                        <label className="text-[13px] font-semibold text-[#6e6e6e]">📝 메모</label>
+                                        <input
+                                            type="text"
+                                            value={memo}
+                                            onChange={(e) => setMemo(e.target.value)}
+                                            placeholder="메모를 입력하세요"
+                                            className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium placeholder:text-[#abb1b9] transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         )}

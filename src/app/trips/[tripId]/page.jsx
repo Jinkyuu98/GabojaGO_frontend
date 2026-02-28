@@ -192,7 +192,7 @@ export default function TripDetailPage() {
                 id: locItem.iPK || locItem.iScheduleLocationPK, // [ADD] 장소 삭제 시 필요한 PK값 매핑
                 name: locItem.location.strName,
                 time: timeStr,
-                duration: locItem.strMemo || "1시간", // [MOD] 하드코딩된 '1시간' 대신 DB에 저장된 strMemo 표출
+                duration: locItem.strMemo || "", // [MOD] 빈 메모일 때 "1시간" 대신 빈 문자열 사용
                 latitude: parseFloat(locItem.location.ptLatitude || 0),
                 longitude: parseFloat(locItem.location.ptLongitude || 0),
                 fullItem: locItem // [ADD] 수정을 위해 원본 데이터 추가
@@ -422,15 +422,11 @@ export default function TripDetailPage() {
     try {
       const date = new Date(start);
       date.setDate(date.getDate() + (dayIndex - 1));
-      // Set to current time or a default time
-      const now = new Date();
+      // [MOD] 현재 시간 대신 10:00:00 고정값 사용하여 예측 가능한 기본값 제공
       const yyyy = date.getFullYear();
       const mm = String(date.getMonth() + 1).padStart(2, "0");
       const dd = String(date.getDate()).padStart(2, "0");
-      const hh = String(now.getHours()).padStart(2, "0");
-      const min = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+      return `${yyyy}-${mm}-${dd} 10:00:00`;
     } catch (e) {
       return "";
     }
@@ -515,14 +511,107 @@ export default function TripDetailPage() {
     }
   };
 
-  const handleAddSuccess = () => {
-    // Refresh schedule data
-    if (tripId) {
-      // Small delay to ensure DB updated
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
-    }
+  // [MOD] 장소 추가 후 리로드 없이 state 직접 업데이트
+  const handleAddSuccess = (addedData) => {
+    if (!tripId || !addedData) return;
+
+    setApiTrip(prev => {
+      if (!prev) return prev;
+
+      const { place, dtSchedule, strMemo } = addedData;
+      const timeParts = dtSchedule.split(" ");
+      const timeStr = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
+
+      // 여행 시작일 기준 dayIdx 계산
+      const start = prev.dtDate1 || prev.startDate;
+      const startDate = new Date(start);
+      const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const locDate = new Date(dtSchedule.split(" ")[0].replace(/-/g, "/"));
+      const locUtc = Date.UTC(locDate.getFullYear(), locDate.getMonth(), locDate.getDate());
+      const dayCount = prev.days.length;
+      let dayIdx = Math.floor((locUtc - startUtc) / (1000 * 3600 * 24));
+      if (dayIdx < 0) dayIdx = 0;
+      if (dayIdx >= dayCount) dayIdx = dayCount - 1;
+      if (isNaN(dayIdx)) dayIdx = 0;
+
+      const newPlace = {
+        id: Date.now(), // 임시 ID (서버 반환값 없으므로)
+        name: place.name,
+        time: timeStr,
+        duration: strMemo || "",
+        latitude: place.latitude,
+        longitude: place.longitude,
+        fullItem: {
+          dtSchedule,
+          strMemo,
+          iScheduleFK: parseInt(tripId),
+          iLocationFK: place.id,
+          location: {
+            strName: place.name,
+            ptLatitude: String(place.latitude),
+            ptLongitude: String(place.longitude),
+          }
+        }
+      };
+
+      const newDays = prev.days.map((day, idx) => {
+        if (idx === dayIdx) {
+          const updatedPlaces = [...day.places, newPlace].sort((a, b) =>
+            (a.time || "00:00").localeCompare(b.time || "00:00")
+          );
+          return { ...day, places: updatedPlaces };
+        }
+        return day;
+      });
+
+      return { ...prev, days: newDays };
+    });
+
+    // [ADD] 백그라운드에서 서버 데이터 refetch하여 실제 PK로 갱신
+    setTimeout(async () => {
+      try {
+        const { getScheduleLocations } = await import("../../../services/schedule");
+        const locationRes = await getScheduleLocations(tripId);
+        if (locationRes?.location_list) {
+          setApiTrip(prev => {
+            if (!prev) return prev;
+            const start = prev.dtDate1 || prev.startDate;
+            const startDate = new Date(start);
+            const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            const dayCount = prev.days.length;
+            const newDays = Array.from({ length: dayCount }, (_, idx) => ({
+              places: [],
+              records: prev.days[idx]?.records || []
+            }));
+            const list = Array.isArray(locationRes.location_list) ? locationRes.location_list :
+              (typeof locationRes.location_list === "string" ? JSON.parse(locationRes.location_list.replace(/'/g, '"')) : []);
+            list.forEach(locItem => {
+              if (!locItem.dtSchedule || !locItem.location) return;
+              const locDate = new Date(locItem.dtSchedule.split(" ")[0].replace(/-/g, "/"));
+              const locUtc = Date.UTC(locDate.getFullYear(), locDate.getMonth(), locDate.getDate());
+              let dayIdx = Math.floor((locUtc - startUtc) / (1000 * 3600 * 24));
+              if (dayIdx < 0) dayIdx = 0;
+              if (dayIdx >= dayCount) dayIdx = dayCount - 1;
+              if (isNaN(dayIdx)) dayIdx = 0;
+              const timeParts = locItem.dtSchedule.split(" ");
+              const timeStr = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
+              newDays[dayIdx].places.push({
+                id: locItem.iPK || locItem.iScheduleLocationPK,
+                name: locItem.location.strName,
+                time: timeStr,
+                duration: locItem.strMemo || "",
+                latitude: parseFloat(locItem.location.ptLatitude || 0),
+                longitude: parseFloat(locItem.location.ptLongitude || 0),
+                fullItem: locItem
+              });
+            });
+            return { ...prev, days: newDays };
+          });
+        }
+      } catch (e) {
+        console.error("백그라운드 refetch 실패:", e);
+      }
+    }, 1000);
   };
 
   // [ADD] 장소 수정 모달 오픈 핸들러
@@ -537,21 +626,24 @@ export default function TripDetailPage() {
     setEditingPlace({
       ...place,
       editDtSchedule: dtFormatted,
-      editMemo: place.duration === "1시간" && !place.fullItem?.strMemo ? "" : (place.fullItem?.strMemo || place.duration)
+      // [MOD] 메모 기본값을 fullItem.strMemo에서 직접 가져오기 (빈 문자열 허용)
+      editMemo: place.fullItem?.strMemo ?? place.duration ?? ""
     });
   };
 
   // [ADD] 장소 수정 제출 핸들러
   const handleSubmitEdit = async () => {
     try {
+      // [MOD] fullItem의 실제 서버 PK를 우선 사용
       const payload = {
-        iPK: editingPlace.id,
+        iPK: editingPlace.fullItem?.iPK || editingPlace.id,
         iScheduleFK: editingPlace.fullItem?.iScheduleFK || parseInt(tripId),
         iLocationFK: editingPlace.fullItem?.iLocationFK,
         dtSchedule: editingPlace.editDtSchedule.replace("T", " ") + ":00",
         strMemo: editingPlace.editMemo
       };
 
+      console.log("🔍 [DEBUG] modifyScheduleLocation payload:", JSON.stringify(payload));
       await modifyScheduleLocation(payload);
       alert("수정되었습니다.");
       setEditingPlace(null);
@@ -567,7 +659,7 @@ export default function TripDetailPage() {
             const updated = { ...p };
             const timeParts = payload.dtSchedule.split(" ");
             updated.time = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
-            updated.duration = payload.strMemo || "1시간";
+            updated.duration = payload.strMemo || ""; // [MOD] "1시간" fallback 제거
             if (updated.fullItem) {
               updated.fullItem.dtSchedule = payload.dtSchedule;
               updated.fullItem.strMemo = payload.strMemo;
@@ -702,7 +794,7 @@ export default function TripDetailPage() {
                           {place.time || "10:00"}
                         </span>
                         <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
-                          {place.duration || "1시간"}
+                          {place.duration}
                         </span>
                       </div>
                     </div>
