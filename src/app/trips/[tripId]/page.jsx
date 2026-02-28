@@ -500,6 +500,9 @@ export default function TripDetailPage() {
 
   // [ADD] 장소 삭제 이벤트 핸들러 추가
   const handleDeletePlace = async (placeId) => {
+    console.log("=== handleDeletePlace 호출됨 ===");
+    console.log("대상 placeId:", placeId, typeof placeId);
+
     if (!placeId) {
       alert("삭제할 장소 정보가 없습니다.");
       return;
@@ -508,7 +511,17 @@ export default function TripDetailPage() {
       try {
         await removeScheduleLocation(placeId);
         alert("장소가 삭제되었습니다.");
-        window.location.reload();
+
+        // [MOD] 페이지 스크롤 및 선택된 날짜 유지 (새로고침 없이 State 갱신)
+        setApiTrip(prev => {
+          if (!prev) return prev;
+          const newDays = prev.days.map(day => ({
+            ...day,
+            places: day.places.filter(p => p.id !== placeId)
+          }));
+          return { ...prev, days: newDays };
+        });
+
       } catch (err) {
         console.error("장소 삭제 실패:", err);
         alert("장소 삭제 중 오류가 발생했습니다.");

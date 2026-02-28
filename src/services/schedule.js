@@ -84,6 +84,9 @@ export const addScheduleExpense = async (data) => {
  * @returns {Promise}
  */
 export const removeScheduleLocation = async (iScheduleLocationPK) => {
-    const res = await api.post(`/schedule/location/remove`, { iScheduleLocationPK });
+    // 백엔드가 필수 입력 (query) 로 요구하므로 params 에 담아 보냅니다.
+    const res = await api.post(`/schedule/location/remove`, null, {
+        params: { iScheduleLocationPK }
+    });
     return res.data;
 };
