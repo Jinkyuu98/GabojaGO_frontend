@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
 import { MobileContainer } from "../../../../components/layout/MobileContainer";
@@ -289,6 +289,23 @@ export default function SearchPlaceDetailPage() {
                 <button
                   onClick={async () => {
                     try {
+                      // [FIX] 앱에서는 로컬스토리지 데이터를 사용하므로 서버 DB에 장소가 없을 수 있음
+                      // 일정 추가 전에 registerPlace로 장소를 먼저 등록 (이미 등록된 경우 무시)
+                      try {
+                        await registerPlace({
+                          id: placeData.id,
+                          name: placeData.name,
+                          address: placeData.address,
+                          category: placeData.category,
+                          latitude: placeData.latitude,
+                          longitude: placeData.longitude,
+                          phone: placeData.phone,
+                          link: placeData.link,
+                        });
+                      } catch (e) {
+                        console.warn("Place registration skipped (may already exist):", e);
+                      }
+
                       await addScheduleLocation({
                         iPK: 0,
                         iScheduleFK: parseInt(tripId),
