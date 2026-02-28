@@ -44,8 +44,15 @@ export default function CompanionSelectionPage() {
   };
 
   const handleNext = () => {
-    // 기타 텍스트가 있으면 실제 데이터로 저장하는 전처리 (향후 수정 확장 가능)
-    setTravelData({ companions });
+    // 기타 텍스트가 있으면 'etc' 문자열 대신 { name: etcText, isEtc: true } 형태 또는 직접 etcText 문자열로 변환하여 저장
+    const finalCompanions = companions.map(c => {
+      if (c === "etc" && etcText.trim()) {
+        return { name: etcText.trim() }; // useOnboardingStore.js 에서는 name 속성을 꺼내쓰도록 되어있음
+      }
+      return c;
+    });
+
+    setTravelData({ companions: finalCompanions });
     if (travelData.creationType === "manual") {
       router.push("/onboarding/style");
     } else {

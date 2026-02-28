@@ -6,6 +6,7 @@ import { api } from "../lib/api";
  * @returns {Promise}
  */
 export const createSchedule = async (scheduleData) => {
+    console.log("[스케쥴 생성 백엔드 전송 직전 페이로드 검사]", JSON.stringify(scheduleData));
     const res = await api.post("/schedule/append", scheduleData);
     return res.data;
 };

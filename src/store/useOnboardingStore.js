@@ -36,34 +36,48 @@ export const useOnboardingStore = create(
         // Helper map for companion labels (Should match CompanionSelection options)
         const COMPANION_MAP = {
           alone: "나홀로",
-          couple: "연인과 함께",
-          friends: "친구와 함께",
-          family: "가족과 함께",
-          parents: "부모님과 함께",
+          couple: "연인과",
+          friends: "친구와",
+          family: "가족과",
+          parents: "부모님과",
           etc: "기타",
         };
 
-        let rawCompanion = state.travelData?.companions?.[0];
-        if (typeof rawCompanion === "object" && rawCompanion !== null) {
-          rawCompanion = rawCompanion.name || "나홀로";
+        // [MOD] 다중 선택된 companions 배열을 '-' 기준으로 결합
+        const companionsArray = Array.isArray(state.travelData?.companions)
+          ? state.travelData.companions
+          : [];
+
+        let companionLabel = "나홀로";
+        if (companionsArray.length > 0) {
+          companionLabel = companionsArray
+            .map(c => typeof c === "object" ? (c.name || "기타") : (COMPANION_MAP[c] || c))
+            .filter(Boolean)
+            .join("-");
         }
-        const companionLabel =
-          COMPANION_MAP[rawCompanion] || (typeof rawCompanion === "string" ? rawCompanion : "나홀로");
 
         // 백엔드 명세에 맞춘 데이터 매핑
         const { travelData, user } = state;
         const budget = travelData.budget || {};
 
-        // 예산 총합 계산
+        // [MOD] 사용자가 직접 입력한 총액(travelData.budget이 숫자인 경우 등)을 우선 고려하거나,
+        // 세부 항목 합산이 0일 경우 사용자가 입력한 총 예산 값이나 0을 반환하도록 수정 (기본 1,000,000 제거)
         const calculateTotalBudget = (budgetObj) => {
           let total = 0;
-          if (budgetObj) {
+          if (budgetObj && typeof budgetObj === 'object') {
             total += parseInt(budgetObj.accommodation?.amount || 0);
             total += parseInt(budgetObj.food?.amount || 0);
             total += parseInt(budgetObj.transport?.amount || 0);
             total += parseInt(budgetObj.etc?.amount || 0);
           }
-          return total || 1000000;
+
+          if (total > 0) return total;
+
+          // budgetObj가 숫자형태로 들어오거나, budgetObj 안에 total 값이 있을 경우 방어
+          if (typeof budgetObj === 'number') return budgetObj;
+          if (budgetObj?.total) return parseInt(budgetObj.total);
+
+          return 0; // 더 이상 100만원을 기본으로 주지 않고 0으로 처리 (혹은 다른 적절한 초기값)
         };
 
         // 날짜 포맷 (YYYY-MM-DD 변환 등 방어 로직)
@@ -75,11 +89,33 @@ export const useOnboardingStore = create(
           return new Date().toISOString().split("T")[0];
         };
 
-        // 여행 스타일(배열) 파싱 후 문자열로 결합 (예: "맛집, 자연경관")
-        // 사용자가 선택한 travelData.styles 는 [{ label: "맛집", value: "restaurant" }, ...] 형태임
+        // 여행 스타일(배열) 파싱 후 문자열로 결합 (예: "맛집-자연경관")
+        // 사용자가 선택한 travelData.styles 는 형태가 string 배열(["restaurant", "cafe"]) 이거나 
+        // 객체 배열([{ label: "맛집", value: "restaurant" }, ...]) 일 수 있으므로 방어 코드 추가
+        console.log("[백엔드 전송 전 디버깅: 원본 styles 데이터]", travelData.styles);
+
+        // style 매핑용 객체 (generate-loading 과 동일하게)
+        const STYLE_MAP = {
+          activity: "체험/액티비티", hotplace: "핫플레이스", culture: "문화/역사", landmark: "유명 관광지",
+          nature: "자연경관", healing: "휴양/힐링", hiking: "등산",
+          restaurant: "맛집", cafe: "카페", market: "시장", nightmarket: "야시장/노점",
+          shopping: "쇼핑", parents: "효도 관광", other: "기타"
+        };
+
         const tripStyleLabel = travelData.styles?.length > 0
-          ? travelData.styles.map(s => s.label || "").filter(Boolean).join(", ")
+          ? travelData.styles.map(s => {
+            // 1. 객체 형태인 경우 (s.label 혹은 매핑)
+            if (typeof s === "object" && s !== null) {
+              return s.label || STYLE_MAP[s.value] || "";
+            }
+            // 2. 문자열 형태인 경우 (STYLE_MAP 에서 찾거나 그대로 반환)
+            if (typeof s === "string") {
+              return STYLE_MAP[s] || s;
+            }
+            return "";
+          }).filter(Boolean).join("-")
           : "일반";
+        console.log("[백엔드 전송 전 디버깅: 변환된 tripStyleLabel]", tripStyleLabel);
 
         // 아이디가 문자열(String)인 경우 파싱 시도, 실패 시 임시값 1 부여
         const parsedUserId = parseInt(user?.id, 10);

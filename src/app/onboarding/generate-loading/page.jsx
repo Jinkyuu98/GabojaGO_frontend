@@ -41,8 +41,10 @@ export default function GenerateLoadingPage() {
         const COMPANION_MAP = {
           alone: "나홀로", couple: "연인과 함께", friends: "친구와 함께", family: "가족과 함께", parents: "부모님과 함께", etc: "기타",
         };
-        const rawCompanion = travelData.companions?.[0];
-        const companionLabel = COMPANION_MAP[rawCompanion?.name || rawCompanion] || "나홀로";
+        const companionsArray = Array.isArray(travelData.companions) ? travelData.companions : [];
+        const companionLabel = companionsArray.length > 0
+          ? companionsArray.map(c => typeof c === "object" ? (c.name || "기타") : (COMPANION_MAP[c] || c)).filter(Boolean).join("-")
+          : "나홀로";
 
         const TRANSPORT_MAP = {
           car: "자동차",
@@ -60,7 +62,7 @@ export default function GenerateLoadingPage() {
           shopping: "쇼핑", parents: "효도 관광", other: "기타"
         };
         const tripStyleLabel = travelData.styles?.length > 0
-          ? travelData.styles.map((s) => STYLE_MAP[s] || s).join(", ")
+          ? travelData.styles.map((s) => STYLE_MAP[s] || s).join("-")
           : "일반";
 
         const parsedUserId = parseInt(user?.id, 10);

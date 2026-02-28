@@ -32,9 +32,9 @@ const TripCard = ({ trip, onClick, isLast }) => {
     return `${start} ~ ${end}`;
   })();
 
-  // [MOD] 콤마(",") 기준으로 split 하여 태그 배열 생성, 없으면 빈 배열
+  // [MOD] 하이픈("-") 기준으로 split 하여 태그 배열 생성, 없으면 빈 배열
   const tags = trip.strTripStyle
-    ? trip.strTripStyle.split(",").map(t => t.trim()).filter(Boolean)
+    ? trip.strTripStyle.split("-").map(t => t.trim()).filter(Boolean)
     : [];
 
   return (
