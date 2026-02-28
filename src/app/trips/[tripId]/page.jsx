@@ -1021,7 +1021,7 @@ export default function TripDetailPage() {
           </div>
 
           {/* Header - Mobile Only (Hidden on Desktop since it's moved to Left Panel) */}
-          <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-20 shadow-sm max-w-[430px] mx-auto">
+          <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-20 shadow-sm">
             <div className="flex items-center gap-4">
               <button onClick={() => router.push("/trips")}>
                 <Image
@@ -1045,7 +1045,7 @@ export default function TripDetailPage() {
         {/* Bottom Sheet - Mobile Only */}
         <div
           ref={sheetRef}
-          className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20 max-w-[430px] mx-auto"
+          className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20"
           style={{
             height: `${sheetHeight}px`,
             bottom: 0,
