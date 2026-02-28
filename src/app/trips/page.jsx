@@ -6,11 +6,14 @@ import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { ActionSheet } from "../../components/common/ActionSheet";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
-import { Search } from "lucide-react";
+// [MOD] Trash2 아이콘 추가
+import { Search, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
-import { getScheduleList } from "../../services/schedule";
+// [MOD] removeSchedule 함수 import 추가
+import { getScheduleList, removeSchedule } from "../../services/schedule";
 
-const TripCard = ({ trip, onClick, isLast }) => {
+// [MOD] onDelete props 추가
+const TripCard = ({ trip, onClick, onDelete, isLast }) => {
   const companionText = trip.strWithWho
     ? ["친구와", "연인과", "가족과", "부모님과", "친구", "연인", "가족", "부모님"].includes(trip.strWithWho)
       ? `${trip.strWithWho} 함께`
@@ -48,9 +51,22 @@ const TripCard = ({ trip, onClick, isLast }) => {
             <span className="text-[13px] font-medium text-[#7a28fa] bg-[#f8f6ff] px-2 py-1 rounded-[6px] tracking-[-0.5px] whitespace-nowrap transition-colors">
               {companionText}
             </span>
-            <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap lg:hidden">
-              {dateText}
-            </span>
+            {/* [MOD] 모바일용 삭제 버튼 추가를 위해 flex 컨테이너로 묶음 */}
+            <div className="flex items-center gap-2 lg:hidden">
+              <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
+                {dateText}
+              </span>
+              {/* [ADD] 모바일용 삭제 버튼 */}
+              <button
+                className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(trip.iPK);
+                }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
 
           <h2 className="text-[18px] lg:text-[16px] font-bold text-[#111111] tracking-[-0.5px] leading-tight mb-auto lg:mb-0 lg:flex-1 truncate">
@@ -77,9 +93,22 @@ const TripCard = ({ trip, onClick, isLast }) => {
             })}
           </div>
 
-          <span className="hidden lg:block text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap lg:shrink-0 lg:ml-auto">
-            {dateText}
-          </span>
+          {/* [MOD] 데스크톱용 삭제 버튼 추가를 위해 flex 컨테이너로 묶음 */}
+          <div className="hidden lg:flex items-center gap-4 shrink-0 lg:ml-auto">
+            <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
+              {dateText}
+            </span>
+            {/* [ADD] 데스크톱용 삭제 버튼 */}
+            <button
+              className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(trip.iPK);
+              }}
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
         </div>
       </div>
       {!isLast && (
@@ -96,6 +125,21 @@ export default function TripsListPage() {
   const [scheduleList, setScheduleList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
+
+  // [ADD] 일정 삭제 이벤트 핸들러 추가
+  const handleDeleteSchedule = async (iPK) => {
+    if (window.confirm("정말 이 일정을 삭제하시겠습니까?")) {
+      try {
+        await removeSchedule(iPK);
+        alert("일정이 삭제되었습니다.");
+        // [MOD] 삭제 성공 시 새로고침 대신 상태에서 즉시 제거
+        setScheduleList((prev) => prev.filter((trip) => trip.iPK !== iPK));
+      } catch (err) {
+        console.error("일정 삭제 실패:", err);
+        alert("일정 삭제 중 오류가 발생했습니다.");
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchSchedules = async () => {
@@ -241,6 +285,7 @@ export default function TripsListPage() {
                         trip={trip}
                         isLast={index === displayTrips.length - 1 || true}
                         onClick={() => router.push(`/trips/${trip.iPK}`)}
+                        onDelete={handleDeleteSchedule} // [MOD] 삭제 핸들러 전달 추가
                       />
                     </div>
                   ))}

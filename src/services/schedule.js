@@ -11,8 +11,20 @@ export const createSchedule = async (scheduleData) => {
     return res.data;
 };
 
+// [ADD] 일정 삭제 API 추가
+/**
+ * 일정 삭제 API
+ * @param {number} iSchedulePK - 삭제할 일정의 PK
+ * @returns {Promise}
+ */
+export const removeSchedule = async (iSchedulePK) => {
+    const res = await api.post(`/schedule/remove?iSchedulePK=${iSchedulePK}`);
+    return res.data;
+};
+
 /**
  * AI 명칭 리스트로 백엔드에서 카카오 장소 데이터 조회 (location_list) 
+
  * @param {Object} data - { request_list: [{ place_name, category_group_code }] }
  */
 export const requestScheduleLocations = async (data) => {
