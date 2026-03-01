@@ -9,16 +9,13 @@ import { useOnboardingStore } from "../../store/useOnboardingStore";
 // [MOD] Trash2 아이콘 추가
 import { Search, Trash2 } from "lucide-react";
 import { clsx } from "clsx";
-// [MOD] removeSchedule 함수 import 추가
-import { getScheduleList, removeSchedule } from "../../services/schedule";
+// [MOD] removeSchedule, modifySchedule 함수 import 추가
+import { getScheduleList, removeSchedule, modifySchedule } from "../../services/schedule";
 
-// [MOD] onDelete props 추가
-const TripCard = ({ trip, onClick, onDelete, isLast }) => {
-  const companionText = trip.strWithWho
-    ? ["친구와", "연인과", "가족과", "부모님과", "친구", "연인", "가족", "부모님"].includes(trip.strWithWho)
-      ? `${trip.strWithWho} 함께`
-      : trip.strWithWho
-    : "나홀로";
+// [MOD] onDelete, onEdit props 추가
+const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
+  // [MOD] strWithWho 값을 그대로 표시 (불필요한 '함께' 접미사 제거)
+  const companionText = trip.strWithWho || "나홀로";
 
   const dateText = (() => {
     if (!trip.dtDate1) return "날짜 없음";
@@ -56,6 +53,17 @@ const TripCard = ({ trip, onClick, onDelete, isLast }) => {
               <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
                 {dateText}
               </span>
+              {/* [ADD] 모바일용 수정 버튼 */}
+              <button
+                className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(trip);
+                }}
+                title="일정 수정"
+              >
+                <div className="w-[14px] h-[14px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+              </button>
               {/* [ADD] 모바일용 삭제 버튼 */}
               <button
                 className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
@@ -98,6 +106,17 @@ const TripCard = ({ trip, onClick, onDelete, isLast }) => {
             <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
               {dateText}
             </span>
+            {/* [ADD] 데스크톱용 수정 버튼 */}
+            <button
+              className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(trip);
+              }}
+              title="일정 수정"
+            >
+              <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+            </button>
             {/* [ADD] 데스크톱용 삭제 버튼 */}
             <button
               className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
@@ -125,6 +144,7 @@ export default function TripsListPage() {
   const [scheduleList, setScheduleList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
+  const [editingTrip, setEditingTrip] = useState(null); // [ADD] 수정 모달 상태
 
   // [ADD] 일정 삭제 이벤트 핸들러 추가
   const handleDeleteSchedule = async (iPK) => {
@@ -138,6 +158,48 @@ export default function TripsListPage() {
         console.error("일정 삭제 실패:", err);
         alert("일정 삭제 중 오류가 발생했습니다.");
       }
+    }
+  };
+
+  // [ADD] 일정 수정 모달 열기 핸들러
+  const handleEditSchedule = (trip) => {
+    setEditingTrip({
+      iPK: trip.iPK,
+      iUserFK: trip.iUserFK,
+      dtDate1: trip.dtDate1?.split("T")[0] || "",
+      dtDate2: trip.dtDate2?.split("T")[0] || "",
+      strWhere: trip.strWhere || "",
+      strWithWho: trip.strWithWho || "",
+      strTripStyle: trip.strTripStyle || "",
+      strTransport: trip.strTransport || "",
+      nTotalPeople: trip.nTotalPeople || 1,
+      // [MOD] 예산 0이면 백엔드 에러 방지를 위해 원본값 유지
+      nTotalBudget: trip.nTotalBudget ?? 0,
+      nAlarmRatio: trip.nAlarmRatio || 25,
+      nTransportRatio: trip.nTransportRatio || 25,
+      nLodgingRatio: trip.nLodgingRatio || 25,
+      nFoodRatio: trip.nFoodRatio || 25,
+      chStatus: trip.chStatus || "A",
+      dtCreate: trip.dtCreate || null,
+    });
+  };
+
+  // [ADD] 일정 수정 제출 핸들러
+  const handleSubmitEdit = async () => {
+    if (!editingTrip) return;
+    try {
+      await modifySchedule(editingTrip);
+      alert("일정이 수정되었습니다.");
+      // [MOD] 수정 성공 시 목록 상태 즉시 갱신
+      setScheduleList((prev) =>
+        prev.map((trip) =>
+          trip.iPK === editingTrip.iPK ? { ...trip, ...editingTrip } : trip
+        )
+      );
+      setEditingTrip(null);
+    } catch (err) {
+      console.error("일정 수정 실패:", err);
+      alert("일정 수정 중 오류가 발생했습니다.");
     }
   };
 
@@ -286,6 +348,7 @@ export default function TripsListPage() {
                         isLast={index === displayTrips.length - 1 || true}
                         onClick={() => router.push(`/trips/${trip.iPK}`)}
                         onDelete={handleDeleteSchedule} // [MOD] 삭제 핸들러 전달 추가
+                        onEdit={handleEditSchedule} // [ADD] 수정 핸들러 전달 추가
                       />
                     </div>
                   ))}
@@ -310,6 +373,133 @@ export default function TripsListPage() {
             </div>
           </div>
         </div>
+
+        {/* [ADD] 일정 수정 모달 */}
+        {editingTrip && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-[480px] lg:max-w-[600px] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 max-h-[90vh] flex flex-col">
+              {/* 모달 헤더 */}
+              <div className="px-6 py-5 border-b border-[#f2f4f6] flex items-center justify-between">
+                <h2 className="text-[20px] font-bold text-[#111111] tracking-tight">일정 수정</h2>
+                <button
+                  onClick={() => setEditingTrip(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors text-[#969696] hover:text-[#111]"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 모달 본문 */}
+              <div className="px-6 py-5 flex flex-col gap-4 max-h-[60vh] lg:max-h-none overflow-y-auto">
+                {/* 여행지 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#6e6e6e]">🗺️ 여행지</label>
+                  <input
+                    type="text"
+                    value={editingTrip.strWhere}
+                    onChange={(e) => setEditingTrip({ ...editingTrip, strWhere: e.target.value })}
+                    className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                  />
+                </div>
+
+                {/* 시작일 / 종료일 */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">📅 시작일</label>
+                    <input
+                      type="date"
+                      value={editingTrip.dtDate1}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, dtDate1: e.target.value })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">📅 종료일</label>
+                    <input
+                      type="date"
+                      value={editingTrip.dtDate2}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, dtDate2: e.target.value })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 동행자 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#6e6e6e]">👥 누구와</label>
+                  <input
+                    type="text"
+                    value={editingTrip.strWithWho}
+                    onChange={(e) => setEditingTrip({ ...editingTrip, strWithWho: e.target.value })}
+                    className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                  />
+                </div>
+
+                {/* 여행 스타일 / 교통수단 */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">✈️ 여행 스타일</label>
+                    <input
+                      type="text"
+                      value={editingTrip.strTripStyle}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, strTripStyle: e.target.value })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">🚗 교통수단</label>
+                    <input
+                      type="text"
+                      value={editingTrip.strTransport}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, strTransport: e.target.value })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* 인원 / 예산 */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">👤 인원</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editingTrip.nTotalPeople}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, nTotalPeople: parseInt(e.target.value) || 1 })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="text-[13px] font-semibold text-[#6e6e6e]">💰 예산</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingTrip.nTotalBudget}
+                      onChange={(e) => setEditingTrip({ ...editingTrip, nTotalBudget: parseInt(e.target.value) || 0 })}
+                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 모달 하단 버튼 */}
+              <div className="px-6 py-5 border-t border-[#f2f4f6] flex gap-3">
+                <button
+                  onClick={() => setEditingTrip(null)}
+                  className="flex-1 h-[52px] border border-[#eceff4] bg-white text-[#6d818f] rounded-2xl text-[16px] font-bold hover:bg-gray-50 active:scale-[0.98] transition-all"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSubmitEdit}
+                  className="flex-1 h-[52px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] active:scale-[0.98] transition-all shadow-lg shadow-[#7a28fa]/20"
+                >
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <ActionSheet
           isOpen={isActionSheetOpen}

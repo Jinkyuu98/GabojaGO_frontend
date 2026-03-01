@@ -22,6 +22,17 @@ export const removeSchedule = async (iSchedulePK) => {
     return res.data;
 };
 
+// [ADD] 일정 수정 API
+/**
+ * 일정 수정 API
+ * @param {Object} data - 수정할 일정 데이터 (iPK 필수, 나머지 수정 대상)
+ * @returns {Promise}
+ */
+export const modifySchedule = async (data) => {
+    const res = await api.post("/schedule/modify", data);
+    return res.data;
+};
+
 /**
  * AI 명칭 리스트로 백엔드에서 카카오 장소 데이터 조회 (location_list) 
 
