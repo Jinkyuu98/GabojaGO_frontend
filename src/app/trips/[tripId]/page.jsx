@@ -297,6 +297,14 @@ export default function TripDetailPage() {
     [trip, selectedDay],
   );
 
+  // [ADD] 장소 이름 클릭 시 지도를 해당 위치로 이동하는 핸들러
+  const handlePlaceClick = (place) => {
+    if (!mapInstance.current || !place.latitude || !place.longitude) return;
+    const moveLatLng = new window.kakao.maps.LatLng(place.latitude, place.longitude);
+    mapInstance.current.setLevel(3); // 확대 레벨 조정
+    mapInstance.current.panTo(moveLatLng); // 부드러운 이동
+  };
+
   const initMap = () => {
     if (!window.kakao || !mapRef.current) return;
 
@@ -768,7 +776,11 @@ export default function TripDetailPage() {
 
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-5 mb-2">
-                        <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
+                        {/* [MOD] 장소 이름 클릭 시 지도 해당 위치로 이동 */}
+                        <h3
+                          className="text-base font-semibold text-[#111111] tracking-[-0.06px] cursor-pointer hover:text-[#7a28fa] transition-colors"
+                          onClick={() => handlePlaceClick(place)}
+                        >
                           {place.name}
                         </h3>
                         <div className="flex items-center gap-2">
