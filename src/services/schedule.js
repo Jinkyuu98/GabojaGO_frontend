@@ -114,3 +114,26 @@ export const modifyScheduleLocation = async (data) => {
     return res.data;
 };
 
+// [ADD] 지출 삭제 API
+/**
+ * 일정 내 지출 삭제 API
+ * @param {number} iScheduleExpensePK - 삭제할 지출의 PK
+ * @returns {Promise}
+ */
+export const removeScheduleExpense = async (iScheduleExpensePK) => {
+    const res = await api.post(`/schedule/expense/remove`, null, {
+        params: { iScheduleExpensePK }
+    });
+    return res.data;
+};
+
+// [ADD] 지출 수정 API
+/**
+ * 일정 내 지출 수정 API
+ * @param {Object} data - { iPK, nMoney, dtExpense, chCategory, strMemo }
+ * @returns {Promise}
+ */
+export const modifyScheduleExpense = async (data) => {
+    const res = await api.post("/schedule/expense/modify", data);
+    return res.data;
+};
