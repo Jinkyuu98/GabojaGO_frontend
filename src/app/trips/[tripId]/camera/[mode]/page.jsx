@@ -163,7 +163,9 @@ export default function TravelCameraPage() {
       alert("사진이 저장되었습니다!");
     }
 
-    router.push(`/trips/${tripId}`);
+    // [MOD] 영수증 모드면 비용 탭, 사진 모드면 기록 탭으로 복귀
+    const returnTab = isReceipt ? "비용" : "기록";
+    router.push(`/trips/${tripId}?tab=${returnTab}`);
   };
 
   return (
@@ -229,7 +231,8 @@ export default function TravelCameraPage() {
               {isReceipt ? (
                 <button
                   className="w-20 text-white text-sm font-medium bg-transparent border-none cursor-pointer"
-                  onClick={() => alert("직접 입력 페이지로 이동합니다.")}
+                  // [MOD] alert 팝업 대신 직접입력 페이지로 실제 라우터 이동
+                  onClick={() => router.push(`/trips/${tripId}/expense/manual`)}
                 >
                   직접 입력
                 </button>

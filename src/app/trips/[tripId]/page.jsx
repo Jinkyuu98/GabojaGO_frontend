@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
 import { clsx } from "clsx";
@@ -272,7 +272,10 @@ export default function TripDetailPage() {
     [apiTrip, myTrips, tripId],
   );
 
-  const [selectedTab, setSelectedTab] = useState("일정");
+  // [MOD] URL 쿼리 파라미터(?tab=비용)에서 탭 상태를 복원하여 페이지 이동 후에도 탭 유지
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") || "일정";
+  const [selectedTab, setSelectedTab] = useState(initialTab);
   const [selectedDay, setSelectedDay] = useState(1);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
