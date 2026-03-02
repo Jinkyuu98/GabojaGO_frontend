@@ -200,7 +200,7 @@ export default function TripDetailPage() {
             });
           }
 
-          // 비용 (expense_list -> budget.spent)
+          // [MOD] 비용 (expense_list -> budget.spent) - 카테고리 코드→한글 변환 및 카테고리별 그룹핑
           let newSpent = [];
           if (expenseRes?.expense_list) {
             try {
@@ -208,15 +208,30 @@ export default function TripDetailPage() {
                 ? JSON.parse(expenseRes.expense_list.replace(/'/g, '"'))
                 : (Array.isArray(expenseRes.expense_list) ? expenseRes.expense_list : []);
 
-              const categoryColors = { "숙박비": "#14b8a6", "식비": "#3b82f6", "교통비": "#ffa918", "기타": "#b115fa", "쇼핑": "#f43f5e", "관광": "#8b5cf6" };
-              const totalB = found.nTotalBudget || 500000;
+              // [ADD] 카테고리 코드 → 한글 라벨 매핑
+              const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+              // [ADD] 카테고리 라벨 → 색상 매핑
+              const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
 
-              newSpent = eList.map(exp => ({
-                category: exp.chCategory || "기타",
-                amount: exp.nMoney || 0,
-                color: categoryColors[exp.chCategory] || "#b115fa",
-                percentage: Math.round(((exp.nMoney || 0) / totalB) * 100)
+              // [ADD] 카테고리별 금액 그룹핑
+              const grouped = {};
+              eList.forEach(exp => {
+                const label = categoryLabelMap[exp.chCategory] || "기타";
+                if (!grouped[label]) grouped[label] = 0;
+                grouped[label] += (exp.nMoney || 0);
+              });
+
+              const totalSpent = Object.values(grouped).reduce((sum, v) => sum + v, 0);
+
+              newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                category: label,
+                amount,
+                color: categoryColors[label] || "#b115fa",
+                percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
               }));
+
+              // [ADD] 금액 내림차순 정렬
+              newSpent.sort((a, b) => b.amount - a.amount);
             } catch (e) { console.error("Expense parse error", e); }
           }
 
@@ -252,6 +267,11 @@ export default function TripDetailPage() {
               total: found.nTotalBudget || 500000,
               spent: newSpent.length > 0 ? newSpent : MOCK_TRIP.budget.spent,
               planned: MOCK_TRIP.budget.planned,
+              // [ADD] 카테고리별 예산 비율 매핑 (초과 경고 판단용)
+              foodRatio: found.nFoodRatio || 25,
+              transportRatio: found.nTransportRatio || 25,
+              lodgingRatio: found.nLodgingRatio || 25,
+              etcRatio: found.nAlarmRatio || 25,
             },
             companions: newCompanions.length > 0 ? newCompanions : MOCK_TRIP.companions,
             checklist: MOCK_TRIP.checklist,
@@ -975,25 +995,40 @@ export default function TripDetailPage() {
                     사용 금액
                   </h3>
                   <div className="flex gap-6 items-center">
+                    {/* [MOD] 정적 SVG 이미지 -> 실제 데이터 기반 동적 SVG 도넛 차트 */}
                     <div className="relative w-[159px] h-[159px] flex-shrink-0">
-                      <Image
-                        src="/icons/donut-chart.svg"
-                        alt="chart"
-                        width={159}
-                        height={159}
-                      />
-                      <span className="absolute top-[66px] right-[10px] text-[13px] font-semibold text-white">
-                        62%
-                      </span>
-                      <span className="absolute top-[93px] left-[11px] text-[13px] font-semibold text-white">
-                        25%
-                      </span>
-                      <span className="absolute top-[34px] left-[12px] text-[13px] font-semibold text-white">
-                        12%
-                      </span>
-                      <span className="absolute top-[13px] left-[47px] text-[13px] font-semibold text-white">
-                        6%
-                      </span>
+                      <svg viewBox="0 0 36 36" className="w-full h-full" style={{ transform: "rotate(-90deg)" }}>
+                        {(() => {
+                          const spentData = trip.budget.spent || [];
+                          const total = spentData.reduce((s, i) => s + i.amount, 0);
+                          if (total === 0) return <circle cx="18" cy="18" r="14" fill="none" stroke="#e5ebf1" strokeWidth="6" />;
+                          let cumulative = 0;
+                          return spentData.map((item, idx) => {
+                            const pct = item.amount / total;
+                            const dashArray = `${pct * 87.96} ${87.96 - pct * 87.96}`;
+                            const dashOffset = -cumulative * 87.96;
+                            cumulative += pct;
+                            return (
+                              <circle
+                                key={idx}
+                                cx="18" cy="18" r="14"
+                                fill="none"
+                                stroke={item.color}
+                                strokeWidth="6"
+                                strokeDasharray={dashArray}
+                                strokeDashoffset={dashOffset}
+                              />
+                            );
+                          });
+                        })()}
+                      </svg>
+                      {/* [ADD] 도넛 차트 중앙에 총 사용 금액 표시 */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-[11px] text-[#8e8e93]">사용 금액</span>
+                        <span className="text-[14px] font-bold text-[#111]">
+                          {(trip.budget.spent || []).reduce((s, i) => s + i.amount, 0).toLocaleString()}원
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex-1 flex flex-col gap-2">
@@ -1019,9 +1054,15 @@ export default function TripDetailPage() {
                           <span
                             className={clsx(
                               "text-sm font-semibold",
-                              item.category === "식비"
-                                ? "text-[#ff0909]"
-                                : "text-[#111111]",
+                              // [MOD] 카테고리별 사용 금액이 예산 비율을 초과하면 빨간색 경고 표시
+                              (() => {
+                                const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
+                                const ratio = ratioMap[item.category];
+                                const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
+                                return budgetForCategory !== null && item.amount > budgetForCategory
+                                  ? "text-[#ff0909]"
+                                  : "text-[#111111]";
+                              })(),
                             )}
                           >
                             {item.amount.toLocaleString()}
@@ -1031,17 +1072,28 @@ export default function TripDetailPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3">
-                    <Image
-                      src="/icons/danger.svg"
-                      alt="warning"
-                      width={15}
-                      height={14}
-                    />
-                    <span className="text-[13px] font-medium text-[#ff0909]">
-                      예상 비용을 초과한 사용 금액이 있어요
-                    </span>
-                  </div>
+                  {/* [MOD] 실제로 예산 초과 카테고리가 있을 때만 경고 배너 표시 */}
+                  {(() => {
+                    const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
+                    const hasExceeded = (trip.budget.spent || []).some(item => {
+                      const ratio = ratioMap[item.category];
+                      const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
+                      return budgetForCategory !== null && item.amount > budgetForCategory;
+                    });
+                    return hasExceeded ? (
+                      <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3">
+                        <Image
+                          src="/icons/danger.svg"
+                          alt="warning"
+                          width={15}
+                          height={14}
+                        />
+                        <span className="text-[13px] font-medium text-[#ff0909]">
+                          예상 비용을 초과한 사용 금액이 있어요
+                        </span>
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
               </div>
             ) : (
