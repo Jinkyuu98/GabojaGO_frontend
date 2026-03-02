@@ -142,7 +142,7 @@ export default function TripDetailPage() {
   const [showExpenseDetail, setShowExpenseDetail] = useState(false); // 내역 뷰 토글
   const [editingBudget, setEditingBudget] = useState(null); // 예산 수정 모달
   const [expenseRawList, setExpenseRawList] = useState([]); // 개별 지출 원본 데이터
-
+  const [editingExpense, setEditingExpense] = useState(null); // [ADD] 개별 지출 수정 모달
   useEffect(() => {
     const fetchTrip = async () => {
       try {
@@ -1054,6 +1054,29 @@ export default function TripDetailPage() {
                                 <div className="flex items-center gap-2 flex-shrink-0">
                                   <span className="text-[14px] font-bold text-[#111]">{(exp.nMoney || 0).toLocaleString()}원</span>
                                   <button
+                                    className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
+                                    title="지출 수정"
+                                    onClick={() => {
+                                      setEditingExpense({
+                                        iPK: exp.iPK,
+                                        iScheduleFK: exp.iScheduleFK || tripId, // [ADD] 필수 필드
+                                        iUserFK: exp.iUserFK || 1, // [ADD] 필수 필드
+                                        nMoney: exp.nMoney || 0,
+                                        dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
+                                        chCategory: exp.chCategory || "E",
+                                        strMemo: exp.strMemo || ""
+                                      });
+                                    }}
+                                  >
+                                    <Image
+                                      src="/icons/edit-purple.svg"
+                                      alt="edit"
+                                      width={16}
+                                      height={16}
+                                      className="grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
+                                    />
+                                  </button>
+                                  <button
                                     className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
                                     title="지출 삭제"
                                     onClick={async () => {
@@ -1698,6 +1721,128 @@ export default function TripDetailPage() {
                     const errorDetail = err.response?.data;
                     const errorMsg = errorDetail ? (typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail)) : err.message;
                     alert(`🚨 예산 수정 중 오류가 발생했습니다.\n\n[서버 응답 상세]\n${errorMsg}`);
+                  }
+                }}
+                className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
+              >저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* [ADD] 지출 항목 개별 수정 모달 */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm bg-white rounded-xl p-5 shadow-lg">
+            <h3 className="text-[17px] font-bold text-[#111] mb-4">지출 내역 수정</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">카테고리</label>
+                <select
+                  value={editingExpense.chCategory}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, chCategory: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px] bg-white"
+                >
+                  <option value="F">식비</option>
+                  <option value="T">교통비</option>
+                  <option value="L">숙박비</option>
+                  <option value="E">기타</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">지출 금액 (원)</label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={editingExpense.nMoney}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, nMoney: parseInt(e.target.value) || 0 })}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">지출 일시</label>
+                <input
+                  type="datetime-local"
+                  value={editingExpense.dtExpense}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, dtExpense: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">내용 (메모)</label>
+                <input
+                  type="text"
+                  value={editingExpense.strMemo}
+                  onChange={(e) => setEditingExpense({ ...editingExpense, strMemo: e.target.value })}
+                  placeholder="지출 내용을 입력하세요"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setEditingExpense(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">취소</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const dtFormatted = editingExpense.dtExpense
+                      ? editingExpense.dtExpense.replace("T", " ") + (editingExpense.dtExpense.length === 16 ? ":00" : "")
+                      : "";
+
+                    const payload = {
+                      iPK: editingExpense.iPK,
+                      iScheduleFK: parseInt(editingExpense.iScheduleFK), // [ADD] 필수 필드
+                      iUserFK: parseInt(editingExpense.iUserFK), // [ADD] 필수 필드
+                      nMoney: editingExpense.nMoney,
+                      dtExpense: dtFormatted,
+                      chCategory: editingExpense.chCategory,
+                      strMemo: editingExpense.strMemo
+                    };
+
+                    console.log("🚨 [지출 개별 수정 페이로드]", payload);
+                    const { modifyScheduleExpense } = await import("../../../services/schedule");
+                    await modifyScheduleExpense(payload);
+
+                    // 화면(로컬 상태) 즉시 업데이트
+                    setExpenseRawList(prev => prev.map(exp => {
+                      if (exp.iPK === editingExpense.iPK) {
+                        return { ...exp, ...payload, dtExpense: dtFormatted, categoryLabel: { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" }[payload.chCategory] };
+                      }
+                      return exp;
+                    }));
+
+                    setApiTrip(prev => {
+                      if (!prev) return prev;
+                      const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+                      const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
+
+                      const updatedRawList = expenseRawList.map(exp =>
+                        exp.iPK === editingExpense.iPK ? { ...exp, ...payload, dtExpense: dtFormatted, categoryLabel: categoryLabelMap[payload.chCategory] } : exp
+                      );
+
+                      const grouped = {};
+                      updatedRawList.forEach(e => {
+                        const label = categoryLabelMap[e.chCategory] || "기타";
+                        if (!grouped[label]) grouped[label] = 0;
+                        grouped[label] += (e.nMoney || 0);
+                      });
+
+                      const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
+                      const newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                        category: label, amount,
+                        color: categoryColors[label] || "#b115fa",
+                        percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+                      })).sort((a, b) => b.amount - a.amount);
+
+                      return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                    });
+
+                    setEditingExpense(null);
+                    alert("✅ 지출 내역이 수정되었습니다.");
+                  } catch (err) {
+                    console.error("🚨 지출 수정 실패:", err);
+                    const errorDetail = err.response?.data;
+                    const errorMsg = errorDetail ? (typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail)) : err.message;
+                    alert(`🚨 지출 수정 중 오류가 발생했습니다.\n\n[서버 응답 상세]\n${errorMsg}`);
                   }
                 }}
                 className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
