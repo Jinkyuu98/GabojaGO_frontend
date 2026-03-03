@@ -137,3 +137,49 @@ export const modifyScheduleExpense = async (data) => {
     const res = await api.post("/schedule/expense/modify", data);
     return res.data;
 };
+
+// ==========================================
+// [ADD] 준비물(Checklist) 관련 API
+// ==========================================
+
+/**
+ * 일정 준비물 목록 조회 API
+ * @param {number} iSchedulePK 
+ * @returns {Promise}
+ */
+export const getSchedulePreparations = async (iSchedulePK) => {
+    const res = await api.get(`/schedule/preparation/list?iSchedulePK=${iSchedulePK}`);
+    return res.data;
+};
+
+/**
+ * 일정 준비물 추가 API
+ * @param {Object} data - { iScheduleFK, strName, bCheck }
+ * @returns {Promise}
+ */
+export const addSchedulePreparation = async (data) => {
+    const res = await api.post("/schedule/preparation/append", data);
+    return res.data;
+};
+
+/**
+ * 일정 준비물 수정 API (체크 여부 토글용)
+ * @param {Object} data - { iPK, bCheck }
+ * @returns {Promise}
+ */
+export const modifySchedulePreparation = async (data) => {
+    const res = await api.post("/schedule/preparation/modify", data);
+    return res.data;
+};
+
+/**
+ * 일정 준비물 삭제 API
+ * @param {number} iSchedulePreparationPK 
+ * @returns {Promise}
+ */
+export const removeSchedulePreparation = async (iSchedulePreparationPK) => {
+    const res = await api.post(`/schedule/preparation/remove`, null, {
+        params: { iSchedulePreparationPK }
+    });
+    return res.data;
+};

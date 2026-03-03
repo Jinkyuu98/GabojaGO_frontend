@@ -9,7 +9,11 @@ import SearchModal from "./SearchModal";
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
 import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
-import { removeScheduleLocation, modifyScheduleLocation, removeScheduleExpense, modifyScheduleExpense } from "../../../services/schedule"; // [MOD] 장소/지출 삭제/수정 API 추가
+import {
+  removeScheduleLocation, modifyScheduleLocation,
+  removeScheduleExpense, modifyScheduleExpense,
+  getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation // [MOD] 준비물 API 추가
+} from "../../../services/schedule";
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -85,15 +89,7 @@ export default function TripDetailPage() {
         { category: "기타", amount: 500000, color: "#b115fa", percentage: 6 },
       ],
     },
-    checklist: [
-      { id: 1, name: "충전기", checked: false },
-      { id: 2, name: "충전기", checked: false },
-      { id: 3, name: "충전기", checked: false },
-      { id: 4, name: "충전기", checked: false },
-      { id: 5, name: "충전기", checked: false },
-      { id: 6, name: "충전기", checked: false },
-      { id: 7, name: "충전기", checked: false },
-    ],
+    checklist: [], // [MOD] 기본 MOCK 비우기 (API 연동)
     companions: [
       { id: 1, name: "홍길동", isOwner: true },
       { id: 2, name: "홍길동", isOwner: false },
@@ -143,19 +139,25 @@ export default function TripDetailPage() {
   const [editingBudget, setEditingBudget] = useState(null); // 예산 수정 모달
   const [expenseRawList, setExpenseRawList] = useState([]); // 개별 지출 원본 데이터
   const [editingExpense, setEditingExpense] = useState(null); // [ADD] 개별 지출 수정 모달
+
+  // [ADD] 준비물 관련 상태
+  const [isAddingPreparation, setIsAddingPreparation] = useState(false);
+  const [newPreparationName, setNewPreparationName] = useState("");
+
   useEffect(() => {
     const fetchTrip = async () => {
       try {
-        const { getScheduleList, getScheduleLocations, getScheduleExpenses, getScheduleUsers } = await import("../../../services/schedule");
+        const { getScheduleList, getScheduleLocations, getScheduleExpenses, getScheduleUsers, getSchedulePreparations } = await import("../../../services/schedule");
 
-        // 1) 기본 정보와 3가지 상세 정보를 병렬로 호출합니다.
-        const [resA, resB, resC, locationRes, expenseRes, userRes] = await Promise.all([
+        // 1) 기본 정보와 4가지 상세 정보를 병렬로 호출합니다.
+        const [resA, resB, resC, locationRes, expenseRes, userRes, prepRes] = await Promise.all([
           getScheduleList("a"),
           getScheduleList("b"),
           getScheduleList("c"),
           getScheduleLocations(tripId).catch(() => null),
           getScheduleExpenses(tripId).catch(() => null),
-          getScheduleUsers(tripId).catch(() => null)
+          getScheduleUsers(tripId).catch(() => null),
+          getSchedulePreparations(tripId).catch(() => null) // [ADD] 준비물 데이터 로드
         ]);
 
         const allTrips = [
@@ -265,6 +267,22 @@ export default function TripDetailPage() {
             } catch (e) { console.error("User parse error", e); }
           }
 
+          // [ADD] 준비물 (preparation_list -> checklist)
+          let newChecklist = [];
+          if (prepRes?.preparation_list) {
+            try {
+              const pList = typeof prepRes.preparation_list === "string"
+                ? JSON.parse(prepRes.preparation_list.replace(/'/g, '"'))
+                : (Array.isArray(prepRes.preparation_list) ? prepRes.preparation_list : []);
+
+              newChecklist = pList.map(prep => ({
+                id: prep.iPK,
+                name: prep.strName,
+                checked: prep.bCheck || false
+              }));
+            } catch (e) { console.error("Preparation parse error", e); }
+          }
+
           setApiTrip({
             id: found.iPK,
             title: found.strWhere ? `${found.strWhere} 여행` : "여행 일정",
@@ -288,9 +306,10 @@ export default function TripDetailPage() {
               etcRatio: found.nAlarmRatio || 25,
             },
             companions: newCompanions.length > 0 ? newCompanions : MOCK_TRIP.companions,
-            checklist: MOCK_TRIP.checklist,
+            checklist: newChecklist, // [MOD] 준비물 데이터 매핑
             raw: found, // [ADD] 서버 통신용 원본 데이터 보관
           });
+
         }
       } catch (err) {
         console.error("일정 상세 조회 실패:", err);
@@ -298,6 +317,102 @@ export default function TripDetailPage() {
     };
     fetchTrip();
   }, [tripId]);
+
+  // ==========================================
+  // [ADD] 준비물 탭 핸들러 (추가, 토글, 삭제)
+  // ==========================================
+
+  const onAddPreparation = async () => {
+    if (!newPreparationName.trim()) {
+      setIsAddingPreparation(false);
+      return;
+    }
+    try {
+      const payload = {
+        iPK: 0,
+        iScheduleFK: parseInt(tripId, 10),
+        strName: newPreparationName.trim(),
+        bCheck: false
+      };
+
+      // API call
+      await addSchedulePreparation(payload);
+
+      // 로컬 상태 즉시 업데이트
+      const fetchCall = await getSchedulePreparations(tripId).catch(() => null);
+
+      let newChecklist = [];
+      if (fetchCall?.preparation_list) {
+        try {
+          const pList = typeof fetchCall.preparation_list === "string"
+            ? JSON.parse(fetchCall.preparation_list.replace(/'/g, '"'))
+            : (Array.isArray(fetchCall.preparation_list) ? fetchCall.preparation_list : []);
+
+          newChecklist = pList.map(prep => ({
+            id: prep.iPK,
+            name: prep.strName,
+            checked: prep.bCheck || false
+          }));
+        } catch (e) { console.error("Preparation parse error", e); }
+      }
+
+      setApiTrip(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          checklist: newChecklist.length > 0 ? newChecklist : [...prev.checklist, { id: Date.now(), name: payload.strName, checked: false }]
+        };
+      });
+      setNewPreparationName("");
+      setIsAddingPreparation(false);
+    } catch (err) {
+      console.error("준비물 추가 중 오류 세부정보:", err.response?.data || err);
+      alert("준비물 추가에 실패했습니다. (500 Error)");
+    }
+  };
+
+  const onTogglePreparation = async (prep) => {
+    try {
+      const payload = {
+        iPK: prep.id,
+        bCheck: !prep.checked
+      };
+      await modifySchedulePreparation(payload);
+
+      // 클라이언트 상태 즉시 반영
+      setApiTrip(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          checklist: prev.checklist.map(item =>
+            item.id === prep.id ? { ...item, checked: !item.checked } : item
+          )
+        };
+      });
+    } catch (err) {
+      console.error("준비물 상태 변경 오류:", err);
+      alert("상태 변경에 실패했습니다.");
+    }
+  };
+
+  const onRemovePreparation = async (prepId) => {
+    if (!window.confirm("이 준비물을 삭제하시겠습니까?")) return;
+    try {
+      await removeSchedulePreparation(prepId);
+
+      // 클라이언트 상태 즉시 반영
+      setApiTrip(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          checklist: prev.checklist.filter(item => item.id !== prepId)
+        };
+      });
+    } catch (err) {
+      console.error("준비물 삭제 오류:", err);
+      alert("삭제에 실패했습니다.");
+    }
+  };
 
   const trip = useMemo(
     () =>
@@ -1304,54 +1419,103 @@ export default function TripDetailPage() {
 
         {
           selectedTab === "준비물" && (
-            trip.checklist && trip.checklist.length > 0 ? (
-              <div className="flex flex-col gap-4 pt-1">
-                <div className="flex items-center justify-between gap-5">
-                  <span className="text-sm font-semibold text-[#111111]">
-                    준비물 {trip.checklist.length}개
-                  </span>
-                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                    준비물 추가
-                  </span>
-                </div>
+            <div className="flex flex-col gap-4 pt-1">
+              <div className="flex items-center justify-between gap-5">
+                <span className="text-sm font-semibold text-[#111111]">
+                  준비물 {trip.checklist ? trip.checklist.length : 0}개
+                </span>
+                <button
+                  className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
+                  onClick={() => setIsAddingPreparation(true)}
+                >
+                  준비물 추가
+                </button>
+              </div>
 
-                <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
-                  {trip.checklist.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-[18px] h-[18px] rounded cursor-pointer">
-                          <Image
-                            src="/icons/checkbox-unchecked.svg"
-                            alt="checkbox"
-                            width={18}
-                            height={18}
-                          />
-                        </div>
-                        <span className="text-base text-[#111111] tracking-[-0.4px]">
-                          {item.name}
-                        </span>
+              <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
+                {trip.checklist && trip.checklist.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-[18px] h-[18px] rounded cursor-pointer"
+                        onClick={() => onTogglePreparation(item)}
+                      >
+                        <Image
+                          src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
+                          alt="checkbox"
+                          width={18}
+                          height={18}
+                        />
                       </div>
-                      <Image
-                        src="/icons/dots-menu.svg"
-                        alt="menu"
-                        width={18}
-                        height={4}
-                      />
+                      <span className={clsx(
+                        "text-base tracking-[-0.4px]",
+                        item.checked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
+                      )}>
+                        {item.name}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    {/* [MOD] dots-menu.svg 대신 Trash2(휴지통) 아이콘 사용 */}
+                    <button
+                      className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                      onClick={() => onRemovePreparation(item.id)}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+
+                {/* [ADD] 준비물 추가 인풋 폼 */}
+                {isAddingPreparation && (
+                  <div className="flex items-center gap-3 mt-1">
+                    <input
+                      type="text"
+                      value={newPreparationName}
+                      onChange={(e) => setNewPreparationName(e.target.value)}
+                      placeholder="준비물을 입력하세요"
+                      className="flex-1 bg-white border border-[#e5ebf2] rounded-lg px-3 py-2 text-[14px] text-[#111] focus:outline-none focus:border-[#7a28fa]"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') onAddPreparation();
+                        if (e.key === 'Escape') setIsAddingPreparation(false);
+                      }}
+                    />
+                    <button
+                      className="px-3 py-2 bg-[#111] text-white text-[13px] font-semibold rounded-lg"
+                      onClick={onAddPreparation}
+                    >
+                      저장
+                    </button>
+                    <button
+                      className="px-3 py-2 bg-white border border-[#d1d5db] text-[#111] text-[13px] font-semibold rounded-lg"
+                      onClick={() => {
+                        setIsAddingPreparation(false);
+                        setNewPreparationName("");
+                      }}
+                    >
+                      취소
+                    </button>
+                  </div>
+                )}
+
+                {/* 준비물이 없을 때 보여줄 디자인 (추가 중이 아닐 때만) */}
+                {(!trip.checklist || trip.checklist.length === 0) && !isAddingPreparation && (
+                  <div className="flex flex-col items-center justify-center py-6 px-6 mt-4">
+                    <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                      {"아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요"}
+                    </p>
+                    <button
+                      className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsAddingPreparation(true)}
+                    >
+                      준비물 추가
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                  {"아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요"}
-                </p>
-                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">준비물 추가</button>
-              </div>
-            )
+            </div>
           )
         }
 
