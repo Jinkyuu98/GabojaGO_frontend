@@ -340,7 +340,7 @@ export default function MyPage() {
   return (
     <MobileContainer showNav={true}>
       <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_MAP_KEY}&autoload=false&libraries=services`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.KAKAO_API_KEY}&autoload=false&libraries=services`}
         strategy="afterInteractive"
       />
       <div className="w-full h-screen bg-white flex flex-col lg:bg-[#f8f9fa]">
