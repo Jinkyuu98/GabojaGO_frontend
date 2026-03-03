@@ -610,7 +610,7 @@ export default function ResultPage() {
   return (
     <div className="relative w-full h-screen bg-white overflow-hidden lg:flex lg:flex-row">
       <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${"bdacda02e2365ada858c79c1f84db35f"}&autoload=false&libraries=services`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
         strategy="afterInteractive"
         onLoad={initMap}
       />

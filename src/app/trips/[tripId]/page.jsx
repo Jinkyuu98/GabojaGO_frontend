@@ -1765,7 +1765,7 @@ export default function TripDetailPage() {
         {/* Map Section */}
         <div className="relative flex-1 h-full overflow-hidden">
           <Script
-            src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${"bdacda02e2365ada858c79c1f84db35f"}&autoload=false&libraries=services`}
+            src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
             strategy="afterInteractive"
             onLoad={initMap}
           />
