@@ -377,19 +377,23 @@ export default function SearchPlaceDetailPage() {
                       try {
                         // [ADD] 장소 등록 API 호출 (PC 버전과 동일하게 개별 예외 처리)
                         // [ADD] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송 및 Favorite_Location 연동
-                        await registerPlace({
-                          iPK: placeData.id,
-                          strName: placeData.name,
-                          strAddress: placeData.address,
-                          strGroupName: placeData.category || "",
-                          strGroupCode: placeData.groupCode || "",
-                          strGroupDetail: placeData.groupDetail || "",
-                          strPhone: placeData.phone || "",
-                          strLink: placeData.link || "",
-                          chCategory: placeData.chCategory || "E",
-                          ptLatitude: String(placeData.latitude),
-                          ptLongitude: String(placeData.longitude),
-                        });
+                        try {
+                          await registerPlace({
+                            iPK: placeData.id,
+                            strName: placeData.name,
+                            strAddress: placeData.address,
+                            strGroupName: placeData.category || "",
+                            strGroupCode: placeData.groupCode || "",
+                            strGroupDetail: placeData.groupDetail || "",
+                            strPhone: placeData.phone || "",
+                            strLink: placeData.link || "",
+                            chCategory: placeData.chCategory || "E",
+                            ptLatitude: String(placeData.latitude),
+                            ptLongitude: String(placeData.longitude),
+                          });
+                        } catch (regErr) {
+                          console.warn("registerPlace failed (might already exist):", regErr);
+                        }
 
                         // [ADD] 1번(기본) 폴더에 장소 담기. 만약 1번 폴더가 없으면 리스트를 조회해서 맨 처음 폴더 사용.
                         try {
@@ -402,6 +406,7 @@ export default function SearchPlaceDetailPage() {
                           } catch (e) { /* ignore and fallback to 1 */ }
 
                           await appendFavoriteLocation({
+                            iPK: 0,
                             iFavoriteFK: favoriteId,
                             iLocationFK: placeData.id
                           });

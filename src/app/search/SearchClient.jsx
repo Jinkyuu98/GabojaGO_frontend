@@ -9,6 +9,7 @@ import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { Toast } from "../../components/common/Toast";
 import { searchPlaces, registerPlace } from "../../services/place";
+import { getFavoriteList, appendFavoriteLocation } from "../../services/favorite";
 
 const HighlightText = ({ text = "", keyword = "" }) => {
   if (!text) return null;
@@ -288,37 +289,53 @@ export default function SearchClient() {
                     <button
                       onClick={async () => {
                         try {
-                          // [ADD] 장소 등록 API 호출 (기존 유지)
+                          // [ADD] 장소 등록 API 호출 
                           try {
                             await registerPlace({
-                              id: selectedPlace.id,
-                              name: selectedPlace.name,
-                              address: selectedPlace.address,
-                              category: selectedPlace.category,
-                              groupCode: selectedPlace.groupCode,
-                              latitude: selectedPlace.latitude,
-                              longitude: selectedPlace.longitude,
-                              phone: selectedPlace.phone,
-                              link: selectedPlace.link,
+                              iPK: selectedPlace.id,
+                              strName: selectedPlace.name,
+                              strAddress: selectedPlace.address,
+                              strGroupName: selectedPlace.category || "",
+                              strGroupCode: selectedPlace.groupCode || "",
+                              strGroupDetail: selectedPlace.groupDetail || "",
+                              strPhone: selectedPlace.phone || "",
+                              strLink: selectedPlace.link || "",
+                              chCategory: selectedPlace.chCategory || "E",
+                              ptLatitude: String(selectedPlace.latitude || "0"),
+                              ptLongitude: String(selectedPlace.longitude || "0"),
                             });
                           } catch (e) {
-                            console.error(
-                              "API registration failed, falling back to local storage only:",
-                              e,
-                            );
+                            console.warn("registerPlace failed in SearchClient (might already exist):", e);
+                          }
+
+                          // [ADD] 1번(기본) 폴더에 장소 담기. 만약 1번 폴더가 없으면 리스트를 조회해서 맨 처음 폴더 사용.
+                          try {
+                            let favoriteId = 1;
+                            try {
+                              const favListRes = await getFavoriteList();
+                              if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
+                                favoriteId = favListRes.data.favorite_list[0].iPK;
+                              }
+                            } catch (e) { /* ignore and fallback to 1 */ }
+
+                            await appendFavoriteLocation({
+                              iPK: 0,
+                              iFavoriteFK: favoriteId,
+                              iLocationFK: selectedPlace.id
+                            });
+                          } catch (e) {
+                            console.error("즐겨찾기에 장소 추가 실패:", e);
                           }
 
                           // [ADD] 로컬 스토리지에도 저장하여 즉시 확인 가능하도록 처리
                           const savedList = JSON.parse(
-                            localStorage.getItem("saved_places") || "[]",
+                            localStorage.getItem("saved_places") || "[]"
                           );
-                          if (
-                            !savedList.find((p) => p.id === selectedPlace.id)
-                          ) {
+                          if (!savedList.find((p) => p.id === selectedPlace.id)) {
                             savedList.push(selectedPlace);
                             localStorage.setItem(
                               "saved_places",
-                              JSON.stringify(savedList),
+                              JSON.stringify(savedList)
                             );
                           }
 
@@ -600,6 +617,6 @@ export default function SearchClient() {
 
         <BottomNavigation />
       </div>
-    </MobileContainer>
+    </MobileContainer >
   );
 }

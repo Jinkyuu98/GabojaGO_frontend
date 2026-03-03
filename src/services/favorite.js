@@ -28,3 +28,17 @@ export const appendFavoriteLocation = (payload) =>
  */
 export const removeFavoriteLocation = (iFavoriteLocationPK) =>
     api.post("/favorite/location/remove", null, { params: { iFavoriteLocationPK } });
+/**
+ * [ADD] 즐겨찾기 폴더 (그룹) 생성
+ * @param {Object} payload 
+ * @param {string} payload.strName - 새 그룹 이름
+ */
+export const appendFavoriteGroup = (payload) =>
+    api.post("/favorite/append", payload);
+
+/**
+ * [ADD] 즐겨찾기 폴더 (그룹) 삭제
+ * @param {number} iFavoritePK - 삭제할 그룹 PK
+ */
+export const removeFavoriteGroup = (iFavoritePK) =>
+    api.post("/favorite/remove", null, { params: { iFavoritePK } });

@@ -18,6 +18,8 @@ import {
   getFavoriteLocationList,
   appendFavoriteLocation,
   removeFavoriteLocation,
+  appendFavoriteGroup,
+  removeFavoriteGroup,
 } from "../../services/favorite";
 import { useEffect, useRef } from "react";
 import Script from "next/script";
@@ -46,6 +48,10 @@ export default function MyPage() {
   const [isSortOpen, setIsSortOpen] = useState(false); // [ADD] 정렬 옵션 드롭다운 상태
   const [locationFilter, setLocationFilter] = useState("map_center"); // [ADD] 위치 기준 필터 (map_center, my_location)
   const [isLocationOpen, setIsLocationOpen] = useState(false); // [ADD] 위치 기준 드롭다운 상태
+
+  // [ADD] 즐겨찾기 그룹 관리를 위한 상태
+  const [favoriteGroups, setFavoriteGroups] = useState([]);
+  const [selectedGroupPK, setSelectedGroupPK] = useState(1);
 
   // [ADD] Toast 및 되돌리기 기능용 상태
   const [isToastOpen, setIsToastOpen] = useState(false);
@@ -80,18 +86,26 @@ export default function MyPage() {
 
           // 2. API에서도 가져오기
           let apiData = [];
+          let fetchSuccess = false;
           try {
             let favoriteId = 1;
             try {
               const favListRes = await getFavoriteList();
               if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
-                favoriteId = favListRes.data.favorite_list[0].iPK;
+                // [MOD] favoriteGroups 상태 업데이트
+                setFavoriteGroups(favListRes.data.favorite_list);
+                // 이미 선택된 그룹 유지 로직
+                const found = favListRes.data.favorite_list.find(g => g.iPK === selectedGroupPK);
+                favoriteId = found ? selectedGroupPK : favListRes.data.favorite_list[0].iPK;
+                if (favoriteId !== selectedGroupPK) setSelectedGroupPK(favoriteId);
               }
             } catch (e) { /* ignore */ }
 
             const response = await getFavoriteLocationList(favoriteId);
             if (response.data && response.data.location_list) {
-              const rawData = response.data.location_list;
+              const rawData = Array.isArray(response.data.location_list)
+                ? response.data.location_list
+                : [response.data.location_list];
 
               apiData = rawData.map((item) => {
                 const loc = item.location;
@@ -109,17 +123,20 @@ export default function MyPage() {
                 };
               });
             }
+            fetchSuccess = true;
           } catch (e) {
             console.error("API fetch failed, using local data only:", e);
           }
 
           // 3. 중복 제거 후 합치기 (ID 기준)
-          const merged = [...localData];
-          apiData.forEach((item) => {
-            if (!merged.find((m) => String(m.id) === String(item.id))) {
-              merged.push(item);
-            }
-          });
+          // [MOD] DB API 조회가 성공했다면 오직 선택된 해당 그룹의 DB 데이터만 보여준다.
+          // (로컬 데이터 무단 병합 방지: 다른 그룹 조회 시 1번 그룹 데이터가 섞여 나오는 현상 완벽 해결)
+          let merged = [];
+          if (fetchSuccess) {
+            merged = [...apiData];
+          } else {
+            merged = [...localData];
+          }
 
           // [ADD] 정렬 로직 적용
           const sorted = [...merged].sort((a, b) => {
@@ -144,7 +161,51 @@ export default function MyPage() {
 
       fetchSavedPlaces();
     }
-  }, [activeTab, sortBy]);
+  }, [activeTab, sortBy, selectedGroupPK]);
+
+  // [ADD] 즐겨찾기 그룹 관리 핸들러
+  const handleCreateGroup = async () => {
+    const groupName = window.prompt("새로 생성할 즐겨찾기 그룹 이름을 입력하세요.");
+    if (!groupName || groupName.trim() === "") return;
+    try {
+      await appendFavoriteGroup({
+        iPK: 0,
+        iUserFK: 1, // 백엔드 로직에 맞춰 하드코딩된 유저 ID 사용
+        strName: groupName
+      });
+      const favListRes = await getFavoriteList();
+      if (favListRes.data && favListRes.data.favorite_list) {
+        setFavoriteGroups(favListRes.data.favorite_list);
+      }
+    } catch (e) {
+      console.error("그룹 생성 실패", e);
+      alert("그룹 생성에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteGroup = async () => {
+    if (favoriteGroups.length <= 1) {
+      alert("기본 폴더는 삭제할 수 없습니다.");
+      return;
+    }
+    const confirmDelete = window.confirm("현재 선택된 즐겨찾기 그룹을 삭제하시겠습니까?");
+    if (!confirmDelete) return;
+
+    try {
+      await removeFavoriteGroup(selectedGroupPK);
+      const favListRes = await getFavoriteList();
+      if (favListRes.data && favListRes.data.favorite_list) {
+        const newGroups = favListRes.data.favorite_list;
+        setFavoriteGroups(newGroups);
+        if (newGroups.length > 0) {
+          setSelectedGroupPK(newGroups[0].iPK); // 삭제 후 첫번째 그룹으로 초기화
+        }
+      }
+    } catch (e) {
+      console.error("그룹 삭제 실패", e);
+      alert("그룹 삭제에 실패했습니다.");
+    }
+  };
 
   const savedPhotos = [{ id: 6, src: "/images/trip-photo-3.png" }];
 
@@ -199,17 +260,24 @@ export default function MyPage() {
       iPK: place.id,
       strName: place.name,
       strAddress: place.address,
-      strGroupName: place.category,
-      strGroupCode: place.groupCode,
-      ptLongitude: place.longitude,
-      ptLatitude: place.latitude,
-      // 기타 필요값
+      strGroupName: place.category || "",
+      strGroupCode: place.groupCode || "",
+      strGroupDetail: place.groupDetail || "",
+      strPhone: place.phone || "",
+      strLink: place.link || "",
+      chCategory: place.chCategory || "E",
+      ptLongitude: String(place.longitude),
+      ptLatitude: String(place.latitude),
     };
 
     if (unSavedPlaceIds.includes(place.id)) {
       // 이미 해제된 상태에서 클릭 -> 찜 재등록 (하트 다시 채움)
       try {
-        await registerPlace(payload); // fallback DB register
+        try {
+          await registerPlace(payload); // fallback DB register
+        } catch (regErr) {
+          console.warn("registerPlace failed in profile (might already exist):", regErr);
+        }
 
         try {
           let favoriteId = 1;
@@ -220,6 +288,7 @@ export default function MyPage() {
             }
           } catch (e) { }
           await appendFavoriteLocation({
+            iPK: 0,
             iFavoriteFK: favoriteId,
             iLocationFK: place.id,
           });
@@ -248,11 +317,6 @@ export default function MyPage() {
       try {
         if (place.favoriteLocationPK) {
           await removeFavoriteLocation(place.favoriteLocationPK);
-        }
-        try {
-          await unregisterPlace(payload);
-        } catch (e) {
-          console.warn("Global place unregister failed, ignoring:", e);
         }
 
         // [MOD] 즉시 리스트에서 제거하도록 상태 업데이트
@@ -416,114 +480,159 @@ export default function MyPage() {
                     ))}
                   </div>
 
-                  {/* [ADD] 필터 및 정렬 옵션 선택 UI (듀얼 드롭다운) */}
-                  <div className="flex justify-start gap-2 pt-1 pb-0 relative z-20">
-                    {/* 1. 위치 기준 드롭다운 */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setIsLocationOpen(!isLocationOpen)}
-                        className="flex items-center gap-1 py-1 pl-2 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="text-[14px] font-medium text-[#898989]">
-                          {{
-                            map_center: "현재 지도 중심",
-                            my_location: "내 위치 중심",
-                          }[locationFilter] || "현재 지도 중심"}
-                        </span>
-                        <ChevronDown
-                          size={16}
-                          className={clsx(
-                            "text-[#898989] transition-transform",
-                            isLocationOpen && "rotate-180",
-                          )}
-                        />
-                      </button>
+                  {/* [MOD] 필터 및 정렬 옵션 선택 UI 변경 (그룹 리스트 좌측, 드롭다운 우측 배치) */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-y-2 pt-2 pb-1 relative z-30 w-full">
 
-                      {isLocationOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setIsLocationOpen(false)}
-                          />
-                          <div className="absolute top-full right-0 mt-1 w-32 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                            {[
-                              { id: "map_center", label: "현재 지도 중심" },
-                              { id: "my_location", label: "내 위치 중심" },
-                            ].map((option) => (
-                              <button
-                                key={option.id}
-                                onClick={() => {
-                                  setLocationFilter(option.id);
-                                  setIsLocationOpen(false);
-                                }}
-                                className={clsx(
-                                  "px-4 py-3 text-[14px] text-left transition-colors whitespace-nowrap",
-                                  locationFilter === option.id
-                                    ? "font-bold text-[#111111] bg-gray-50 text-opacity-100"
-                                    : "font-medium text-[#6e6e6e] hover:bg-gray-50",
-                                )}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </>
+                    {/* [ADD] 즐겨찾기 폴더 그룹 리스트 영역 */}
+                    <div className="flex gap-2 items-center overflow-x-auto scrollbar-hide flex-1 sm:pr-4 w-full">
+                      {favoriteGroups.map((group) => (
+                        <button
+                          key={group.iPK || group.strName}
+                          onClick={() => setSelectedGroupPK(group.iPK)}
+                          className={clsx(
+                            "whitespace-nowrap px-3 py-1.5 rounded-full text-[14px] font-medium transition-all border shrink-0",
+                            selectedGroupPK === group.iPK
+                              ? "bg-[#7a28fa] text-white border-[#7a28fa] font-semibold"
+                              : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
+                          )}
+                        >
+                          {group.strName}
+                        </button>
+                      ))}
+                      {favoriteGroups.length === 0 && (
+                        <button
+                          className="whitespace-nowrap px-3 py-1.5 rounded-full text-[14px] font-semibold transition-all border bg-[#7a28fa] text-white border-[#7a28fa] shrink-0"
+                        >
+                          1
+                        </button>
+                      )}
+
+                      {/* 그룹 추가/삭제 버튼 */}
+                      <button
+                        onClick={handleCreateGroup}
+                        className="whitespace-nowrap px-2.5 py-1.5 rounded-full text-[13px] font-medium bg-white text-[#111] border border-[#eceff4] hover:bg-gray-50 transition-all shrink-0 flex items-center shadow-sm"
+                      >
+                        +그룹생성
+                      </button>
+                      {favoriteGroups.length > 0 && (
+                        <button
+                          onClick={handleDeleteGroup}
+                          className="whitespace-nowrap px-2.5 py-1.5 rounded-full text-[13px] font-medium bg-white text-[#ff3b3b] border border-[#ff3b3b] hover:bg-red-50 transition-all shrink-0 flex items-center shadow-sm"
+                        >
+                          -그룹삭제
+                        </button>
                       )}
                     </div>
 
-                    {/* 2. 정렬 순서 드롭다운 */}
-                    <div className="relative">
-                      <button
-                        onClick={() => setIsSortOpen(!isSortOpen)}
-                        className="flex items-center gap-1 py-1 pl-3 pr-1 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <span className="text-[14px] font-medium text-[#898989]">
-                          {{
-                            latest: "최신순",
-                            reviews: "리뷰순",
-                            oldest: "과거순",
-                          }[sortBy] || "최신순"}
-                        </span>
-                        <ChevronDown
-                          size={16}
-                          className={clsx(
-                            "text-[#898989] transition-transform",
-                            isSortOpen && "rotate-180",
-                          )}
-                        />
-                      </button>
-
-                      {isSortOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setIsSortOpen(false)}
+                    {/* 기존 필터 및 정렬 드롭다운 (우측 고정) */}
+                    <div className="flex justify-start sm:justify-end gap-2 shrink-0 w-full sm:w-auto mt-1 sm:mt-0">
+                      {/* 1. 위치 기준 드롭다운 */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setIsLocationOpen(!isLocationOpen)}
+                          className="flex items-center gap-1 py-1 pl-2 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-[14px] font-medium text-[#898989]">
+                            {{
+                              map_center: "현재 지도 중심",
+                              my_location: "내 위치 중심",
+                            }[locationFilter] || "현재 지도 중심"}
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={clsx(
+                              "text-[#898989] transition-transform",
+                              isLocationOpen && "rotate-180",
+                            )}
                           />
-                          <div className="absolute top-full right-0 mt-1 w-28 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                            {[
-                              { id: "latest", label: "최신순" },
-                              { id: "reviews", label: "리뷰순" },
-                              { id: "oldest", label: "과거순" },
-                            ].map((option) => (
-                              <button
-                                key={option.id}
-                                onClick={() => {
-                                  setSortBy(option.id);
-                                  setIsSortOpen(false);
-                                }}
-                                className={clsx(
-                                  "px-4 py-3 text-[14px] text-left transition-colors",
-                                  sortBy === option.id
-                                    ? "font-bold text-[#111111] bg-gray-50 text-opacity-100"
-                                    : "font-medium text-[#6e6e6e] hover:bg-gray-50",
-                                )}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
+                        </button>
+
+                        {isLocationOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setIsLocationOpen(false)}
+                            />
+                            <div className="absolute top-full right-0 mt-1 w-32 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                              {[
+                                { id: "map_center", label: "현재 지도 중심" },
+                                { id: "my_location", label: "내 위치 중심" },
+                              ].map((option) => (
+                                <button
+                                  key={option.id}
+                                  onClick={() => {
+                                    setLocationFilter(option.id);
+                                    setIsLocationOpen(false);
+                                  }}
+                                  className={clsx(
+                                    "px-4 py-3 text-[14px] text-left transition-colors whitespace-nowrap",
+                                    locationFilter === option.id
+                                      ? "font-bold text-[#111111] bg-gray-50 text-opacity-100"
+                                      : "font-medium text-[#6e6e6e] hover:bg-gray-50",
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* 2. 정렬 순서 드롭다운 */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setIsSortOpen(!isSortOpen)}
+                          className="flex items-center gap-1 py-1 pl-3 pr-1 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <span className="text-[14px] font-medium text-[#898989]">
+                            {{
+                              latest: "최신순",
+                              reviews: "리뷰순",
+                              oldest: "과거순",
+                            }[sortBy] || "최신순"}
+                          </span>
+                          <ChevronDown
+                            size={16}
+                            className={clsx(
+                              "text-[#898989] transition-transform",
+                              isSortOpen && "rotate-180",
+                            )}
+                          />
+                        </button>
+
+                        {isSortOpen && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setIsSortOpen(false)}
+                            />
+                            <div className="absolute top-full right-0 mt-1 w-28 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                              {[
+                                { id: "latest", label: "최신순" },
+                                { id: "reviews", label: "리뷰순" },
+                                { id: "oldest", label: "과거순" },
+                              ].map((option) => (
+                                <button
+                                  key={option.id}
+                                  onClick={() => {
+                                    setSortBy(option.id);
+                                    setIsSortOpen(false);
+                                  }}
+                                  className={clsx(
+                                    "px-4 py-3 text-[14px] text-left transition-colors",
+                                    sortBy === option.id
+                                      ? "font-bold text-[#111111] bg-gray-50 text-opacity-100"
+                                      : "font-medium text-[#6e6e6e] hover:bg-gray-50",
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
