@@ -7,6 +7,7 @@ import Script from "next/script";
 import { MobileContainer } from "../../../../components/layout/MobileContainer";
 import { registerPlace } from "../../../../services/place";
 import { addScheduleLocation } from "../../../../services/schedule";
+import { appendFavoriteLocation, getFavoriteList } from "../../../../services/favorite";
 
 /**
  * [ADD] SearchPlaceDetailPage
@@ -375,47 +376,62 @@ export default function SearchPlaceDetailPage() {
                     onClick={async () => {
                       try {
                         // [ADD] 장소 등록 API 호출 (PC 버전과 동일하게 개별 예외 처리)
+                        // [ADD] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송 및 Favorite_Location 연동
+                        await registerPlace({
+                          iPK: placeData.id,
+                          strName: placeData.name,
+                          strAddress: placeData.address,
+                          strGroupName: placeData.category || "",
+                          strGroupCode: placeData.groupCode || "",
+                          strGroupDetail: placeData.groupDetail || "",
+                          strPhone: placeData.phone || "",
+                          strLink: placeData.link || "",
+                          chCategory: placeData.chCategory || "E",
+                          ptLatitude: String(placeData.latitude),
+                          ptLongitude: String(placeData.longitude),
+                        });
+
+                        // [ADD] 1번(기본) 폴더에 장소 담기. 만약 1번 폴더가 없으면 리스트를 조회해서 맨 처음 폴더 사용.
                         try {
-                          // [FIX] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송
-                          await registerPlace({
-                            iPK: placeData.id,
-                            strName: placeData.name,
-                            strAddress: placeData.address,
-                            strGroupName: placeData.category || "",
-                            strGroupCode: placeData.groupCode || "",
-                            strGroupDetail: placeData.groupDetail || "",
-                            strPhone: placeData.phone || "",
-                            strLink: placeData.link || "",
-                            chCategory: placeData.chCategory || "",
-                            ptLatitude: String(placeData.latitude),
-                            ptLongitude: String(placeData.longitude),
+                          let favoriteId = 1;
+                          try {
+                            const favListRes = await getFavoriteList();
+                            if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
+                              favoriteId = favListRes.data.favorite_list[0].iPK;
+                            }
+                          } catch (e) { /* ignore and fallback to 1 */ }
+
+                          await appendFavoriteLocation({
+                            iFavoriteFK: favoriteId,
+                            iLocationFK: placeData.id
                           });
                         } catch (e) {
-                          console.error(
-                            "API registration failed, using local storage fallback:",
-                            e,
-                          );
+                          console.error("즐겨찾기에 장소 추가 실패:", e);
                         }
-
-                        // [ADD] 로컬 스토리지 저장 (API 실패 여부와 상관없이 수행되어야 함)
                         const savedList = JSON.parse(
                           localStorage.getItem("saved_places") || "[]",
                         );
-                        if (
-                          !savedList.find(
-                            (p) => String(p.id) === String(placeData.id),
-                          )
-                        ) {
+                        if (!savedList.find((p) => String(p.id) === String(placeData.id))) {
                           savedList.push(placeData);
                           localStorage.setItem(
                             "saved_places",
                             JSON.stringify(savedList),
                           );
                         }
-
                         router.push("/search?saved=true");
-                      } catch (error) {
-                        console.error("Local save failed:", error);
+                      } catch (e) {
+                        console.error("API registration failed, using local storage fallback:", e);
+                        // fallback local storage save
+                        const savedList = JSON.parse(
+                          localStorage.getItem("saved_places") || "[]",
+                        );
+                        if (!savedList.find((p) => String(p.id) === String(placeData.id))) {
+                          savedList.push(placeData);
+                          localStorage.setItem(
+                            "saved_places",
+                            JSON.stringify(savedList),
+                          );
+                        }
                         router.push("/search?saved=true");
                       }
                     }}
@@ -492,6 +508,6 @@ export default function SearchPlaceDetailPage() {
           </div>
         </div>
       </div>
-    </MobileContainer>
+    </MobileContainer >
   );
 }

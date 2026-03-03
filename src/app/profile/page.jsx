@@ -13,6 +13,12 @@ import {
   unregisterPlace,
   registerPlace,
 } from "../../services/place";
+import {
+  getFavoriteList,
+  getFavoriteLocationList,
+  appendFavoriteLocation,
+  removeFavoriteLocation,
+} from "../../services/favorite";
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 
@@ -75,26 +81,33 @@ export default function MyPage() {
           // 2. API에서도 가져오기
           let apiData = [];
           try {
-            const response = await getSavedPlaces();
-            if (response.data) {
-              const rawData = response.data;
-              apiData = Array.isArray(rawData)
-                ? rawData
-                : typeof rawData === "object"
-                  ? Object.values(rawData)
-                  : [];
+            let favoriteId = 1;
+            try {
+              const favListRes = await getFavoriteList();
+              if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
+                favoriteId = favListRes.data.favorite_list[0].iPK;
+              }
+            } catch (e) { /* ignore */ }
 
-              apiData = apiData.map((item) => ({
-                id: item.id,
-                name: item.name,
-                address: item.address,
-                category: item.strGroupName || item.category || "기타",
-                groupCode: item.strGroupCode || item.group_code || "기타",
-                latitude: parseFloat(item.latitude),
-                longitude: parseFloat(item.longitude),
-                rating: item.rating || 0,
-                reviewCount: item.review_count || item.reviewCount || 0,
-              }));
+            const response = await getFavoriteLocationList(favoriteId);
+            if (response.data && response.data.location_list) {
+              const rawData = response.data.location_list;
+
+              apiData = rawData.map((item) => {
+                const loc = item.location;
+                return {
+                  id: loc.iPK,
+                  favoriteLocationPK: item.iPK, // [ADD] 삭제 시 필요한 매핑 PK 보관
+                  name: loc.strName,
+                  address: loc.strAddress,
+                  category: loc.strGroupName || "기타",
+                  groupCode: loc.strGroupCode || "기타",
+                  latitude: parseFloat(loc.ptLatitude),
+                  longitude: parseFloat(loc.ptLongitude),
+                  rating: 0,
+                  reviewCount: 0,
+                };
+              });
             }
           } catch (e) {
             console.error("API fetch failed, using local data only:", e);
@@ -196,7 +209,23 @@ export default function MyPage() {
     if (unSavedPlaceIds.includes(place.id)) {
       // 이미 해제된 상태에서 클릭 -> 찜 재등록 (하트 다시 채움)
       try {
-        await registerPlace(payload);
+        await registerPlace(payload); // fallback DB register
+
+        try {
+          let favoriteId = 1;
+          try {
+            const favListRes = await getFavoriteList();
+            if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
+              favoriteId = favListRes.data.favorite_list[0].iPK;
+            }
+          } catch (e) { }
+          await appendFavoriteLocation({
+            iFavoriteFK: favoriteId,
+            iLocationFK: place.id,
+          });
+        } catch (e) {
+          console.error("즐겨찾기 추가 맵핑 실패:", e);
+        }
 
         setUnSavedPlaceIds((prev) => prev.filter((id) => id !== place.id));
 
@@ -215,11 +244,19 @@ export default function MyPage() {
         console.error("장소 재등록 실패:", error);
       }
     } else {
-      // 찜 해제
+      // 찜 해제 (바로 리스트에서 제거)
       try {
-        await unregisterPlace(payload);
+        if (place.favoriteLocationPK) {
+          await removeFavoriteLocation(place.favoriteLocationPK);
+        }
+        try {
+          await unregisterPlace(payload);
+        } catch (e) {
+          console.warn("Global place unregister failed, ignoring:", e);
+        }
 
-        setUnSavedPlaceIds((prev) => [...prev, place.id]);
+        // [MOD] 즉시 리스트에서 제거하도록 상태 업데이트
+        setSavedPlaces((prev) => prev.filter((p) => p.id !== place.id));
 
         const localData = JSON.parse(
           localStorage.getItem("saved_places") || "[]",
@@ -235,41 +272,6 @@ export default function MyPage() {
     }
   };
 
-  // [MOD] 방금 삭제한 항목 API로 다시 등록(되돌리기) 핸들러
-  const undoRemovePlace = async () => {
-    if (!toastPlace) return;
-
-    const payload = {
-      iPK: toastPlace.id,
-      strName: toastPlace.name,
-      strAddress: toastPlace.address,
-      strGroupName: toastPlace.category,
-      strGroupCode: toastPlace.groupCode,
-      ptLongitude: toastPlace.longitude,
-      ptLatitude: toastPlace.latitude,
-    };
-
-    try {
-      await registerPlace(payload);
-
-      // 하트 색상 상태 복구
-      setUnSavedPlaceIds((prev) => prev.filter((id) => id !== toastPlace.id));
-
-      // 로컬 스토리지 복구
-      const localData = JSON.parse(
-        localStorage.getItem("saved_places") || "[]",
-      );
-      if (!localData.find((p) => p.id === toastPlace.id)) {
-        localData.push(toastPlace);
-        localStorage.setItem("saved_places", JSON.stringify(localData));
-      }
-
-      setIsToastOpen(false);
-      setToastPlace(null);
-    } catch (error) {
-      console.error("되돌리기 재등록 실패:", error);
-    }
-  };
 
   return (
     <MobileContainer showNav={true}>
@@ -639,8 +641,6 @@ export default function MyPage() {
           isVisible={isToastOpen}
           onClose={() => setIsToastOpen(false)}
           message="찜한 장소를 해제했어요"
-          actionText="되돌리기"
-          onAction={undoRemovePlace}
           position="bottom"
         />
 

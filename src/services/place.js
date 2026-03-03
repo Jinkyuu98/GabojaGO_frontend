@@ -34,4 +34,4 @@ export const getSavedPlaces = () => api.get("/location/register");
  * @returns {Promise}
  */
 export const unregisterPlace = (placeData) =>
-  api.post("/location/unregister", placeData);
+  api.post("/location/unregister", null, { params: { iLocationPK: placeData.iPK } });
