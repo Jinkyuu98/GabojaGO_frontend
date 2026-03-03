@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requestLocationExtraction } from "../../../backend_source/route.js"; // 공용 함수 재사용
+// [FIX] 잘못된 import 경로 수정 (../../../backend_source/route.js -> ../../generate/route.js)
+import { requestLocationExtraction } from "../../generate/route.js"; // 공용 함수 재사용
 
 /**
  * 2단계: 생성된 일정(ScheduleResponse)에서 

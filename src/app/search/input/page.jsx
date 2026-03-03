@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MobileContainer } from "../../../components/layout/MobileContainer";
@@ -24,7 +24,7 @@ const HighlightText = ({ text, keyword }) => {
   );
 };
 
-export default function SearchInputPage() {
+function SearchInputContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tripId = searchParams.get("tripId");
@@ -271,5 +271,14 @@ export default function SearchInputPage() {
         </div>
       </div>
     </MobileContainer>
+  );
+}
+
+// [MOD] useSearchParams 사용 시 static build 에러 방지를 위해 Suspense 로 컴포넌트 감싸기
+export default function SearchInputPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SearchInputContent />
+    </Suspense>
   );
 }

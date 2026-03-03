@@ -4,7 +4,7 @@ import axios from "axios";
 // 서버 사이드에서는 직접 백엔드 URL 사용
 const isServer = typeof window === "undefined";
 const baseURL = isServer
-  ? (process.env.API_URL || "http://localhost:8000")
+  ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
   : "/proxy";
 
 export const api = axios.create({
