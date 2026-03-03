@@ -185,7 +185,7 @@ export default function SearchPlaceDetailPage() {
   return (
     <MobileContainer>
       <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.KAKAO_API_KEY}&autoload=false&libraries=services`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${"bdacda02e2365ada858c79c1f84db35f"}&autoload=false&libraries=services`}
         strategy="afterInteractive"
         onLoad={initMap}
       />
