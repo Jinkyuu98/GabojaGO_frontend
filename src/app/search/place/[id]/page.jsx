@@ -32,6 +32,9 @@ export default function SearchPlaceDetailPage() {
   // [ADD] 일시/메모 입력 state - 사용자가 직접 일자와 메모를 입력하여 장소 등록 가능
   const [scheduleDate, setScheduleDate] = useState("");
   const [memo, setMemo] = useState("");
+  // [ADD] 즐겨찾기 그룹 선택 관련 상태
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+  const [favoriteGroups, setFavoriteGroups] = useState([]);
 
   // [ADD] 바텀시트 드래그 상태 관리
   const [dragY, setDragY] = useState(0); // [MOD] 초기 높이를 전체 확장 상태(0)로 복구
@@ -375,69 +378,18 @@ export default function SearchPlaceDetailPage() {
                   <button
                     onClick={async () => {
                       try {
-                        // [ADD] 장소 등록 API 호출 (PC 버전과 동일하게 개별 예외 처리)
-                        // [ADD] OpenAPI LocationModel 스펙에 맞게 전체 필수 필드 전송 및 Favorite_Location 연동
-                        try {
-                          await registerPlace({
-                            iPK: placeData.id,
-                            strName: placeData.name,
-                            strAddress: placeData.address,
-                            strGroupName: placeData.category || "",
-                            strGroupCode: placeData.groupCode || "",
-                            strGroupDetail: placeData.groupDetail || "",
-                            strPhone: placeData.phone || "",
-                            strLink: placeData.link || "",
-                            chCategory: placeData.chCategory || "E",
-                            ptLatitude: String(placeData.latitude),
-                            ptLongitude: String(placeData.longitude),
-                          });
-                        } catch (regErr) {
-                          console.warn("registerPlace failed (might already exist):", regErr);
+                        // [ADD] 그룹 목록 먼저 조회
+                        const favListRes = await getFavoriteList();
+                        if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
+                          setFavoriteGroups(favListRes.data.favorite_list);
+                          setShowGroupSelector(true);
+                        } else {
+                          // 그룹이 하나도 없는 극히 드문 경우 (기본적으로 1개는 있어야 함)
+                          alert("즐겨찾기 그룹 정보를 불러올 수 없습니다.");
                         }
-
-                        // [ADD] 1번(기본) 폴더에 장소 담기. 만약 1번 폴더가 없으면 리스트를 조회해서 맨 처음 폴더 사용.
-                        try {
-                          let favoriteId = 1;
-                          try {
-                            const favListRes = await getFavoriteList();
-                            if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
-                              favoriteId = favListRes.data.favorite_list[0].iPK;
-                            }
-                          } catch (e) { /* ignore and fallback to 1 */ }
-
-                          await appendFavoriteLocation({
-                            iPK: 0,
-                            iFavoriteFK: favoriteId,
-                            iLocationFK: placeData.id
-                          });
-                        } catch (e) {
-                          console.error("즐겨찾기에 장소 추가 실패:", e);
-                        }
-                        const savedList = JSON.parse(
-                          localStorage.getItem("saved_places") || "[]",
-                        );
-                        if (!savedList.find((p) => String(p.id) === String(placeData.id))) {
-                          savedList.push(placeData);
-                          localStorage.setItem(
-                            "saved_places",
-                            JSON.stringify(savedList),
-                          );
-                        }
-                        router.push("/search?saved=true");
                       } catch (e) {
-                        console.error("API registration failed, using local storage fallback:", e);
-                        // fallback local storage save
-                        const savedList = JSON.parse(
-                          localStorage.getItem("saved_places") || "[]",
-                        );
-                        if (!savedList.find((p) => String(p.id) === String(placeData.id))) {
-                          savedList.push(placeData);
-                          localStorage.setItem(
-                            "saved_places",
-                            JSON.stringify(savedList),
-                          );
-                        }
-                        router.push("/search?saved=true");
+                        console.error("Failed to fetch favorite list:", e);
+                        alert("즐겨찾기 목록을 불러오는 중 오류가 발생했습니다.");
                       }
                     }}
                     className="w-full h-[56px] bg-[#111111] text-white rounded-2xl text-[16px] font-bold hover:opacity-90 active:scale-[0.98] transition-all"
@@ -447,6 +399,75 @@ export default function SearchPlaceDetailPage() {
                 )
               )}
             </div>
+
+            {/* [ADD] 즐겨찾기 그룹 선택 모달 */}
+            {showGroupSelector && (
+              <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center p-4">
+                <div className="w-full max-w-[400px] bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden animate-slide-up">
+                  <div className="px-5 py-4 border-b border-[#f2f4f6] flex items-center justify-between">
+                    <h3 className="text-[17px] font-bold text-[#111]">저장할 그룹 선택</h3>
+                    <button onClick={() => setShowGroupSelector(false)} className="text-[#abb1b9]">
+                      <Image src="/icons/close-icon.svg" alt="close" width={24} height={24} />
+                    </button>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto px-2 py-2">
+                    {favoriteGroups.map((group) => (
+                      <button
+                        key={group.iPK}
+                        onClick={async () => {
+                          try {
+                            // 1. 장소 등록 (DB에 장소 정보 보관)
+                            try {
+                              await registerPlace({
+                                iPK: placeData.id,
+                                strName: placeData.name,
+                                strAddress: placeData.address,
+                                strGroupName: placeData.category || "",
+                                strGroupCode: placeData.groupCode || "",
+                                strGroupDetail: placeData.groupDetail || "",
+                                strPhone: placeData.phone || "",
+                                strLink: placeData.link || "",
+                                chCategory: placeData.chCategory || "E",
+                                ptLatitude: String(placeData.latitude),
+                                ptLongitude: String(placeData.longitude),
+                              });
+                            } catch (regErr) {
+                              console.warn("registerPlace failed (might already exist):", regErr);
+                            }
+
+                            // 2. 선택한 그룹에 장소 담기
+                            await appendFavoriteLocation({
+                              iPK: 0,
+                              iFavoriteFK: group.iPK,
+                              iLocationFK: placeData.id
+                            });
+
+                            // 3. 로컬 스토리지 업데이트
+                            const savedList = JSON.parse(localStorage.getItem("saved_places") || "[]");
+                            if (!savedList.find((p) => String(p.id) === String(placeData.id))) {
+                              savedList.push(placeData);
+                              localStorage.setItem("saved_places", JSON.stringify(savedList));
+                            }
+
+                            setShowGroupSelector(false);
+                            router.push("/search?saved=true");
+                          } catch (e) {
+                            console.error("즐겨찾기 추가 실패:", e);
+                            alert("장소를 저장하는 중 요류가 발생했습니다.");
+                          }
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-3 hover:bg-[#f8f9fa] rounded-xl transition-colors text-left"
+                      >
+                        <div className="w-10 h-10 bg-[#f2f4f6] rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Image src="/icons/location.svg" alt="folder" width={20} height={20} />
+                        </div>
+                        <span className="text-[15px] font-medium text-[#111]">{group.strName}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* [ADD] 리뷰 섹션 - 애니메이션 컨테이너 적용 (버튼 클릭 시 올라오는 효과) */}
             <div
