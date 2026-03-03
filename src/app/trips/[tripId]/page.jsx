@@ -307,6 +307,31 @@ export default function TripDetailPage() {
     [apiTrip, myTrips, tripId],
   );
 
+  const calculateDayCount = (tripData) => {
+    const start = tripData?.dtDate1 || tripData?.startDate;
+    const end = tripData?.dtDate2 || tripData?.endDate;
+
+    if (start && end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+
+      // Calculate difference in time (resetting hours to avoid timezone issues)
+      const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+      const differenceInDays = Math.floor((endUtc - startUtc) / (1000 * 3600 * 24)) + 1;
+
+      if (differenceInDays > 0 && !isNaN(differenceInDays)) {
+        return differenceInDays;
+      }
+    }
+
+    return tripData?.days?.length || 1; // Fallback
+  };
+
+  const dayCount = calculateDayCount(trip);
+  const days = Array.from({ length: dayCount }, (_, i) => `${i + 1}일차`);
+
   // [MOD] URL 쿼리 파라미터(?tab=비용)에서 탭 상태를 복원하여 페이지 이동 후에도 탭 유지
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") || "일정";
@@ -324,6 +349,61 @@ export default function TripDetailPage() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
+  // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
+  const dayTabsRef = useRef(null);
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // [ADD] 스크롤 위치 감지하여 화살표 노출 여부 결정
+  const checkScroll = () => {
+    if (dayTabsRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = dayTabsRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener("resize", checkScroll);
+    return () => window.removeEventListener("resize", checkScroll);
+  }, [days, selectedTab]);
+
+  // [ADD] 마우스 드래그 핸들러
+  const handleMouseDown = (e) => {
+    if (window.innerWidth < 1024) return; // 데스크톱에서만 작동
+    setIsMouseDragging(true);
+    setStartX(e.pageX - dayTabsRef.current.offsetLeft);
+    setScrollLeft(dayTabsRef.current.scrollLeft);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isMouseDragging) return;
+    e.preventDefault();
+    const x = e.pageX - dayTabsRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5; // 스크롤 속도 조절
+    dayTabsRef.current.scrollLeft = scrollLeft - walk;
+    checkScroll();
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDragging(false);
+  };
+
+  // [ADD] 화살표 클릭 스크롤
+  const scrollDays = (direction) => {
+    if (dayTabsRef.current) {
+      const scrollAmount = 200;
+      dayTabsRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth"
+      });
+      setTimeout(checkScroll, 300);
+    }
+  };
 
   const currentDayPlaces = useMemo(
     () => trip?.days?.[selectedDay - 1]?.places || [],
@@ -419,33 +499,6 @@ export default function TripDetailPage() {
   };
 
   const tabs = ["일정", "기록", "비용", "준비물", "동행자"];
-
-
-
-  const calculateDayCount = (tripData) => {
-    const start = tripData?.dtDate1 || tripData?.startDate;
-    const end = tripData?.dtDate2 || tripData?.endDate;
-
-    if (start && end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-
-      // Calculate difference in time (resetting hours to avoid timezone issues)
-      const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-      const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-
-      const differenceInDays = Math.floor((endUtc - startUtc) / (1000 * 3600 * 24)) + 1;
-
-      if (differenceInDays > 0 && !isNaN(differenceInDays)) {
-        return differenceInDays;
-      }
-    }
-
-    return tripData?.days?.length || 1; // Fallback
-  };
-
-  const dayCount = calculateDayCount(trip);
-  const days = Array.from({ length: dayCount }, (_, i) => `${i + 1}일차`);
 
   const getActualDateText = (dayIndex) => {
     const start = trip?.dtDate1 || trip?.startDate;
@@ -1435,21 +1488,68 @@ export default function TripDetailPage() {
 
               {/* Desktop Day Tabs */}
               {["일정", "기록"].includes(selectedTab) && (
-                <div className="px-5 pt-4 pb-2 flex gap-1 overflow-x-auto scrollbar-hide flex-shrink-0">
-                  {days.map((day, index) => (
+                <div className="px-5 pt-4 pb-2 relative flex-shrink-0 group">
+                  {/* [ADD] 좌측 화살표 */}
+                  {showLeftArrow && (
                     <button
-                      key={index}
-                      onClick={() => setSelectedDay(index + 1)}
-                      className={clsx(
-                        "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border",
-                        selectedDay === index + 1
-                          ? "bg-[#111111] text-white border-[#111111] font-semibold"
-                          : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
-                      )}
+                      onClick={() => scrollDays("left")}
+                      className="absolute left-4 top-[55%] -translate-y-1/2 z-10 w-8 h-8 bg-white/90 border border-[#f2f4f6] rounded-full shadow-md flex items-center justify-center hover:bg-white transition-all"
                     >
-                      {day}
+                      <Image src="/icons/arrow-left.svg" alt="prev" width={14} height={14} />
                     </button>
-                  ))}
+                  )}
+
+                  <div
+                    ref={dayTabsRef}
+                    onScroll={checkScroll}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    className={clsx(
+                      "flex gap-1 overflow-x-auto scrollbar-hide select-none",
+                      isMouseDragging ? "cursor-grabbing" : "cursor-pointer"
+                    )}
+                  >
+                    {days.map((day, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedDay(index + 1)}
+                        className={clsx(
+                          "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border shrink-0",
+                          selectedDay === index + 1
+                            ? "bg-[#111111] text-white border-[#111111] font-semibold"
+                            : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
+                        )}
+                      >
+                        {day}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* [ADD] 우측 화살표 */}
+                  {showRightArrow && (
+                    <button
+                      onClick={() => scrollDays("right")}
+                      className="absolute right-4 top-[55%] -translate-y-1/2 z-10 w-8 h-8 bg-white/90 border border-[#f2f4f6] rounded-full shadow-md flex items-center justify-center hover:bg-white transition-all"
+                    >
+                      <Image
+                        src="/icons/arrow-left.svg"
+                        alt="next"
+                        width={14}
+                        height={14}
+                        className="rotate-180"
+                      />
+                    </button>
+                  )}
+
+                  {/* [ADD] 그라데이션 인디케이터 */}
+                  {showRightArrow && (
+                    <div className="absolute right-5 top-4 bottom-2 w-12 bg-gradient-to-l from-white to-transparent pointer-events-none" />
+                  )}
+                  {showLeftArrow && (
+                    <div className="absolute left-5 top-4 bottom-2 w-12 bg-gradient-to-r from-white to-transparent pointer-events-none" />
+                  )}
                 </div>
               )}
 
