@@ -578,11 +578,66 @@ export default function TripDetailPage() {
     }
   };
 
+  // [ADD] SSR 에러 방지를 위한 isMobile 상태 선언
+  const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
-    checkScroll();
-    window.addEventListener("resize", checkScroll);
-    return () => window.removeEventListener("resize", checkScroll);
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+      checkScroll();
+    };
+
+    // 초기 로드 시 한 번 실행
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, [days, selectedTab]);
+
+  // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 및 중심 재보정
+  // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 동기화
+  useEffect(() => {
+    if (mapInstance.current && window.kakao) {
+      // 바텀시트 transition 300ms 재생 동안 여러 번 리사이징 갱신 (회색 화면, 깨짐 방지)
+      let iterations = 0;
+      const interval = setInterval(() => {
+        if (mapInstance.current) {
+          mapInstance.current.relayout();
+
+          // 이미 bounds가 맞춰져 있다면 단순히 리사이징만 하고,
+          // 마커 상태 유지를 위해 setBounds 재호출은 드래그 단위 끝에서만 실행하거나 생략
+        }
+        iterations++;
+        if (iterations >= 20) {
+          clearInterval(interval);
+
+          // 애니메이션이 완전히 끝난 후 한 번만 중심점을 잡아주어 마커가 온전히 보이게 위치 조정
+          const places = trip?.days?.[selectedDay - 1]?.places || [];
+          if (mapInstance.current && places.length > 0) {
+            const bounds = new window.kakao.maps.LatLngBounds();
+            let hasValidCoords = false;
+            places.forEach(p => {
+              if (p.latitude && p.longitude) {
+                bounds.extend(new window.kakao.maps.LatLng(p.latitude, p.longitude));
+                hasValidCoords = true;
+              }
+            });
+            if (hasValidCoords) {
+              if (places.filter(p => p.latitude && p.longitude).length === 1) {
+                mapInstance.current.setCenter(bounds.getSouthWest());
+                if (window.innerWidth < 1024) mapInstance.current.panBy(0, 150);
+              } else {
+                // 하단 패딩은 CSS단에서 이미 sheetHeight로 잡혀 있으므로 API의 bottom 패딩은 여유분만 줌
+                mapInstance.current.setBounds(bounds, 50, 50, 50, 50);
+              }
+            }
+          }
+        }
+      }, 16);
+
+      return () => clearInterval(interval);
+    }
+  }, [sheetHeight, selectedDay, trip]);
 
   // [ADD] 마우스 드래그 핸들러
   const handleMouseDown = (e) => {
@@ -726,18 +781,11 @@ export default function TripDetailPage() {
 
       const position = new window.kakao.maps.LatLng(place.latitude, place.longitude);
 
-      // 마커 생성
-      const marker = new window.kakao.maps.Marker({
-        position: position,
-        map: map
-      });
-
-      markersRef.current.push(marker);
       bounds.extend(position);
 
-      // 숫자 라벨 표시 (CustomOverlay 활용)
+      // [MOD] 마커 제거, 숫자 오버레이만 표시 + Tailwind → 인라인 스타일 (앱 WebView 호환)
       const content = `
-        <div class="bg-[#7a28fa] text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md text-[13px] font-bold mb-10">
+        <div style="background-color:#7a28fa;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;font-weight:700;font-family:sans-serif;line-height:1;">
           ${idx + 1}
         </div>
       `;
@@ -745,15 +793,34 @@ export default function TripDetailPage() {
       const overlay = new window.kakao.maps.CustomOverlay({
         position: position,
         content: content,
-        yAnchor: 1.2
+        yAnchor: 0.5 // [MOD] 마커 없이 숫자가 정확한 위치에 표시되도록 조정
       });
 
       overlay.setMap(map);
       markersRef.current.push(overlay);
     });
 
-    // 모든 마커가 보이도록 지도 범위 조정
-    map.setBounds(bounds);
+    // [MOD] 모든 마커가 보이도록 지도 범위 조정
+    const isMobile = window.innerWidth < 1024;
+
+    // 모바일에서는 바텀시트가 하단 절반을 가리므로, 마커가 화면 "상단"에 몰리도록 하단 패딩을 매우 크게 줍니다.
+    // 지도 컨테이너 자체가 바텀시트 위치에 따라 transform-y 로 통째로 이동하므로,
+    // 초기 렌더링 시 이렇게 위로 몰아주면 바텀시트가 오르내릴 때 자연스럽게 같이 상하로 움직입니다.
+    const paddingBottom = isMobile ? 550 : 50;
+
+    if (currentDayPlaces.filter(p => p.latitude && p.longitude).length === 1) {
+      map.setCenter(bounds.getSouthWest());
+      map.setLevel(isMobile ? 3 : 4);
+      if (isMobile) {
+        // 단일 마커일 때 화면 최상단으로 조금 올려줌 (지도 컨테이너 전체 이동과 시너지)
+        setTimeout(() => map.panBy(0, 150), 50);
+      }
+    } else {
+      map.setBounds(bounds, 50, 50, paddingBottom, 50);
+      if (map.getLevel() > 7) {
+        map.setLevel(7);
+      }
+    }
   }, [currentDayPlaces]);
 
   // Define 3-tier snap heights
@@ -1968,7 +2035,12 @@ export default function TripDetailPage() {
             onLoad={initMap}
           />
           {/* Map Background */}
-          <div className="absolute inset-0 w-full h-full">
+          {/* [MOD] 모바일에서 바텀시트 높이(sheetHeight)만큼 동적으로 하단 패딩을 주어 지도 렌더링 영역을 확보 */}
+          {/* 바텀시트를 드래그해서 높이가 변하면 지도 뷰포트도 동기화되어 리사이징됨 */}
+          <div
+            className="absolute inset-0 w-full h-full lg:pb-0 transition-all duration-300"
+            style={{ paddingBottom: isMobile ? `${sheetHeight}px` : '0px' }}
+          >
             <div ref={mapRef} className="w-full h-full" />
           </div>
 
