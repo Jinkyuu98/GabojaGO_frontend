@@ -7,6 +7,7 @@ export const signup = async (data) => {
   // ⭐ 회원가입 즉시 로그인 처리
   if (res.data?.access_token) {
     localStorage.setItem("token", res.data.access_token);
+    localStorage.setItem("loginTime", Date.now().toString()); // [ADD] 로그인 시간 저장
   }
 
   return res.data;
@@ -21,6 +22,7 @@ export const login = async (id, password) => {
 
   if (res.data?.access_token) {
     localStorage.setItem("token", res.data.access_token);
+    localStorage.setItem("loginTime", Date.now().toString()); // [ADD] 로그인 시간 저장
   }
 
   return res.data;

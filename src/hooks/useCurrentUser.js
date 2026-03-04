@@ -10,13 +10,16 @@ export function useCurrentUser() {
         if (!token) return { userId: null, userLoginId: null, userName: null };
 
         const payload = JSON.parse(atob(token.split(".")[1]));
+        const currentTime = Math.floor(Date.now() / 1000);
+        const isExpired = payload.exp ? payload.exp < currentTime : false;
 
         return {
             userId: payload.iPK ?? null,         // 유저 PK → 리뷰의 iUserFK와 비교용
             userLoginId: payload.strUserID ?? null, // 로그인 아이디 표시용
             userName: payload.strName ?? null,       // 이름 표시용
+            isExpired,                               // 토큰 만료 여부
         };
     } catch (e) {
-        return { userId: null, userLoginId: null, userName: null };
+        return { userId: null, userLoginId: null, userName: null, isExpired: true };
     }
 }

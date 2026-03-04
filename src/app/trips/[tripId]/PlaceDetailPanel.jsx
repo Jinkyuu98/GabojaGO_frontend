@@ -22,8 +22,17 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
     const [showGroupSelector, setShowGroupSelector] = useState(false);
     const [favoriteGroups, setFavoriteGroups] = useState([]);
 
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     // [MOD] IIFE 제거 → 공통 훅으로 교체 (JWT payload.iPK 사용)
-    const { userId: currentUserId, userLoginId, userName: currentUserName } = useCurrentUser();
+    const { userId: rawUserId, userLoginId, userName: rawUserName } = useCurrentUser();
+
+    // Hydration 가드: 마운트 전에는 유효한 사용자 정보가 없는 것으로 간주 (서버와 동일하게)
+    const currentUserId = mounted ? rawUserId : null;
+    const currentUserName = mounted ? rawUserName : null;
 
     // [MOD] fullItem이 있는 경우(trips 페이지에서 전달) → fullItem.location 경로로 수정
     // [FIX] phone/link 버그: 기존 place.location?.strPhone → place.fullItem?.location?.strPhone

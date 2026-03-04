@@ -22,6 +22,7 @@ import {
   removeFavoriteGroup,
 } from "../../services/favorite";
 import { getPlaceReviews } from "../../services/review"; // [ADD] 실제 리뷰 점수 반영
+import { useCurrentUser } from "../../hooks/useCurrentUser"; // [ADD] 유저 정보 훅
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 
@@ -64,10 +65,17 @@ export default function MyPage() {
   const modalMapRef = useRef(null);
   const modalMapInstance = useRef(null);
 
+  const { userName } = useCurrentUser(); // [ADD] 실제 로그인 유저 이름 가져오기
+  const [isMounted, setIsMounted] = useState(false); // [ADD] Hydration 에러 방지용
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const user = {
-    name: "홍길동님",
-    reviewCount: 12,
-    profileImage: "/icons/profile.svg", // Using existing profile icon as placeholder
+    name: (isMounted && userName) ? `${userName}님` : "로그인 필요",
+    reviewCount: savedPlaces.length, // [MOD] 실제 찜한 장소 개수 반영
+    profileImage: "/icons/profile.svg",
   };
 
   const tabs = [
@@ -397,7 +405,12 @@ export default function MyPage() {
                     <button
                       className="px-4 py-3 text-[14px] lg:text-sm font-medium text-[#ff3b3b] text-left hover:bg-gray-50 transition-colors"
                       onClick={() => {
-                        console.log("로그아웃 클릭");
+                        // [MOD] 로그아웃 구현 (백엔드 API 없이 클라이언트에서 토큰 삭제)
+                        if (window.confirm("로그아웃 하시겠습니까?")) {
+                          localStorage.removeItem("token");
+                          localStorage.removeItem("saved_places");
+                          router.push("/login"); // 로그인 페이지로 이동
+                        }
                         setIsSettingsOpen(false);
                       }}
                     >
