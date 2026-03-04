@@ -142,7 +142,8 @@ export const useOnboardingStore = create(
           strTransport: transportLabel,
           nTotalPeople: travelData.peopleCount || 1,
           nTotalBudget: calculateTotalBudget(budget),
-          nAlarmRatio: budget.alertThreshold || 25, // 경고 알림 설정치 혹은 임의
+          // [MOD] 알림 토글: 꺼져있으면 0 (알림 없음), 켜져있으면 사용자 설정값 사용
+          nAlarmRatio: budget.alertEnabled ? (budget.alertThreshold || 25) : 0,
           nTransportRatio: budget.transport?.ratio || 25,
           nLodgingRatio: budget.accommodation?.ratio || 25,
           nFoodRatio: budget.food?.ratio || 25,

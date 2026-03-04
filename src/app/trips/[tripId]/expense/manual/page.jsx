@@ -75,7 +75,7 @@ export default function ManualExpensePage() {
                 <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#f2f4f6]">
                     <button
                         className="p-1 text-[#111]"
-                        onClick={() => router.back()}
+                        onClick={() => router.push(`/trips/${tripId}?tab=비용`)}
                     >
                         <X size={22} />
                     </button>

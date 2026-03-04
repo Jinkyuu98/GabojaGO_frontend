@@ -300,11 +300,12 @@ export default function TripDetailPage() {
               total: found.nTotalBudget || 0, // [MOD] 기본값 0 (백엔드에서 설정 안 한 경우)
               spent: newSpent, // [MOD] 실제 지출 내역만 표시 (없으면 빈 배열)
               planned: [], // [MOD] MOCK 제거
-              // [ADD] 카테고리별 예산 비율 매핑 (초과 경고 판단용)
+              // [ADD] 카테고리별 예산 비율 매핑
               foodRatio: found.nFoodRatio || 25,
               transportRatio: found.nTransportRatio || 25,
               lodgingRatio: found.nLodgingRatio || 25,
-              etcRatio: found.nAlarmRatio || 25,
+              // [MOD] nAlarmRatio를 별도 alarmRatio로 분리 (0이면 알림 끔)
+              alarmRatio: found.nAlarmRatio ?? 0,
             },
             ownerUserFK, // [ADD] 스케줄 생성자 userPK 보관
             companions: newCompanions.length > 0 ? newCompanions : [],
@@ -1254,6 +1255,39 @@ export default function TripDetailPage() {
                 </div>
 
                 <div className="h-[1px] bg-[#f2f4f6]" />
+
+                {/* [ADD] 예산 초과 경고 배너 - alarmRatio > 0 이고 카테고리 잔여 예산이 경고 임계값 이하일 때 표시 */}
+                {trip.budget.alarmRatio > 0 && trip.budget.total > 0 && trip.budget.spent?.length > 0 && (() => {
+                  const total = trip.budget.total;
+                  const alarmPct = trip.budget.alarmRatio; // 예: 25 = 25% 남으면 경고
+                  const ratioMap = {
+                    "숙박비": trip.budget.lodgingRatio || 25,
+                    "식비": trip.budget.foodRatio || 25,
+                    "교통비": trip.budget.transportRatio || 25,
+                  };
+                  const warnings = [];
+                  trip.budget.spent.forEach(cat => {
+                    const ratio = ratioMap[cat.category];
+                    if (!ratio) return;
+                    const allocated = Math.round(total * ratio / 100);
+                    const remaining = allocated - cat.amount;
+                    const threshold = Math.round(allocated * alarmPct / 100);
+                    if (remaining <= threshold && remaining >= 0) {
+                      warnings.push(`${cat.category}: 잔여 ${remaining.toLocaleString()}원 (경고 기준 ${threshold.toLocaleString()}원 이하)`);
+                    } else if (remaining < 0) {
+                      warnings.push(`${cat.category}: ${Math.abs(remaining).toLocaleString()}원 초과!`);
+                    }
+                  });
+                  if (warnings.length === 0) return null;
+                  return (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                      <p className="text-[13px] font-bold text-red-600 mb-1">⚠️ 예산 경고</p>
+                      {warnings.map((w, i) => (
+                        <p key={i} className="text-[12px] text-red-500">{w}</p>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* [ADD] 내역 상세 뷰 - 개별 지출 항목 리스트 + 삭제 기능 */}
                 {showExpenseDetail ? (

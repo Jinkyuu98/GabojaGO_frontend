@@ -175,7 +175,7 @@ export default function TravelCameraPage() {
         <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-20 text-white bg-gradient-to-b from-black/60 to-transparent">
           <button
             className="bg-transparent border-none text-white cursor-pointer p-2 rounded-full hover:bg-white/10"
-            onClick={() => router.back()}
+            onClick={() => router.push(`/trips/${tripId}?tab=${isReceipt ? "비용" : "기록"}`)}
           >
             <X size={24} />
           </button>
