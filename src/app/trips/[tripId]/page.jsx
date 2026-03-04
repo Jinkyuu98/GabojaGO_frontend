@@ -112,6 +112,11 @@ export default function TripDetailPage() {
   const [expenseRawList, setExpenseRawList] = useState([]); // 개별 지출 원본 데이터
   const [editingExpense, setEditingExpense] = useState(null); // [ADD] 개별 지출 수정 모달
 
+  // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  // [ADD] 현재 선택(클릭)된 장소 인덱스 추적 (동일 좌표 마커 겹침 해결용)
+  const [selectedMarkerIndex, setSelectedMarkerIndex] = useState(null);
+
   // [ADD] 준비물 관련 상태
   const [isAddingPreparation, setIsAddingPreparation] = useState(false);
   const [newPreparationName, setNewPreparationName] = useState("");
@@ -683,7 +688,31 @@ export default function TripDetailPage() {
   );
 
   // [ADD] 장소 이름 클릭 시 지도를 해당 위치로 이동하는 핸들러
-  const handlePlaceClick = (place) => {
+  const handlePlaceClick = (place, idx) => { // [MOD] 인덱스도 함께 받음
+    setSelectedMarkerIndex(idx); // 상태는 UI(리스트) 갱신용으로만 저장
+
+    // [ADD] 지도를 다시 그리지(useEffect 재실행) 않고, 생성되어 있는 마커들의 zIndex만 즉시 직접 조작하여 퍼포먼스(속도) 극대화
+    if (markersRef.current && markersRef.current.length > 0) {
+      markersRef.current.forEach((overlay, overlayIdx) => {
+        if (overlayIdx === idx) {
+          overlay.setZIndex(99);
+          // 생성 시 주입된 HTML 문자열의 z-index 스타일도 강제 변경 시도
+          const contentStr = overlay.getContent();
+          if (typeof contentStr === 'string') {
+            const updatedContent = contentStr.replace(/z-index:\s*\d+;/, 'z-index: 99;');
+            overlay.setContent(updatedContent);
+          }
+        } else {
+          overlay.setZIndex(10);
+          const contentStr = overlay.getContent();
+          if (typeof contentStr === 'string') {
+            const updatedContent = contentStr.replace(/z-index:\s*\d+;/, 'z-index: 10;');
+            overlay.setContent(updatedContent);
+          }
+        }
+      });
+    }
+
     if (!mapInstance.current || !place.latitude || !place.longitude) return;
     const moveLatLng = new window.kakao.maps.LatLng(place.latitude, place.longitude);
     mapInstance.current.setLevel(3); // 확대 레벨 조정
@@ -729,6 +758,7 @@ export default function TripDetailPage() {
         level: 4,
       });
       console.log("🗺️ 카카오맵 생성 완료!");
+      setIsMapLoaded(true); // [ADD] 로드 완료 시점 상태 갱신
     };
 
     if (window.kakao.maps?.Map) {
@@ -764,7 +794,8 @@ export default function TripDetailPage() {
   }, [tripId]);
 
   useEffect(() => {
-    if (!mapInstance.current || !window.kakao) return;
+    // [MOD] mapInstance뿐 아니라 isMapLoaded 상태도 의존성으로 추가하여 로드 즉시 재실행 보장
+    if (!isMapLoaded || !mapInstance.current || !window.kakao) return;
 
     const map = mapInstance.current;
 
@@ -785,9 +816,12 @@ export default function TripDetailPage() {
 
       // [MOD] Vercel 배포 시 CSS Minification이나 DOM 깨짐을 우회하기 위해 
       // 인라인 style을 최소화하고 보장된 Tailwind 유틸리티 클래스 문자열로 복원
+      // [MOD] 사용자가 리스트에서 클릭한 순번(idx)이라면 z-index를 최상위(99)로, 기본은 10
+      const zIndex = selectedMarkerIndex === idx ? 99 : 10;
+
       const content = `
         <div class="flex items-center justify-center bg-[#7a28fa] text-white font-bold border-2 border-white shadow-md rounded-full" 
-             style="width: 28px; height: 28px; font-size: 13px; z-index: 10;">
+             style="width: 28px; height: 28px; font-size: 13px; z-index: ${zIndex};">
           ${idx + 1}
         </div>
       `;
@@ -795,7 +829,8 @@ export default function TripDetailPage() {
       const overlay = new window.kakao.maps.CustomOverlay({
         position: position,
         content: content,
-        yAnchor: 0.5
+        yAnchor: 0.5,
+        zIndex: zIndex // 카카오맵 자체 zIndex 속성도 부여하여 확실하게 위로 올림
       });
 
       overlay.setMap(map);
@@ -823,7 +858,7 @@ export default function TripDetailPage() {
         map.setLevel(7);
       }
     }
-  }, [currentDayPlaces]);
+  }, [currentDayPlaces, isMapLoaded]); // [MOD] 선택 인덱스는 의존성에서 제외하여 재렌더링 방지, 클릭 핸들러에서 직접 DOM 조작
 
   // Define 3-tier snap heights
   const SNAPS = {
@@ -1187,52 +1222,56 @@ export default function TripDetailPage() {
         {selectedTab === "일정" && (
           <div className="flex flex-col gap-6">
             {currentDayPlaces.length > 0 ? (
-              <>
+              <div className="flex flex-col">
                 {currentDayPlaces.map((place, idx) => (
-                  <div key={idx} className="flex items-start gap-3.5">
-                    <div className="flex flex-col items-center gap-2 pt-1">
-                      <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
-                        {idx + 1}
-                      </div>
-                      {idx < currentDayPlaces.length - 1 && (
-                        <div className="w-[1px] h-5 bg-[rgba(229,235,241,0.7)]" />
-                      )}
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-5 mb-2">
-                        {/* [MOD] 장소 이름 클릭 시 지도 해당 위치로 이동 */}
-                        <h3
-                          className="text-base font-semibold text-[#111111] tracking-[-0.06px] cursor-pointer hover:text-[#7a28fa] transition-colors"
-                          onClick={() => handlePlaceClick(place)}
-                        >
-                          {place.name}
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEditPlace(place)}
-                            className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                            title="일정/메모 수정"
-                          >
-                            <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-                          </button>
-                          {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
-                          <button
-                            onClick={() => handleDeletePlace(place.id)}
-                            className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                            title="장소 삭제"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                  <div key={`place-${idx}-${place.id}`} className="relative">
+                    <div
+                      className="ml-6 flex items-start gap-4 cursor-pointer"
+                      onClick={() => handlePlaceClick(place, idx)}
+                    >
+                      <div className="flex flex-col items-center gap-2 pt-1">
+                        <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
+                          {idx + 1}
                         </div>
+                        {idx < currentDayPlaces.length - 1 && (
+                          <div className="w-[1px] h-5 bg-[rgba(229,235,241,0.7)]" />
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
-                          {place.time || "10:00"}
-                        </span>
-                        <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
-                          {place.duration}
-                        </span>
+
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-5 mb-2">
+                          {/* [MOD] 장소 이름 클릭 시 지도 해당 위치로 이동 */}
+                          <h3
+                            className="text-base font-semibold text-[#111111] tracking-[-0.06px] hover:text-[#7a28fa] transition-colors"
+                          >
+                            {place.name}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleEditPlace(place); }}
+                              className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                              title="일정/메모 수정"
+                            >
+                              <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                            </button>
+                            {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeletePlace(place.id); }}
+                              className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                              title="장소 삭제"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
+                            {place.time || "10:00"}
+                          </span>
+                          <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
+                            {place.duration}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1245,7 +1284,7 @@ export default function TripDetailPage() {
                     장소 추가
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
                 <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
