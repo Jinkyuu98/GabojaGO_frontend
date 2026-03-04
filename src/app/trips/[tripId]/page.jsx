@@ -783,33 +783,19 @@ export default function TripDetailPage() {
 
       bounds.extend(position);
 
-      // [MOD] HTML 문자열 파싱 깨짐 방지: 실제 DOM 엘리먼트를 생성하여 CustomOverlay에 주입 (Production 호환성)
-      const contentNode = document.createElement("div");
-      contentNode.style.cssText = `
-        box-sizing: border-box;
-        background-color: #7a28fa;
-        color: #fff;
-        width: 28px;
-        height: 28px;
-        min-width: 28px;
-        min-height: 28px;
-        border-radius: 50%;
-        border: 2px solid #fff;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-        font-size: 13px;
-        font-weight: 700;
-        font-family: sans-serif;
-        text-align: center;
-        line-height: 24px;
-        z-index: 10;
-        position: relative;
+      // [MOD] Vercel 배포 시 CSS Minification이나 DOM 깨짐을 우회하기 위해 
+      // 인라인 style을 최소화하고 보장된 Tailwind 유틸리티 클래스 문자열로 복원
+      const content = `
+        <div class="flex items-center justify-center bg-[#7a28fa] text-white font-bold border-2 border-white shadow-md rounded-full" 
+             style="width: 28px; height: 28px; font-size: 13px; z-index: 10;">
+          ${idx + 1}
+        </div>
       `;
-      contentNode.innerHTML = `${idx + 1}`;
 
       const overlay = new window.kakao.maps.CustomOverlay({
         position: position,
-        content: contentNode, // [MOD] 문자열 대신 DOM Element 주입
-        yAnchor: 0.5 // [MOD] 마커 없이 숫자가 정확한 위치에 표시되도록 조정
+        content: content,
+        yAnchor: 0.5
       });
 
       overlay.setMap(map);
