@@ -21,6 +21,7 @@ import {
   appendFavoriteGroup,
   removeFavoriteGroup,
 } from "../../services/favorite";
+import { getPlaceReviews } from "../../services/review"; // [ADD] 실제 리뷰 점수 반영
 import { useEffect, useRef } from "react";
 import Script from "next/script";
 
@@ -107,11 +108,12 @@ export default function MyPage() {
                 ? response.data.location_list
                 : [response.data.location_list];
 
+              // [MOD] 기본 매핑 (rating/reviewCount는 아래에서 API로 덮어씀)
               apiData = rawData.map((item) => {
                 const loc = item.location;
                 return {
                   id: loc.iPK,
-                  favoriteLocationPK: item.iPK, // [ADD] 삭제 시 필요한 매핑 PK 보관
+                  favoriteLocationPK: item.iPK,
                   name: loc.strName,
                   address: loc.strAddress,
                   category: loc.strGroupName || "기타",
@@ -121,6 +123,25 @@ export default function MyPage() {
                   rating: 0,
                   reviewCount: 0,
                 };
+              });
+
+              // [ADD] 장소별 실제 리뷰 점수를 병렬로 조회하여 반영
+              const reviewResults = await Promise.allSettled(
+                apiData.map((place) => getPlaceReviews(Number(place.id)))
+              );
+              apiData = apiData.map((place, idx) => {
+                const result = reviewResults[idx];
+                if (result.status === "fulfilled" && result.value?.review_list) {
+                  const list = typeof result.value.review_list === "string"
+                    ? JSON.parse(result.value.review_list.replace(/'/g, '"'))
+                    : result.value.review_list;
+                  const count = list?.length || 0;
+                  const avg = count > 0
+                    ? parseFloat((list.reduce((s, r) => s + (r.nScore || 0), 0) / count).toFixed(1))
+                    : 0;
+                  return { ...place, reviewCount: count, rating: avg };
+                }
+                return place;
               });
             }
             fetchSuccess = true;
