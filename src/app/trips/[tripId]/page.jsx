@@ -631,11 +631,22 @@ export default function TripDetailPage() {
     mapInstance.current.panTo(moveLatLng); // 부드러운 이동
   };
 
+  // [MOD] SPA 네비게이션 대응: 컴포넌트 마운트 시 mapInstance 리셋 + 맵 재생성
   const initMap = () => {
     if (!window.kakao || !mapRef.current) return;
 
+    // [MOD] 기존 맵이 있으면 제거 (SPA 네비게이션 시 stale 참조 방지)
+    if (mapInstance.current) {
+      try {
+        // 기존 마커 정리
+        markersRef.current.forEach((m) => m.setMap(null));
+        markersRef.current = [];
+      } catch (e) { /* ignore cleanup errors */ }
+      mapInstance.current = null;
+    }
+
     window.kakao.maps.load(() => {
-      if (mapInstance.current) return;
+      if (!mapRef.current) return;
 
       const center = new window.kakao.maps.LatLng(37.5665, 126.978);
       mapInstance.current = new window.kakao.maps.Map(mapRef.current, {
@@ -645,11 +656,22 @@ export default function TripDetailPage() {
     });
   };
 
+  // [MOD] 컴포넌트 마운트 시 맵 초기화 + 언마운트 시 정리
   useEffect(() => {
-    if (window.kakao && !mapInstance.current) {
+    // mapInstance를 리셋하여 SPA 재진입 시 새 맵 생성 보장
+    mapInstance.current = null;
+
+    if (window.kakao) {
       initMap();
     }
-  }, []);
+
+    return () => {
+      // 언마운트 시 정리
+      markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
+      markersRef.current = [];
+      mapInstance.current = null;
+    };
+  }, [tripId]);
 
   useEffect(() => {
     if (!mapInstance.current || !window.kakao) return;
@@ -1729,6 +1751,12 @@ export default function TripDetailPage() {
 
   return (
     <MobileContainer showNav={true} className="lg:max-w-none">
+      {/* [ADD] Kakao Maps SDK - SPA 네비게이션 시에도 독립적으로 로드 보장 */}
+      <Script
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
+        strategy="afterInteractive"
+        onLoad={initMap}
+      />
       <div className="relative w-full h-screen bg-white overflow-hidden lg:flex lg:flex-row">
         {/* Left Side Panel - Desktop Only (Moved from Right, Added Search Panel Style) */}
         <div
