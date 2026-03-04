@@ -57,39 +57,9 @@ export default function TripDetailPage() {
     id: "1",
     title: "제주도 여행",
     budget: {
-      total: 500000,
-      spent: [
-        {
-          category: "숙박비",
-          amount: 500000,
-          color: "#14b8a6",
-          percentage: 62,
-        },
-        { category: "식비", amount: 500000, color: "#3b82f6", percentage: 25 },
-        {
-          category: "교통비",
-          amount: 500000,
-          color: "#ffa918",
-          percentage: 12,
-        },
-        { category: "기타", amount: 500000, color: "#b115fa", percentage: 6 },
-      ],
-      planned: [
-        {
-          category: "숙박비",
-          amount: 500000,
-          color: "#14b8a6",
-          percentage: 62,
-        },
-        { category: "식비", amount: 500000, color: "#3b82f6", percentage: 25 },
-        {
-          category: "교통비",
-          amount: 500000,
-          color: "#ffa918",
-          percentage: 12,
-        },
-        { category: "기타", amount: 500000, color: "#b115fa", percentage: 6 },
-      ],
+      total: 0,
+      spent: [],
+      planned: [],
     },
     checklist: [], // [MOD] 기본 MOCK 비우기 (API 연동)
     companions: [
@@ -327,9 +297,9 @@ export default function TripDetailPage() {
             // 매핑한 상세 정보 연동
             days: newDays.length > 0 ? newDays : MOCK_TRIP.days,
             budget: {
-              total: found.nTotalBudget || 500000,
-              spent: newSpent.length > 0 ? newSpent : MOCK_TRIP.budget.spent,
-              planned: MOCK_TRIP.budget.planned,
+              total: found.nTotalBudget || 0, // [MOD] 기본값 0 (백엔드에서 설정 안 한 경우)
+              spent: newSpent, // [MOD] 실제 지출 내역만 표시 (없으면 빈 배열)
+              planned: [], // [MOD] MOCK 제거
               // [ADD] 카테고리별 예산 비율 매핑 (초과 경고 판단용)
               foodRatio: found.nFoodRatio || 25,
               transportRatio: found.nTransportRatio || 25,
