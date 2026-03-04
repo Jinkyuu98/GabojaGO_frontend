@@ -6,6 +6,7 @@ import Image from "next/image";
 import Script from "next/script";
 import { clsx } from "clsx";
 import SearchModal from "./SearchModal";
+import MobilePlaceSearchSheet from "./MobilePlaceSearchSheet"; // [ADD] 모바일 장소 검색 바텀시트
 import PlaceDetailPanel from "./PlaceDetailPanel"; // [ADD] 장소 상세(리뷰) 패널 추가
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
@@ -577,6 +578,7 @@ export default function TripDetailPage() {
   const [selectedDay, setSelectedDay] = useState(1);
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false); // [ADD] 모바일 바텀시트 상태
   const [sheetHeight, setSheetHeight] = useState(478);
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
@@ -996,8 +998,8 @@ export default function TripDetailPage() {
     if (window.innerWidth >= 1024) {
       setIsSearchModalOpen(true);
     } else {
-      const formattedDate = formatApiDate(selectedDay);
-      router.push(`/search/input?tripId=${tripId}&day=${selectedDay}&date=${encodeURIComponent(formattedDate)}`);
+      // [MOD] 모바일: 페이지 이동 대신 바텀시트 오픈 (지도 유지)
+      setIsMobileSearchOpen(true);
     }
   };
 
@@ -2722,6 +2724,20 @@ export default function TripDetailPage() {
         day={selectedDay}
         formattedDate={formatApiDate(selectedDay)}
         onAddSuccess={handleAddSuccess}
+      />
+
+      {/* [ADD] 모바일 장소 검색 시트 (기존 바텀시트와 동일한 지도 노출 면적) */}
+      <MobilePlaceSearchSheet
+        isOpen={isMobileSearchOpen}
+        onClose={() => setIsMobileSearchOpen(false)}
+        tripId={tripId}
+        day={selectedDay}
+        formattedDate={formatApiDate(selectedDay)}
+        sheetHeight={sheetHeight} // [ADD] 기존 바텀시트 높이 전달 → 지도 노출 면적 일치
+        onAddSuccess={(data) => {
+          handleAddSuccess(data);
+          setIsMobileSearchOpen(false);
+        }}
       />
 
       {/* [ADD] 동행자 초대 모달 */}
