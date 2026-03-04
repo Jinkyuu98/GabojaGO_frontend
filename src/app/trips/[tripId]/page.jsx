@@ -112,6 +112,8 @@ export default function TripDetailPage() {
   const [editingBudget, setEditingBudget] = useState(null); // 예산 수정 모달
   const [expenseRawList, setExpenseRawList] = useState([]); // 개별 지출 원본 데이터
   const [editingExpense, setEditingExpense] = useState(null); // [ADD] 개별 지출 수정 모달
+  const [isAddingExpense, setIsAddingExpense] = useState(false); // [ADD] 지출 직접 입력 모달
+  const [newExpense, setNewExpense] = useState({ chCategory: "F", nMoney: "", dtExpense: "", strMemo: "" });
 
   // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -1586,7 +1588,12 @@ export default function TripDetailPage() {
                     {/* [ADD] 직접 입력 버튼 */}
                     <button
                       className="w-full py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[13px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                      onClick={() => router.push(`/trips/${tripId}/expense/manual`)}
+                      onClick={() => {
+                        const now = new Date();
+                        const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                        setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                        setIsAddingExpense(true);
+                      }}
                     >
                       + 지출 추가
                     </button>
@@ -1704,7 +1711,12 @@ export default function TripDetailPage() {
                 </p>
                 <button
                   className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                  onClick={() => router.push(`/trips/${tripId}/expense/manual`)}
+                  onClick={() => {
+                    const now = new Date();
+                    const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                    setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                    setIsAddingExpense(true);
+                  }}
                 >지출 추가</button>
               </div>
             )
@@ -2450,6 +2462,146 @@ export default function TripDetailPage() {
                 }}
                 className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
               >저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* [ADD] 지출 항목 개별 추가 모달 */}
+      {isAddingExpense && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4 pt-10 pb-10 overflow-y-auto">
+          <div className="w-full max-w-sm bg-white rounded-xl p-5 shadow-lg my-auto">
+            <h3 className="text-[17px] font-bold text-[#111] mb-4">지출 추가</h3>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-2 block">카테고리</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { code: "F", label: "식비", emoji: "🍽️" },
+                    { code: "T", label: "교통비", emoji: "🚗" },
+                    { code: "L", label: "숙박비", emoji: "🏨" },
+                    { code: "E", label: "기타", emoji: "📦" },
+                  ].map((cat) => (
+                    <button
+                      key={cat.code}
+                      type="button"
+                      onClick={() => setNewExpense({ ...newExpense, chCategory: cat.code })}
+                      className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all ${newExpense.chCategory === cat.code
+                          ? "border-[#7a28fa] bg-[#f5eeff]"
+                          : "border-[#e5ebf1] bg-white"
+                        }`}
+                    >
+                      <span className="text-[20px]">{cat.emoji}</span>
+                      <span
+                        className={`text-[12px] font-semibold ${newExpense.chCategory === cat.code ? "text-[#7a28fa]" : "text-[#556574]"
+                          }`}
+                      >
+                        {cat.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">지출 금액 (원)</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={newExpense.nMoney}
+                    onChange={(e) => setNewExpense({ ...newExpense, nMoney: parseInt(e.target.value) || "" })}
+                    className="w-full border border-gray-300 rounded-lg p-2.5 pr-8 text-[15px]"
+                    placeholder="0"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[14px] text-[#8e8e93]">원</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">지출 일시</label>
+                <input
+                  type="datetime-local"
+                  value={newExpense.dtExpense}
+                  onChange={(e) => setNewExpense({ ...newExpense, dtExpense: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-semibold text-[#555] mb-1 block">내용 (메모)</label>
+                <input
+                  type="text"
+                  value={newExpense.strMemo}
+                  onChange={(e) => setNewExpense({ ...newExpense, strMemo: e.target.value })}
+                  placeholder="지출 내용을 입력하세요"
+                  maxLength={100}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button onClick={() => setIsAddingExpense(false)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">취소</button>
+              <button
+                onClick={async () => {
+                  if (!newExpense.nMoney || newExpense.nMoney <= 0) {
+                    alert("금액을 올바르게 입력해주세요.");
+                    return;
+                  }
+                  try {
+                    const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
+                    const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
+
+                    const dtFormatted = newExpense.dtExpense
+                      ? newExpense.dtExpense.replace("T", " ") + (newExpense.dtExpense.length === 16 ? ":00" : "")
+                      : "";
+
+                    const payload = {
+                      iScheduleFK: parseInt(tripId, 10),
+                      iUserFK: safeUserId,
+                      nMoney: parseInt(newExpense.nMoney),
+                      dtExpense: dtFormatted,
+                      chCategory: newExpense.chCategory,
+                      strMemo: newExpense.strMemo || "직접 입력 지출"
+                    };
+
+                    const { addScheduleExpense } = await import("../../../services/schedule");
+                    const res = await addScheduleExpense(payload);
+
+                    alert("✅ 지출 내역이 등록되었습니다.");
+                    setIsAddingExpense(false);
+
+                    const tempId = res?.data?.iPK || Date.now();
+                    const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+                    const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
+
+                    const newExpObj = { ...payload, iPK: tempId, categoryLabel: categoryLabelMap[payload.chCategory] };
+
+                    setExpenseRawList(prev => [...prev, newExpObj]);
+
+                    setApiTrip(prev => {
+                      if (!prev) return prev;
+                      const updatedRawList = [...expenseRawList, newExpObj];
+                      const grouped = {};
+                      updatedRawList.forEach(e => {
+                        const label = categoryLabelMap[e.chCategory] || "기타";
+                        if (!grouped[label]) grouped[label] = 0;
+                        grouped[label] += (e.nMoney || 0);
+                      });
+
+                      const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
+                      const newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                        category: label, amount,
+                        color: categoryColors[label] || "#b115fa",
+                        percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+                      })).sort((a, b) => b.amount - a.amount);
+
+                      return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                    });
+                  } catch (err) {
+                    console.error("지출 등록 실패:", err);
+                    alert("지출 등록 중 오류가 발생했습니다.");
+                  }
+                }}
+                className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
+              >등록</button>
             </div>
           </div>
         </div>
