@@ -11,16 +11,12 @@ export function useCurrentUser() {
 
         const payload = JSON.parse(atob(token.split(".")[1]));
 
-        // [ADD] 개발 디버그용 로그 (필드 구조 확인)
-        console.log("[useCurrentUser] JWT payload:", payload);
-
         return {
             userId: payload.iPK ?? null,         // 유저 PK → 리뷰의 iUserFK와 비교용
             userLoginId: payload.strUserID ?? null, // 로그인 아이디 표시용
             userName: payload.strName ?? null,       // 이름 표시용
         };
     } catch (e) {
-        console.warn("[useCurrentUser] 토큰 파싱 실패:", e);
         return { userId: null, userLoginId: null, userName: null };
     }
 }
