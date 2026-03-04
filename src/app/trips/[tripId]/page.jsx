@@ -286,6 +286,7 @@ export default function TripDetailPage() {
 
               newChecklist = pList.map(prep => ({
                 id: prep.iPK,
+                scheduleFK: prep.iScheduleFK, // [ADD] modify API 필수 필드
                 name: prep.strName,
                 checked: prep.bCheck || false
               }));
@@ -384,8 +385,11 @@ export default function TripDetailPage() {
 
   const onTogglePreparation = async (prep) => {
     try {
+      // [MOD] 422 에러 수정: iScheduleFK, strName 등 필수 필드 포함
       const payload = {
         iPK: prep.id,
+        iScheduleFK: prep.scheduleFK || parseInt(tripId, 10),
+        strName: prep.name,
         bCheck: !prep.checked
       };
       await modifySchedulePreparation(payload);
