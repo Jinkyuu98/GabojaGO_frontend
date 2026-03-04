@@ -783,9 +783,27 @@ export default function TripDetailPage() {
 
       bounds.extend(position);
 
-      // [MOD] 마커 제거, 숫자 오버레이만 표시 + Tailwind → 인라인 스타일 (앱 WebView 호환)
+      // [MOD] 마커 제거, 숫자 오버레이만 표시 + 렌더링 호환성(Vercel/앱) 강화
       const content = `
-        <div style="background-color:#7a28fa;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);font-size:13px;font-weight:700;font-family:sans-serif;line-height:1;">
+        <div style="
+          box-sizing: border-box;
+          background-color: #7a28fa;
+          color: #fff;
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          min-height: 28px;
+          border-radius: 50%;
+          border: 2px solid #fff;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          font-size: 13px;
+          font-weight: 700;
+          font-family: sans-serif;
+          text-align: center;
+          line-height: 24px;
+          z-index: 10;
+          position: relative;
+        ">
           ${idx + 1}
         </div>
       `;
