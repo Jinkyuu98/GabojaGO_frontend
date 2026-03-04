@@ -9,6 +9,7 @@ import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { Toast } from "../../components/common/Toast";
 import { searchPlaces } from "../../services/place";
+import { getPlaceReviews } from "../../services/review"; // [ADD] 리뷰 API import (평점 계산용)
 import PlaceDetailPanel from "../trips/[tripId]/PlaceDetailPanel";
 
 const HighlightText = ({ text = "", keyword = "" }) => {
@@ -86,7 +87,7 @@ export default function SearchClient() {
       address: item.strAddress || item.address || "",
       category: item.strGroupName || item.category || "기타",
       groupCode: item.strGroupCode || item.group_code || "기타",
-      rating: item.rating || 0,
+      rating: item.nScore || item.rating || 0, // [FIX] nScore를 rating으로 매핑 (기존에는 item.rating만 참조해 항상 0이었음)
       reviewCount: item.reviewCount || 0,
       longitude: parseFloat(item.ptLongitude || item.longitude || 0),
       latitude: parseFloat(item.ptLatitude || item.latitude || 0),
@@ -183,7 +184,29 @@ export default function SearchClient() {
       try {
         const response = await searchPlaces(searchQuery);
         const transformedData = transformServerData(response.data);
-        setSearchResults(transformedData);
+
+        // [ADD] 검색 API는 nScore를 반환하지 않으므로, 리뷰 API를 병렬 호출해 평점 계산
+        const withRatings = await Promise.all(
+          transformedData.map(async (place) => {
+            try {
+              const reviewRes = await getPlaceReviews(Number(place.id));
+              const list = reviewRes?.review_list
+                ? (typeof reviewRes.review_list === "string"
+                  ? JSON.parse(reviewRes.review_list.replace(/'/g, '"'))
+                  : reviewRes.review_list)
+                : [];
+              const count = list.length;
+              const avg = count
+                ? parseFloat((list.reduce((s, r) => s + (r.nScore || 0), 0) / count).toFixed(1))
+                : 0;
+              return { ...place, rating: avg, reviewCount: count };
+            } catch {
+              return place; // [FIX] 리뷰 조회 실패 시 원본 유지
+            }
+          })
+        );
+
+        setSearchResults(withRatings);
       } catch (error) {
         console.error("Place search failed:", error);
         setSearchResults([]);
