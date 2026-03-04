@@ -238,31 +238,39 @@ export default function TripDetailPage() {
                 ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
                 : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
 
+              // [ADD] 디버그: user_list 응답 구조 확인 (삭제 PK 매핑 검증용)
+              console.log("👥 동행자 API 응답 (user_list):", JSON.stringify(uList));
+
               newCompanions = uList.map((usr) => ({
-                id: usr.iPK || usr.iUserFK,
-                scheduleUserPK: usr.iPK, // [ADD] 삭제 시 필요한 PK
-                userFK: usr.iUserFK,
-                name: usr.strName || `유저 ${usr.iUserFK}`,
-                isOwner: usr.iUserFK === ownerUserFK // [MOD] 스케줄 생성자 기준 왕관
+                id: `user-${usr.iPK}`,
+                // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
+                // schedule_user iPK는 /schedule/user/list에서 제공하지 않음
+                scheduleUserPK: undefined,
+                userFK: usr.iUserFK || usr.iPK,
+                userId: usr.strUserID || "",
+                name: usr.strName || `유저 ${usr.iUserFK || usr.iPK}`,
+                isOwner: (usr.iUserFK || usr.iPK) === ownerUserFK
               }));
             } catch (e) { console.error("User parse error", e); }
           }
 
           // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
           if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
-            // [ADD] JWT 토큰에서 로그인 사용자 이름 가져오기
             let ownerName = `유저 ${ownerUserFK}`;
+            let ownerUserId = "";
             try {
               const token = localStorage.getItem("token");
               if (token) {
                 const payload = JSON.parse(atob(token.split(".")[1]));
                 ownerName = payload.strName || payload.name || payload.sub || ownerName;
+                ownerUserId = payload.strUserID || payload.sub || "";
               }
             } catch (e) { /* token decode 실패 시 기본값 사용 */ }
 
             newCompanions.unshift({
-              id: ownerUserFK,
+              id: `owner-${ownerUserFK}`,
               userFK: ownerUserFK,
+              userId: ownerUserId,
               name: ownerName,
               isOwner: true
             });
@@ -438,28 +446,34 @@ export default function TripDetailPage() {
     return () => clearTimeout(timer);
   }, [companionSearchQuery]);
 
-  // [ADD] 동행자 추가 핸들러
+  // [MOD] 동행자 추가 핸들러 - addScheduleUser 응답의 iPK(=schedule_user PK)를 직접 사용
   const onAddCompanion = async (user) => {
     try {
-      await addScheduleUser({
+      // [MOD] addScheduleUser 응답에서 schedule_user 테이블의 iPK를 받아옴
+      const addRes = await addScheduleUser({
         iPK: 0,
         iScheduleFK: parseInt(tripId, 10),
         iUserFK: user.iPK
       });
-      // 동행자 목록 새로고침
-      const userRes = await getScheduleUsers(tripId).catch(() => null);
-      let newCompanions = [];
-      if (userRes?.user_list) {
-        const uList = Array.isArray(userRes.user_list) ? userRes.user_list : [];
-        newCompanions = uList.map((usr, i) => ({
-          id: usr.iPK || usr.iUserFK,
-          scheduleUserPK: usr.iPK,
-          userFK: usr.iUserFK,
-          name: usr.strName || `유저 ${usr.iUserFK}`,
-          isOwner: i === 0
-        }));
-      }
-      setApiTrip(prev => prev ? { ...prev, companions: newCompanions } : prev);
+      console.log("✅ 동행자 추가 응답:", JSON.stringify(addRes));
+
+      // [MOD] refetch 대신 기존 목록에 직접 추가 (addRes.iPK = schedule_user PK)
+      const newCompanion = {
+        id: addRes.iPK || Date.now(), // schedule_user 테이블의 iPK
+        scheduleUserPK: addRes.iPK,   // 삭제 시 이 값을 사용
+        userFK: user.iPK,
+        userId: user.strUserID || "",
+        name: user.strName || `유저 ${user.iPK}`,
+        isOwner: false
+      };
+
+      setApiTrip(prev => {
+        if (!prev) return prev;
+        // 이미 추가된 동행자인지 확인
+        const exists = prev.companions?.some(c => c.userFK === user.iPK);
+        if (exists) return prev;
+        return { ...prev, companions: [...(prev.companions || []), newCompanion] };
+      });
       setIsCompanionModalOpen(false);
       setCompanionSearchQuery("");
       setCompanionSearchResults([]);
@@ -469,20 +483,26 @@ export default function TripDetailPage() {
     }
   };
 
-  // [ADD] 동행자 삭제 핸들러
+  // [MOD] 동행자 삭제 핸들러 - scheduleUserPK(iPK)로 삭제 + 디버그 로그
   const onRemoveCompanion = async (companion) => {
     if (!window.confirm(`${companion.name}님을 동행자에서 삭제하시겠습니까?`)) return;
+    const pkToDelete = companion.scheduleUserPK;
+    console.log("🗑️ 동행자 삭제 요청:", { companion, pkToDelete });
+    if (!pkToDelete) {
+      alert("이 동행자는 현재 세션에서 추가되지 않아 삭제할 수 없습니다.\n페이지 새로고침 후 다시 추가하면 삭제가 가능합니다.");
+      return;
+    }
     try {
-      await removeScheduleUser(companion.scheduleUserPK || companion.id);
+      await removeScheduleUser(pkToDelete);
       setApiTrip(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          companions: prev.companions.filter(c => c.id !== companion.id)
+          companions: prev.companions.filter(c => c.scheduleUserPK !== pkToDelete)
         };
       });
     } catch (err) {
-      console.error("동행자 삭제 실패:", err);
+      console.error("동행자 삭제 실패:", err.response?.status, err.response?.data);
       alert("동행자 삭제에 실패했습니다.");
     }
   };
@@ -1638,7 +1658,8 @@ export default function TripDetailPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                {/* [MOD] 1줄에 1명씩 표시, 이름(ID) 형식 */}
+                <div className="flex flex-col gap-2">
                   {trip.companions.map((companion) => (
                     <div
                       key={companion.id}
@@ -1653,7 +1674,7 @@ export default function TripDetailPage() {
                         />
                       </div>
                       <span className="text-sm text-[#111111] font-medium truncate flex-1">
-                        {companion.name}
+                        {companion.name}{companion.userId ? ` (${companion.userId})` : ""}
                       </span>
                       {companion.isOwner ? (
                         <Image
@@ -1664,7 +1685,6 @@ export default function TripDetailPage() {
                           className="flex-shrink-0"
                         />
                       ) : (
-                        /* [ADD] 동행자 삭제 버튼 (생성자 제외) */
                         <button
                           onClick={() => onRemoveCompanion(companion)}
                           className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[#abb1b9] hover:text-[#ff3b3b] transition-colors rounded-full hover:bg-red-50"
