@@ -103,11 +103,13 @@ export default function BudgetInputPage() {
   const { setTravelData } = useOnboardingStore();
 
   const [totalBudget, setTotalBudget] = useState("");
-  const [accommodationRatio, setAccommodationRatio] = useState(80);
-  const [foodRatio, setFoodRatio] = useState(80);
-  const [transportRatio, setTransportRatio] = useState(80);
+  // [MOD] 기본 비율: 백엔드 기본값 0.25 (25%) 에 맞춤 (합계 = 1.0)
+  const [accommodationRatio, setAccommodationRatio] = useState(25);
+  const [foodRatio, setFoodRatio] = useState(25);
+  const [transportRatio, setTransportRatio] = useState(25);
   const [alertEnabled, setAlertEnabled] = useState(false);
-  const [alertThreshold, setAlertThreshold] = useState(80);
+  // [MOD] 경고 알림 기본값: 백엔드 기본값 0.25 (25%) 에 맞춤
+  const [alertThreshold, setAlertThreshold] = useState(25);
 
   const total = parseInt(totalBudget) || 0;
   const accommodationAmount = Math.round((total * accommodationRatio) / 100);
@@ -150,7 +152,8 @@ export default function BudgetInputPage() {
       footer={
         <button
           onClick={handleNext}
-          className="w-full py-[14px] bg-[#d9d9d9] rounded-xl text-base font-semibold text-white tracking-[-0.06px]"
+          className={`w-full py-[14px] rounded-xl text-base font-semibold text-white tracking-[-0.06px] transition-colors ${total > 0 ? "bg-[#7a28fa]" : "bg-[#d9d9d9]"
+            }`}
         >
           완료
         </button>
@@ -240,6 +243,7 @@ export default function BudgetInputPage() {
             <BudgetSlider
               value={alertThreshold}
               onChange={(e) => setAlertThreshold(parseInt(e.target.value))}
+              disabled={!alertEnabled}
             />
             <div className="flex items-center gap-1">
               <span className="text-base font-normal text-[#111111] tracking-[-0.32px]">
