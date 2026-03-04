@@ -419,7 +419,7 @@ export default function SearchPlaceDetailPage() {
                             // 1. 장소 등록 (DB에 장소 정보 보관)
                             try {
                               await registerPlace({
-                                iPK: placeData.id,
+                                iPK: Number(placeData.id),
                                 strName: placeData.name,
                                 strAddress: placeData.address,
                                 strGroupName: placeData.category || "",
@@ -428,8 +428,8 @@ export default function SearchPlaceDetailPage() {
                                 strPhone: placeData.phone || "",
                                 strLink: placeData.link || "",
                                 chCategory: placeData.chCategory || "E",
-                                ptLatitude: String(placeData.latitude),
-                                ptLongitude: String(placeData.longitude),
+                                ptLatitude: String(placeData.latitude || "0"),
+                                ptLongitude: String(placeData.longitude || "0"),
                               });
                             } catch (regErr) {
                               console.warn("registerPlace failed (might already exist):", regErr);
@@ -438,8 +438,8 @@ export default function SearchPlaceDetailPage() {
                             // 2. 선택한 그룹에 장소 담기
                             await appendFavoriteLocation({
                               iPK: 0,
-                              iFavoriteFK: group.iPK,
-                              iLocationFK: placeData.id
+                              iFavoriteFK: Number(group.iPK),
+                              iLocationFK: Number(placeData.id)
                             });
 
                             // 3. 로컬 스토리지 업데이트

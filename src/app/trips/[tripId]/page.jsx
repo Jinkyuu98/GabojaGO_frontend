@@ -12,8 +12,10 @@ import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
 import {
   removeScheduleLocation, modifyScheduleLocation,
   removeScheduleExpense, modifyScheduleExpense,
-  getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation // [MOD] 준비물 API 추가
+  getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation,
+  addScheduleUser, removeScheduleUser, getScheduleUsers // [ADD] 동행자 API 추가
 } from "../../../services/schedule";
+import { searchUserByName } from "../../../services/auth"; // [ADD] 사용자 검색 API
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -144,6 +146,12 @@ export default function TripDetailPage() {
   const [isAddingPreparation, setIsAddingPreparation] = useState(false);
   const [newPreparationName, setNewPreparationName] = useState("");
 
+  // [ADD] 동행자 초대 모달 관련 상태
+  const [isCompanionModalOpen, setIsCompanionModalOpen] = useState(false);
+  const [companionSearchQuery, setCompanionSearchQuery] = useState("");
+  const [companionSearchResults, setCompanionSearchResults] = useState([]);
+  const [isSearchingCompanion, setIsSearchingCompanion] = useState(false);
+
   useEffect(() => {
     const fetchTrip = async () => {
       try {
@@ -251,7 +259,8 @@ export default function TripDetailPage() {
           // [ADD] 개별 지출 원본 리스트 저장
           setExpenseRawList(rawExpenseItems);
 
-          // 동행자 (user_list -> companions)
+          // [MOD] 동행자 (user_list -> companions), 스케줄 생성자를 기준으로 왕관 표시
+          const ownerUserFK = found.iUserFK; // 스케줄 생성자의 userPK
           let newCompanions = [];
           if (userRes?.user_list) {
             try {
@@ -259,12 +268,34 @@ export default function TripDetailPage() {
                 ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
                 : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
 
-              newCompanions = uList.map((usr, i) => ({
-                id: usr.iUserFK,
-                name: `유저 ${usr.iUserFK}`,
-                isOwner: i === 0
+              newCompanions = uList.map((usr) => ({
+                id: usr.iPK || usr.iUserFK,
+                scheduleUserPK: usr.iPK, // [ADD] 삭제 시 필요한 PK
+                userFK: usr.iUserFK,
+                name: usr.strName || `유저 ${usr.iUserFK}`,
+                isOwner: usr.iUserFK === ownerUserFK // [MOD] 스케줄 생성자 기준 왕관
               }));
             } catch (e) { console.error("User parse error", e); }
+          }
+
+          // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
+          if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
+            // [ADD] JWT 토큰에서 로그인 사용자 이름 가져오기
+            let ownerName = `유저 ${ownerUserFK}`;
+            try {
+              const token = localStorage.getItem("token");
+              if (token) {
+                const payload = JSON.parse(atob(token.split(".")[1]));
+                ownerName = payload.strName || payload.name || payload.sub || ownerName;
+              }
+            } catch (e) { /* token decode 실패 시 기본값 사용 */ }
+
+            newCompanions.unshift({
+              id: ownerUserFK,
+              userFK: ownerUserFK,
+              name: ownerName,
+              isOwner: true
+            });
           }
 
           // [ADD] 준비물 (preparation_list -> checklist)
@@ -305,7 +336,8 @@ export default function TripDetailPage() {
               lodgingRatio: found.nLodgingRatio || 25,
               etcRatio: found.nAlarmRatio || 25,
             },
-            companions: newCompanions.length > 0 ? newCompanions : MOCK_TRIP.companions,
+            ownerUserFK, // [ADD] 스케줄 생성자 userPK 보관
+            companions: newCompanions.length > 0 ? newCompanions : [],
             checklist: newChecklist, // [MOD] 준비물 데이터 매핑
             raw: found, // [ADD] 서버 통신용 원본 데이터 보관
           });
@@ -411,6 +443,76 @@ export default function TripDetailPage() {
     } catch (err) {
       console.error("준비물 삭제 오류:", err);
       alert("삭제에 실패했습니다.");
+    }
+  };
+
+  // [MOD] 동행자 자동 검색 (입력 시 300ms 디바운스)
+  useEffect(() => {
+    if (!companionSearchQuery.trim()) {
+      setCompanionSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingCompanion(true);
+      try {
+        const res = await searchUserByName(companionSearchQuery.trim());
+        console.log("🔍 사용자 검색 응답:", JSON.stringify(res));
+        setCompanionSearchResults(res?.user_list || []);
+      } catch (err) {
+        console.error("사용자 검색 실패:", err.response?.status, err.response?.data);
+      } finally {
+        setIsSearchingCompanion(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [companionSearchQuery]);
+
+  // [ADD] 동행자 추가 핸들러
+  const onAddCompanion = async (user) => {
+    try {
+      await addScheduleUser({
+        iPK: 0,
+        iScheduleFK: parseInt(tripId, 10),
+        iUserFK: user.iPK
+      });
+      // 동행자 목록 새로고침
+      const userRes = await getScheduleUsers(tripId).catch(() => null);
+      let newCompanions = [];
+      if (userRes?.user_list) {
+        const uList = Array.isArray(userRes.user_list) ? userRes.user_list : [];
+        newCompanions = uList.map((usr, i) => ({
+          id: usr.iPK || usr.iUserFK,
+          scheduleUserPK: usr.iPK,
+          userFK: usr.iUserFK,
+          name: usr.strName || `유저 ${usr.iUserFK}`,
+          isOwner: i === 0
+        }));
+      }
+      setApiTrip(prev => prev ? { ...prev, companions: newCompanions } : prev);
+      setIsCompanionModalOpen(false);
+      setCompanionSearchQuery("");
+      setCompanionSearchResults([]);
+    } catch (err) {
+      console.error("동행자 추가 실패:", err.response?.data || err);
+      alert("동행자 추가에 실패했습니다.");
+    }
+  };
+
+  // [ADD] 동행자 삭제 핸들러
+  const onRemoveCompanion = async (companion) => {
+    if (!window.confirm(`${companion.name}님을 동행자에서 삭제하시겠습니까?`)) return;
+    try {
+      await removeScheduleUser(companion.scheduleUserPK || companion.id);
+      setApiTrip(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          companions: prev.companions.filter(c => c.id !== companion.id)
+        };
+      });
+    } catch (err) {
+      console.error("동행자 삭제 실패:", err);
+      alert("동행자 삭제에 실패했습니다.");
     }
   };
 
@@ -1527,7 +1629,7 @@ export default function TripDetailPage() {
                   <span className="text-sm font-semibold text-[#111111]">
                     등록된 동행자 {trip.companions.length}명
                   </span>
-                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
+                  <span onClick={() => setIsCompanionModalOpen(true)} className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
                     동행자 초대
                   </span>
                 </div>
@@ -1546,17 +1648,26 @@ export default function TripDetailPage() {
                           height={20}
                         />
                       </div>
-                      <span className="text-sm text-[#111111] font-medium truncate">
+                      <span className="text-sm text-[#111111] font-medium truncate flex-1">
                         {companion.name}
                       </span>
-                      {companion.isOwner && (
+                      {companion.isOwner ? (
                         <Image
                           src="/icons/crown.svg"
                           alt="owner"
                           width={14}
                           height={10}
-                          className="ml-auto flex-shrink-0"
+                          className="flex-shrink-0"
                         />
+                      ) : (
+                        /* [ADD] 동행자 삭제 버튼 (생성자 제외) */
+                        <button
+                          onClick={() => onRemoveCompanion(companion)}
+                          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[#abb1b9] hover:text-[#ff3b3b] transition-colors rounded-full hover:bg-red-50"
+                          aria-label="동행자 삭제"
+                        >
+                          ✕
+                        </button>
                       )}
                     </div>
                   ))}
@@ -1567,7 +1678,7 @@ export default function TripDetailPage() {
                 <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
                   {"아직 등록된 동행자가 없어요\n함께 여행할 사람을 추가해 보세요"}
                 </p>
-                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
+                <button onClick={() => setIsCompanionModalOpen(true)} className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
               </div>
             )
           )
@@ -2125,6 +2236,68 @@ export default function TripDetailPage() {
         formattedDate={formatApiDate(selectedDay)}
         onAddSuccess={handleAddSuccess}
       />
+
+      {/* [ADD] 동행자 초대 모달 */}
+      {isCompanionModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setIsCompanionModalOpen(false)}>
+          <div className="bg-white w-full max-w-[400px] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-[#f2f4f6]">
+              <h3 className="text-[18px] font-bold text-[#111]">동행자 초대</h3>
+              <p className="text-[13px] text-[#8e8e93] mt-1">함께 여행할 사용자를 검색하세요</p>
+            </div>
+            <div className="p-5">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={companionSearchQuery}
+                  onChange={e => setCompanionSearchQuery(e.target.value)}
+                  placeholder="사용자 이름 입력"
+                  className="w-full px-3 py-2.5 border border-[#d1d5db] rounded-lg text-[14px] focus:outline-none focus:border-[#7a28fa]"
+                  autoFocus
+                />
+                {isSearchingCompanion && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8e8e93] animate-pulse">검색중...</span>
+                )}
+              </div>
+
+              {/* 검색 결과 */}
+              <div className="mt-3 max-h-[240px] overflow-y-auto">
+                {companionSearchResults.length > 0 ? (
+                  companionSearchResults.map(user => (
+                    <div key={user.iPK} className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-[#f2f4f6] rounded-full flex items-center justify-center">
+                          <Image src="/icons/profile.svg" alt="profile" width={16} height={16} />
+                        </div>
+                        <div>
+                          <p className="text-[14px] font-medium text-[#111]">{user.strName}</p>
+                          <p className="text-[12px] text-[#8e8e93]">{user.strEmail || user.strUserID}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => onAddCompanion(user)}
+                        className="px-3 py-1.5 bg-[#7a28fa] text-white text-[13px] font-semibold rounded-lg hover:bg-[#6922d5] transition-colors"
+                      >
+                        추가
+                      </button>
+                    </div>
+                  ))
+                ) : companionSearchQuery && !isSearchingCompanion ? (
+                  <p className="text-[14px] text-[#8e8e93] text-center py-6">검색 결과가 없습니다</p>
+                ) : null}
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#f2f4f6]">
+              <button
+                onClick={() => { setIsCompanionModalOpen(false); setCompanionSearchQuery(""); setCompanionSearchResults([]); }}
+                className="w-full py-2.5 text-[14px] font-semibold text-[#8e8e93] hover:text-[#111] transition-colors"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MobileContainer>
   );
 }

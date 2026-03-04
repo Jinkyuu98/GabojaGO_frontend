@@ -25,3 +25,13 @@ export const login = async (id, password) => {
 
   return res.data;
 };
+
+// [ADD] 사용자 이름으로 검색 API (업데이트된 OpenAPI: /auth/user/search)
+/**
+ * @param {string} strUserName - 검색할 사용자 이름
+ * @returns {Promise} - { user_list: [...] }
+ */
+export const searchUserByName = async (strUserName) => {
+  const res = await api.get("/auth/user/search", { params: { strUserName } });
+  return res.data;
+};

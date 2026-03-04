@@ -333,7 +333,7 @@ export default function SearchClient() {
                                   // 1. 장소 등록
                                   try {
                                     await registerPlace({
-                                      iPK: selectedPlace.id,
+                                      iPK: Number(selectedPlace.id),
                                       strName: selectedPlace.name,
                                       strAddress: selectedPlace.address,
                                       strGroupName: selectedPlace.category || "",
@@ -346,14 +346,14 @@ export default function SearchClient() {
                                       ptLongitude: String(selectedPlace.longitude || "0"),
                                     });
                                   } catch (e) {
-                                    console.warn("registerPlace failed in SearchClient:", e);
+                                    console.warn("registerPlace failed in SearchClient:", e.response?.status, e.response?.data, e);
                                   }
 
                                   // 2. 선택한 그룹에 장소 담기
                                   await appendFavoriteLocation({
                                     iPK: 0,
-                                    iFavoriteFK: group.iPK,
-                                    iLocationFK: selectedPlace.id
+                                    iFavoriteFK: Number(group.iPK),
+                                    iLocationFK: Number(selectedPlace.id)
                                   });
 
                                   // 3. 로컬 스토리지 업데이트

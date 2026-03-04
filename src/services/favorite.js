@@ -14,13 +14,19 @@ export const getFavoriteLocationList = (iFavoritePK) =>
     api.get("/favorite/location/list", { params: { iFavoritePK } });
 
 /**
- * [ADD] 장소를 특정 즐겨찾기 그룹에 추가
+ * [MOD] 장소를 특정 즐겨찾기 그룹에 추가
  * @param {Object} payload 
  * @param {number} payload.iFavoriteFK - 즐겨찾기 그룹 PK
  * @param {number} payload.iLocationFK - 추가할 장소의 DB PK
+ * [MOD] 백엔드 API 업데이트: dtFavorite (datetime) 필수 추가됨 → 자동 생성
  */
-export const appendFavoriteLocation = (payload) =>
-    api.post("/favorite/location/append", payload);
+export const appendFavoriteLocation = (payload) => {
+    // [MOD] dtFavorite가 없으면 현재 시각을 자동으로 추가
+    const now = new Date();
+    const dtFavorite = payload.dtFavorite ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    return api.post("/favorite/location/append", { ...payload, dtFavorite });
+};
 
 /**
  * [ADD] 즐겨찾기에 등록된 특정 예약/저장 내역 삭제

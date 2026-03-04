@@ -257,7 +257,7 @@ export default function MyPage() {
     e.stopPropagation(); // 카드 클릭 이벤트(상세보기 이동 등) 방지
 
     const payload = {
-      iPK: place.id,
+      iPK: Number(place.id),
       strName: place.name,
       strAddress: place.address,
       strGroupName: place.category || "",
@@ -266,8 +266,8 @@ export default function MyPage() {
       strPhone: place.phone || "",
       strLink: place.link || "",
       chCategory: place.chCategory || "E",
-      ptLongitude: String(place.longitude),
-      ptLatitude: String(place.latitude),
+      ptLongitude: String(place.longitude || "0"),
+      ptLatitude: String(place.latitude || "0"),
     };
 
     if (unSavedPlaceIds.includes(place.id)) {
@@ -289,8 +289,8 @@ export default function MyPage() {
           } catch (e) { }
           await appendFavoriteLocation({
             iPK: 0,
-            iFavoriteFK: favoriteId,
-            iLocationFK: place.id,
+            iFavoriteFK: Number(favoriteId),
+            iLocationFK: Number(place.id),
           });
         } catch (e) {
           console.error("즐겨찾기 추가 맵핑 실패:", e);

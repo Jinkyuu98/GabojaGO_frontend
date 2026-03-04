@@ -69,6 +69,30 @@ export const getScheduleUsers = async (iSchedulePK) => {
     return res.data;
 };
 
+// [ADD] 동행자 추가 API
+/**
+ * @param {Object} data - { iScheduleFK, iUserFK, dtCreate }
+ */
+export const addScheduleUser = async (data) => {
+    // [MOD] dtCreate가 없으면 현재 시각을 자동 생성
+    const now = new Date();
+    const dtCreate = data.dtCreate ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    const res = await api.post("/schedule/user/append", { ...data, dtCreate });
+    return res.data;
+};
+
+// [ADD] 동행자 삭제 API
+/**
+ * @param {number} iScheduleUserPK - 삭제할 동행자 매핑 PK
+ */
+export const removeScheduleUser = async (iScheduleUserPK) => {
+    const res = await api.post("/schedule/user/remove", null, {
+        params: { iScheduleUserPK }
+    });
+    return res.data;
+};
+
 /**
  * 일정 내 장소 추가 API
  * @param {Object} data - { iScheduleFK, dtSchedule, strMemo, iLocationFK }
