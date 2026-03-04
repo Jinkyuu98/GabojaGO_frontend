@@ -9,10 +9,23 @@ import SearchModal from "./SearchModal";
 import PlaceDetailPanel from "./PlaceDetailPanel"; // [ADD] 장소 상세(리뷰) 패널 추가
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
-import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
+import {
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Calendar,
+  Users,
+  Search,
+  Plus,
+  Trash2,
+  X,
+  Camera,
+  Image as ImageIcon,
+  CheckSquare
+} from "lucide-react"; // [ADD] 휴지통 아이콘 추가
 import {
   removeScheduleLocation, modifyScheduleLocation,
-  removeScheduleExpense, modifyScheduleExpense,
+  removeScheduleExpense, modifyScheduleExpense, addScheduleExpense, // [ADD] addScheduleExpense 추가
   getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation,
   addScheduleUser, removeScheduleUser, getScheduleUsers // [ADD] 동행자 API 추가
 } from "../../../services/schedule";
@@ -114,6 +127,10 @@ export default function TripDetailPage() {
   const [editingExpense, setEditingExpense] = useState(null); // [ADD] 개별 지출 수정 모달
   const [isAddingExpense, setIsAddingExpense] = useState(false); // [ADD] 지출 직접 입력 모달
   const [newExpense, setNewExpense] = useState({ chCategory: "F", nMoney: "", dtExpense: "", strMemo: "" });
+  const [selectedExpenseCategory, setSelectedExpenseCategory] = useState(null); // [ADD] 지출 내역 필터링용 카테고리 선택 상태
+  const [isProcessingReceipt, setIsProcessingReceipt] = useState(false); // [ADD] 영수증 파싱 로딩 상태
+
+  const fileInputRef = useRef(null); // [ADD] 불러오기 파일 선택기 참조
 
   // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -1427,19 +1444,81 @@ export default function TripDetailPage() {
                       />
                     </button>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-4">
+                    {/* [MOD] 영수증 촬영/불러오기/직접 입력 각각의 개별 버튼으로 분리 (아이콘으로 변경) */}
                     <button
-                      className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
+                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='영수증 촬영'"
                       onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
                     >
-                      영수증 등록
+                      <Camera size={20} />
                     </button>
-                    {/* [MOD] 내역 버튼 - 클릭 시 개별 지출 내역 토글 */}
                     <button
-                      className={clsx("text-sm font-semibold bg-transparent border-none p-0 cursor-pointer", showExpenseDetail ? "text-[#7a28fa]" : "text-[#8e8e93]")}
-                      onClick={() => setShowExpenseDetail(!showExpenseDetail)}
+                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='불러오기'"
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      내역
+                      <ImageIcon size={20} />
+                    </button>
+                    {/* [ADD] 숨겨진 파일 선택기 */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+
+                        // [MOD] 사용자가 확인 모달을 누르지 않더라도 딥러닝 파싱 즉시 시작
+                        setIsProcessingReceipt(true);
+
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file, "receipt-upload.jpg");
+
+                          const response = await fetch('/api/vision/parse', {
+                            method: 'POST',
+                            body: formData,
+                          });
+
+                          if (!response.ok) {
+                            throw new Error(`API 오류: ${response.status}`);
+                          }
+
+                          const expenseData = await response.json();
+                          const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
+                          const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
+
+                          await addScheduleExpense({
+                            iScheduleFK: parseInt(tripId, 10),
+                            iUserFK: safeUserId,
+                            dtExpense: expenseData.date || new Date().toISOString().replace("T", " ").substring(0, 19),
+                            chCategory: expenseData.category ? expenseData.category.charAt(0).toUpperCase() : "F",
+                            nMoney: parseInt(expenseData.total || 0, 10),
+                            iLocation: 0,
+                            strMemo: expenseData.strMemo || "불러온 영수증 지출",
+                          });
+
+                          // 성공 시 현재 탭(비용)으로 유지되도록 새로고침
+                          window.location.href = `/trips/${tripId}?tab=비용`;
+                        } catch (err) {
+                          console.error("불러오기 실패:", err);
+                          alert("불러운 이미지 분석에 실패했습니다.");
+                        } finally {
+                          setIsProcessingReceipt(false);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <button
+                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='직접 입력'"
+                      onClick={() => {
+                        const now = new Date();
+                        const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                        setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                        setIsAddingExpense(true);
+                      }}
+                    >
+                      <CheckSquare size={20} />
                     </button>
                   </div>
                 </div>
@@ -1479,113 +1558,245 @@ export default function TripDetailPage() {
                   );
                 })()}
 
-                {/* [ADD] 내역 상세 뷰 - 개별 지출 항목 리스트 + 삭제 기능 */}
-                {showExpenseDetail ? (
-                  <div className="flex flex-col gap-3">
+                {/* [MOD] 차트 뷰 항상 렌더링 */}
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-base font-semibold text-[#111111] tracking-[-0.5px]">
+                    사용 금액
+                  </h3>
+                  <div className="flex gap-6 items-center">
+                    <div className="relative w-[159px] h-[159px] flex-shrink-0">
+                      <svg viewBox="0 0 36 36" className="w-full h-full" style={{ transform: "rotate(-90deg)" }}>
+                        {(() => {
+                          const spentData = trip.budget.spent || [];
+                          const total = spentData.reduce((s, i) => s + i.amount, 0);
+                          if (total === 0) return <circle cx="18" cy="18" r="14" fill="none" stroke="#e5ebf1" strokeWidth="6" />;
+                          let cumulative = 0;
+                          return spentData.map((item, idx) => {
+                            const pct = item.amount / total;
+                            const dashArray = `${pct * 87.96} ${87.96 - pct * 87.96}`;
+                            const dashOffset = -cumulative * 87.96;
+                            cumulative += pct;
+                            return (
+                              <circle
+                                key={idx}
+                                cx="18" cy="18" r="14"
+                                fill="none"
+                                stroke={item.color}
+                                strokeWidth="6"
+                                strokeDasharray={dashArray}
+                                strokeDashoffset={dashOffset}
+                              />
+                            );
+                          });
+                        })()}
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-[11px] text-[#8e8e93]">사용 금액</span>
+                        <span className="text-[14px] font-bold text-[#111]">
+                          {(trip.budget.spent || []).reduce((s, i) => s + i.amount, 0).toLocaleString()}원
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-4 mb-1">
+                        <span className="text-xs text-[#abb1b9]">카테고리</span>
+                        <span className="text-xs text-[#abb1b9]">사용 금액</span>
+                      </div>
+                      <div className="h-[1px] bg-[#f2f4f6]" />
+                      {trip.budget.spent.map((item, idx) => (
+                        <div
+                          key={idx}
+                          className={clsx(
+                            "flex items-center justify-between gap-4 cursor-pointer p-1 rounded-md transition-colors",
+                            selectedExpenseCategory === item.category ? "bg-gray-100" : "hover:bg-gray-50"
+                          )}
+                          onClick={() => {
+                            // 이미 선택된 카테고리를 다시 누르면 전체보기로 해제
+                            setSelectedExpenseCategory(prev => prev === item.category ? null : item.category);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className={clsx("text-sm transition-colors", selectedExpenseCategory === item.category ? "text-[#111] font-semibold" : "text-[#556574]")}>
+                              {item.category}
+                            </span>
+                          </div>
+                          <span
+                            className={clsx(
+                              "text-sm font-semibold transition-colors",
+                              (() => {
+                                if (selectedExpenseCategory === item.category) {
+                                  return "text-[#7a28fa]";
+                                }
+                                const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
+                                const ratio = ratioMap[item.category];
+                                const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
+                                return budgetForCategory !== null && item.amount > budgetForCategory
+                                  ? "text-[#ff0909]"
+                                  : "text-[#111111]";
+                              })(),
+                            )}
+                          >
+                            {item.amount.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* [MOD] 예산 초과 경고 표시 */}
+                  {(() => {
+                    const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
+                    const hasExceeded = (trip.budget.spent || []).some(item => {
+                      const ratio = ratioMap[item.category];
+                      const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
+                      return budgetForCategory !== null && item.amount > budgetForCategory;
+                    });
+                    return hasExceeded ? (
+                      <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3 mt-2">
+                        <Image
+                          src="/icons/danger.svg"
+                          alt="warning"
+                          width={15}
+                          height={14}
+                        />
+                        <span className="text-[13px] font-medium text-[#ff0909]">
+                          예상 비용을 초과한 사용 금액이 있어요
+                        </span>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+
+                {/* [MOD] 지출 내역 리스트 뷰 항상 같이 렌더링 (차트 하단) */}
+                <div className="h-[1px] bg-[#f2f4f6] my-2" />
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
                     <h3 className="text-base font-semibold text-[#111111] tracking-[-0.5px]">
                       지출 내역 ({expenseRawList.length}건)
                     </h3>
-                    {expenseRawList.length > 0 ? (
-                      // [MOD] 카테고리별 그룹핑 + 그룹 내 시간순 정렬
-                      (() => {
-                        const categoryOrder = ["식비", "교통비", "숙박비", "기타"];
-                        const groupedByCategory = {};
-                        expenseRawList.forEach(exp => {
-                          const label = exp.categoryLabel || "기타";
-                          if (!groupedByCategory[label]) groupedByCategory[label] = [];
-                          groupedByCategory[label].push(exp);
-                        });
-                        // 각 그룹 내 시간순 정렬
-                        Object.values(groupedByCategory).forEach(arr => {
-                          arr.sort((a, b) => (a.dtExpense || "").localeCompare(b.dtExpense || ""));
-                        });
-                        // 카테고리 순서대로 렌더링
-                        const orderedKeys = categoryOrder.filter(k => groupedByCategory[k]);
-                        return orderedKeys.map(catLabel => (
-                          <div key={catLabel} className="flex flex-col gap-1.5">
-                            {/* [ADD] 카테고리 그룹 헤더 */}
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: groupedByCategory[catLabel][0]?.color }} />
-                              <span className="text-[13px] font-bold text-[#111]">{catLabel}</span>
-                              <span className="text-[12px] text-[#abb1b9]">({groupedByCategory[catLabel].length}건)</span>
-                            </div>
-                            {groupedByCategory[catLabel].map((exp, idx) => (
-                              <div key={exp.iPK || idx} className="flex items-center justify-between gap-3 py-2 px-3 bg-[#f9fafb] rounded-xl ml-4">
-                                <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-[12px] text-[#8e8e93] truncate">{exp.strMemo || "-"}</span>
-                                  <span className="text-[11px] text-[#abb1b9]">{exp.dtExpense ? exp.dtExpense.replace("T", " ").substring(0, 16) : "-"}</span>
-                                </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  <span className="text-[14px] font-bold text-[#111]">{(exp.nMoney || 0).toLocaleString()}원</span>
-                                  <button
-                                    className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
-                                    title="지출 수정"
-                                    onClick={() => {
-                                      setEditingExpense({
-                                        iPK: exp.iPK,
-                                        iScheduleFK: exp.iScheduleFK || tripId, // [ADD] 필수 필드
-                                        iUserFK: exp.iUserFK || 1, // [ADD] 필수 필드
-                                        nMoney: exp.nMoney || 0,
-                                        dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
-                                        chCategory: exp.chCategory || "E",
-                                        strMemo: exp.strMemo || ""
-                                      });
-                                    }}
-                                  >
-                                    <Image
-                                      src="/icons/edit-purple.svg"
-                                      alt="edit"
-                                      width={16}
-                                      height={16}
-                                      className="grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
-                                    />
-                                  </button>
-                                  <button
-                                    className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                                    title="지출 삭제"
-                                    onClick={async () => {
-                                      if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
-                                      try {
-                                        await removeScheduleExpense(exp.iPK);
-                                        setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
-                                        setApiTrip(prev => {
-                                          if (!prev) return prev;
-                                          const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
-                                          const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
-                                          const remaining = expenseRawList.filter(e => e.iPK !== exp.iPK);
-                                          const grouped = {};
-                                          remaining.forEach(e => {
-                                            const label = categoryLabelMap[e.chCategory] || "기타";
-                                            if (!grouped[label]) grouped[label] = 0;
-                                            grouped[label] += (e.nMoney || 0);
-                                          });
-                                          const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
-                                          const newSpent = Object.entries(grouped).map(([label, amount]) => ({
-                                            category: label, amount,
-                                            color: categoryColors[label] || "#b115fa",
-                                            percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
-                                          })).sort((a, b) => b.amount - a.amount);
-                                          return { ...prev, budget: { ...prev.budget, spent: newSpent } };
-                                        });
-                                        alert("삭제되었습니다.");
-                                      } catch (err) {
-                                        console.error("지출 삭제 실패:", err);
-                                        alert("지출 삭제 중 오류가 발생했습니다.");
-                                      }
-                                    }}
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ));
-                      })()
-                    ) : (
-                      <p className="text-[14px] text-[#8e8e93] text-center py-4">등록된 지출 내역이 없습니다.</p>
+                    {selectedExpenseCategory && (
+                      <span className="text-[12px] text-[#7a28fa] bg-[#f5f0ff] px-2 py-1 rounded-md font-medium">
+                        {selectedExpenseCategory}만 보기 중
+                      </span>
                     )}
-                    {/* [ADD] 직접 입력 버튼 */}
+                  </div>
+                  {expenseRawList.length > 0 ? (
+                    (() => {
+                      const categoryOrder = ["식비", "교통비", "숙박비", "기타"];
+                      const groupedByCategory = {};
+
+                      // [MOD] 선택된 카테고리가 있으면 해당 내역만 필터링
+                      const filteredList = selectedExpenseCategory
+                        ? expenseRawList.filter(exp => (exp.categoryLabel || "기타") === selectedExpenseCategory)
+                        : expenseRawList;
+
+                      if (filteredList.length === 0) {
+                        return <p className="text-[14px] text-[#8e8e93] text-center py-4">선택된 카테고리의 지출 내역이 없습니다.</p>;
+                      }
+
+                      filteredList.forEach(exp => {
+                        const label = exp.categoryLabel || "기타";
+                        if (!groupedByCategory[label]) groupedByCategory[label] = [];
+                        groupedByCategory[label].push(exp);
+                      });
+
+                      Object.values(groupedByCategory).forEach(arr => {
+                        arr.sort((a, b) => (a.dtExpense || "").localeCompare(b.dtExpense || ""));
+                      });
+
+                      const orderedKeys = categoryOrder.filter(k => groupedByCategory[k]);
+                      return orderedKeys.map(catLabel => (
+                        <div key={catLabel} className="flex flex-col gap-1.5">
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: groupedByCategory[catLabel][0]?.color }} />
+                            <span className="text-[13px] font-bold text-[#111]">{catLabel}</span>
+                            <span className="text-[12px] text-[#abb1b9]">({groupedByCategory[catLabel].length}건)</span>
+                          </div>
+                          {groupedByCategory[catLabel].map((exp, idx) => (
+                            <div key={exp.iPK || idx} className="flex items-center justify-between gap-3 py-2 px-3 bg-[#f9fafb] rounded-xl ml-4">
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="text-[12px] text-[#8e8e93] w-full truncate">{exp.strMemo || "-"}</span>
+                                <span className="text-[11px] text-[#abb1b9]">{exp.dtExpense ? exp.dtExpense.replace("T", " ").substring(0, 16) : "-"}</span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-[14px] font-bold text-[#111]">{(exp.nMoney || 0).toLocaleString()}원</span>
+                                <button
+                                  className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
+                                  title="지출 수정"
+                                  onClick={() => {
+                                    setEditingExpense({
+                                      iPK: exp.iPK,
+                                      iScheduleFK: exp.iScheduleFK || tripId,
+                                      iUserFK: exp.iUserFK || 1,
+                                      nMoney: exp.nMoney || 0,
+                                      dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
+                                      chCategory: exp.chCategory || "E",
+                                      strMemo: exp.strMemo || ""
+                                    });
+                                  }}
+                                >
+                                  <Image
+                                    src="/icons/edit-purple.svg"
+                                    alt="edit"
+                                    width={16}
+                                    height={16}
+                                    className="grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
+                                  />
+                                </button>
+                                <button
+                                  className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                                  title="지출 삭제"
+                                  onClick={async () => {
+                                    if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
+                                    try {
+                                      await removeScheduleExpense(exp.iPK);
+                                      setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
+                                      setApiTrip(prev => {
+                                        if (!prev) return prev;
+                                        const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+                                        const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
+                                        const remaining = expenseRawList.filter(e => e.iPK !== exp.iPK);
+                                        const grouped = {};
+                                        remaining.forEach(e => {
+                                          const label = categoryLabelMap[e.chCategory] || "기타";
+                                          if (!grouped[label]) grouped[label] = 0;
+                                          grouped[label] += (e.nMoney || 0);
+                                        });
+                                        const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
+                                        const newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                                          category: label, amount,
+                                          color: categoryColors[label] || "#b115fa",
+                                          percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+                                        })).sort((a, b) => b.amount - a.amount);
+                                        return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                                      });
+                                      alert("삭제되었습니다.");
+                                    } catch (err) {
+                                      console.error("지출 삭제 실패:", err);
+                                      alert("지출 삭제 중 오류가 발생했습니다.");
+                                    }
+                                  }}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ));
+                    })()
+                  ) : (
+                    <p className="text-[14px] text-[#8e8e93] text-center py-4">등록된 지출 내역이 없습니다.</p>
+                  )}
+
+                  {/* [MOD] 지출 추가 버튼 (내역 맨 아래 버튼) - 곧바로 직접 입력 모달 노출 */}
+                  <div className="pt-2">
                     <button
                       className="w-full py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[13px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
                       onClick={() => {
@@ -1598,111 +1809,7 @@ export default function TripDetailPage() {
                       + 지출 추가
                     </button>
                   </div>
-                ) : (
-                  /* 기존 차트 뷰 */
-                  <div className="flex flex-col gap-4">
-                    <h3 className="text-base font-semibold text-[#111111] tracking-[-0.5px]">
-                      사용 금액
-                    </h3>
-                    <div className="flex gap-6 items-center">
-                      <div className="relative w-[159px] h-[159px] flex-shrink-0">
-                        <svg viewBox="0 0 36 36" className="w-full h-full" style={{ transform: "rotate(-90deg)" }}>
-                          {(() => {
-                            const spentData = trip.budget.spent || [];
-                            const total = spentData.reduce((s, i) => s + i.amount, 0);
-                            if (total === 0) return <circle cx="18" cy="18" r="14" fill="none" stroke="#e5ebf1" strokeWidth="6" />;
-                            let cumulative = 0;
-                            return spentData.map((item, idx) => {
-                              const pct = item.amount / total;
-                              const dashArray = `${pct * 87.96} ${87.96 - pct * 87.96}`;
-                              const dashOffset = -cumulative * 87.96;
-                              cumulative += pct;
-                              return (
-                                <circle
-                                  key={idx}
-                                  cx="18" cy="18" r="14"
-                                  fill="none"
-                                  stroke={item.color}
-                                  strokeWidth="6"
-                                  strokeDasharray={dashArray}
-                                  strokeDashoffset={dashOffset}
-                                />
-                              );
-                            });
-                          })()}
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-[11px] text-[#8e8e93]">사용 금액</span>
-                          <span className="text-[14px] font-bold text-[#111]">
-                            {(trip.budget.spent || []).reduce((s, i) => s + i.amount, 0).toLocaleString()}원
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 flex flex-col gap-2">
-                        <div className="flex items-center justify-between gap-4 mb-1">
-                          <span className="text-xs text-[#abb1b9]">카테고리</span>
-                          <span className="text-xs text-[#abb1b9]">사용 금액</span>
-                        </div>
-                        <div className="h-[1px] bg-[#f2f4f6]" />
-                        {trip.budget.spent.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between gap-4"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="w-2.5 h-2.5 rounded-full"
-                                style={{ backgroundColor: item.color }}
-                              />
-                              <span className="text-sm text-[#556574]">
-                                {item.category}
-                              </span>
-                            </div>
-                            <span
-                              className={clsx(
-                                "text-sm font-semibold",
-                                (() => {
-                                  const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
-                                  const ratio = ratioMap[item.category];
-                                  const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
-                                  return budgetForCategory !== null && item.amount > budgetForCategory
-                                    ? "text-[#ff0909]"
-                                    : "text-[#111111]";
-                                })(),
-                              )}
-                            >
-                              {item.amount.toLocaleString()}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* [MOD] 실제로 예산 초과 카테고리가 있을 때만 경고 배너 표시 */}
-                    {(() => {
-                      const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
-                      const hasExceeded = (trip.budget.spent || []).some(item => {
-                        const ratio = ratioMap[item.category];
-                        const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
-                        return budgetForCategory !== null && item.amount > budgetForCategory;
-                      });
-                      return hasExceeded ? (
-                        <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3">
-                          <Image
-                            src="/icons/danger.svg"
-                            alt="warning"
-                            width={15}
-                            height={14}
-                          />
-                          <span className="text-[13px] font-medium text-[#ff0909]">
-                            예상 비용을 초과한 사용 금액이 있어요
-                          </span>
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                )}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
@@ -2487,8 +2594,8 @@ export default function TripDetailPage() {
                       type="button"
                       onClick={() => setNewExpense({ ...newExpense, chCategory: cat.code })}
                       className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all ${newExpense.chCategory === cat.code
-                          ? "border-[#7a28fa] bg-[#f5eeff]"
-                          : "border-[#e5ebf1] bg-white"
+                        ? "border-[#7a28fa] bg-[#f5eeff]"
+                        : "border-[#e5ebf1] bg-white"
                         }`}
                     >
                       <span className="text-[20px]">{cat.emoji}</span>
@@ -2678,6 +2785,14 @@ export default function TripDetailPage() {
           </div>
         </div>
       )}
+      {/* [ADD] 영수증 파싱 풀 스크린 로딩 오버레이 */}
+      {isProcessingReceipt && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/60 text-white">
+          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-[16px] font-semibold tracking-[-0.5px]">영수증 처리 중입니다</p>
+        </div>
+      )}
+
     </MobileContainer>
   );
 }

@@ -26,6 +26,7 @@ export default function TravelCameraPage() {
   const [stream, setStream] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [error, setError] = useState(null);
+  const [isProcessingReceipt, setIsProcessingReceipt] = useState(false); // [ADD] 영수증 파싱 로딩 상태
 
   useEffect(() => {
     let currentStream = null;
@@ -116,6 +117,7 @@ export default function TravelCameraPage() {
     console.log(`Saving ${mode} for trip:`, tripId);
 
     if (isReceipt && capturedImage) {
+      setIsProcessingReceipt(true);
       try {
         // [ADD] 영수증 파싱 API 호출 로직 추가 (data URI -> blob 변환)
         const fetchResponse = await fetch(capturedImage);
@@ -123,9 +125,6 @@ export default function TravelCameraPage() {
 
         const formData = new FormData();
         formData.append("file", blob, "receipt.jpg");
-
-        // UI에 로딩 상태를 알리기 위해 임시 알림 (실서비스에선 로딩 스피너 권장)
-        alert("영수증 분석을 분석 중입니다... 확인을 누르고 잠시만 기다려주세요.");
 
         const response = await fetch('/api/vision/parse', {
           method: 'POST',
@@ -140,7 +139,6 @@ export default function TravelCameraPage() {
         console.log("GPT 영수증 분석 완료:", expenseData);
 
         // 3. 백엔드(DB)로 실제 영수증 내역 전송
-        // OpenAPI 스폰서 스키마(ScheduleExpenseModel)에 맞춰 속성명(chCategory, nMoney, dtExpense 등) 및 필수값(iUserFK, iLocation) 부여
         const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
         const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
 
@@ -154,18 +152,18 @@ export default function TravelCameraPage() {
           strMemo: expenseData.strMemo || "영수증 지출",
         });
 
-        alert(`🎉 영수증 등록 및 지출 저장 완전 성공! (DB 저장 완료)\n\n결제금액: ${expenseData.total}원\n내용: ${expenseData.strMemo}`);
+        // 성공 시 즉시 페이지 리프레시로 비용 탭 되돌아가기
+        window.location.href = `/trips/${tripId}?tab=비용`;
       } catch (error) {
         console.error("영수증 분석 실패:", error);
         alert("영수증 등록 및 분석 중 오류가 발생했습니다.");
+      } finally {
+        setIsProcessingReceipt(false);
       }
     } else if (!isReceipt) {
       alert("사진이 저장되었습니다!");
+      router.push(`/trips/${tripId}?tab=기록`);
     }
-
-    // [MOD] 영수증 모드면 비용 탭, 사진 모드면 기록 탭으로 복귀
-    const returnTab = isReceipt ? "비용" : "기록";
-    router.push(`/trips/${tripId}?tab=${returnTab}`);
   };
 
   return (
@@ -227,19 +225,7 @@ export default function TravelCameraPage() {
               </button>
             </>
           ) : (
-            <div className="w-full flex justify-between items-center">
-              {isReceipt ? (
-                <button
-                  className="w-20 text-white text-sm font-medium bg-transparent border-none cursor-pointer"
-                  // [MOD] alert 팝업 대신 직접입력 페이지로 실제 라우터 이동
-                  onClick={() => router.push(`/trips/${tripId}/expense/manual`)}
-                >
-                  직접 입력
-                </button>
-              ) : (
-                <div className="w-20" />
-              )}
-
+            <div className="w-full flex justify-center items-center">
               <button
                 className="w-20 h-20 rounded-full border-[5px] border-white flex items-center justify-center bg-transparent cursor-pointer active:scale-95 transition-transform"
                 onClick={handleCapture}
@@ -247,26 +233,18 @@ export default function TravelCameraPage() {
               >
                 <div className="w-16 h-16 rounded-full bg-white transition-opacity hover:opacity-90" />
               </button>
-
-              <button
-                className="w-20 h-20 flex flex-col items-center justify-center gap-1 bg-transparent border-none cursor-pointer text-white"
-                onClick={handleAlbumClick}
-                title="앨범에서 선택"
-              >
-                <ImageIcon size={24} />
-                <span className="text-[10px] font-medium">불러오기</span>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="image/*"
-                  style={{ display: "none" }}
-                />
-              </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* [ADD] 영수증 파싱 풀 스크린 로딩 오버레이 */}
+      {isProcessingReceipt && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/60 text-white">
+          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-[16px] font-semibold tracking-[-0.5px]">영수증 처리 중입니다</p>
+        </div>
+      )}
     </MobileContainer>
   );
 }
