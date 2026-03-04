@@ -38,3 +38,7 @@ Explain WHAT and WHY.
 - First explain the plan briefly
 - Then modify code
 - If unsure, ASK before changing
+
+## When implementing screen-related features
+
+- Consider both PC and mobile implementations

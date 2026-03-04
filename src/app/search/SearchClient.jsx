@@ -8,8 +8,8 @@ import { clsx } from "clsx";
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { Toast } from "../../components/common/Toast";
-import { searchPlaces, registerPlace } from "../../services/place";
-import { getFavoriteList, appendFavoriteLocation } from "../../services/favorite";
+import { searchPlaces } from "../../services/place";
+import PlaceDetailPanel from "../trips/[tripId]/PlaceDetailPanel";
 
 const HighlightText = ({ text = "", keyword = "" }) => {
   if (!text) return null;
@@ -41,12 +41,8 @@ export default function SearchClient() {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [isToastVisible, setIsToastVisible] = useState(false);
   const searchParams = useSearchParams();
-
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
-  // [ADD] 즐겨찾기 그룹 선택 관련 상태
-  const [showGroupSelector, setShowGroupSelector] = useState(false);
-  const [favoriteGroups, setFavoriteGroups] = useState([]);
 
   useEffect(() => {
     // [ADD] 장소 자동 선택 처리 (select 쿼리 파라미터 기반)
@@ -224,224 +220,11 @@ export default function SearchClient() {
             )}
           >
             {selectedPlace ? (
-              <div className="flex flex-col h-full overflow-y-auto scrollbar-hide pt-2">
-                <div className="sticky top-0 bg-white z-10 flex items-center mb-6 pb-2">
-                  <button
-                    onClick={() => setSelectedPlace(null)}
-                    className="p-1 -ml-1 hover:bg-gray-100 rounded-full transition-colors"
-                  >
-                    <Image
-                      src="/icons/arrow-left.svg"
-                      alt="back"
-                      width={20}
-                      height={16}
-                      className="w-5 h-4"
-                    />
-                  </button>
-                  <h2 className="ml-4 text-[18px] font-bold text-[#111111]">
-                    장소 상세
-                  </h2>
-                </div>
-
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex">
-                        <span className="text-[12px] font-semibold text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded">
-                          {selectedPlace.category}
-                        </span>
-                      </div>
-                      <h1 className="text-[24px] font-bold text-[#111111] tracking-[-1px]">
-                        {selectedPlace.name}
-                      </h1>
-                    </div>
-                    <div className="flex flex-col gap-1 mt-1">
-                      <p className="text-[14px] text-[#6e6e6e] leading-relaxed">
-                        {selectedPlace.address}
-                      </p>
-                      <div className="flex flex-col gap-0.5 mt-0.5">
-                        {selectedPlace.phone && (
-                          <p className="text-[13px] text-[#6e6e6e] flex items-center gap-1">
-                            📞{" "}
-                            <a
-                              href={`tel:${selectedPlace.phone}`}
-                              className="hover:underline"
-                            >
-                              {selectedPlace.phone}
-                            </a>
-                          </p>
-                        )}
-                        {selectedPlace.link && (
-                          <p className="text-[13px] text-[#6e6e6e] flex items-center gap-1 overflow-hidden">
-                            🔗{" "}
-                            <a
-                              href={selectedPlace.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:underline text-[#7a28fa] truncate"
-                            >
-                              {selectedPlace.link}
-                            </a>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex flex-col gap-1">
-                    <button
-                      onClick={async () => {
-                        try {
-                          // [ADD] 그룹 목록 먼저 조회
-                          const favListRes = await getFavoriteList();
-                          if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
-                            setFavoriteGroups(favListRes.data.favorite_list);
-                            setShowGroupSelector(true);
-                          } else {
-                            alert("즐겨찾기 그룹 정보를 불러올 수 없습니다.");
-                          }
-                        } catch (e) {
-                          console.error("Failed to fetch favorite list:", e);
-                          alert("즐겨찾기 목록을 불러오는 중 오류가 발생했습니다.");
-                        }
-                      }}
-                      className="w-full h-[56px] bg-[#111111] text-white rounded-2xl text-[16px] font-bold hover:opacity-90 active:scale-[0.98] transition-all"
-                    >
-                      찜한 장소로 등록하기
-                    </button>
-                  </div>
-
-                  {/* [ADD] 즐겨찾기 그룹 선택 모달 */}
-                  {showGroupSelector && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center p-4">
-                      <div className="w-full max-w-[400px] bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden animate-slide-up">
-                        <div className="px-5 py-4 border-b border-[#f2f4f6] flex items-center justify-between">
-                          <h3 className="text-[17px] font-bold text-[#111]">저장할 그룹 선택</h3>
-                          <button
-                            onClick={() => setShowGroupSelector(false)}
-                            className="text-[#abb1b9]"
-                          >
-                            <Image src="/icons/close-icon.svg" alt="close" width={24} height={24} />
-                          </button>
-                        </div>
-                        <div className="max-h-[300px] overflow-y-auto px-2 py-2">
-                          {favoriteGroups.map((group) => (
-                            <button
-                              key={group.iPK}
-                              onClick={async () => {
-                                try {
-                                  // 1. 장소 등록
-                                  try {
-                                    await registerPlace({
-                                      iPK: Number(selectedPlace.id),
-                                      strName: selectedPlace.name,
-                                      strAddress: selectedPlace.address,
-                                      strGroupName: selectedPlace.category || "",
-                                      strGroupCode: selectedPlace.groupCode || "",
-                                      strGroupDetail: selectedPlace.groupDetail || "",
-                                      strPhone: selectedPlace.phone || "",
-                                      strLink: selectedPlace.link || "",
-                                      chCategory: selectedPlace.chCategory || "E",
-                                      ptLatitude: String(selectedPlace.latitude || "0"),
-                                      ptLongitude: String(selectedPlace.longitude || "0"),
-                                    });
-                                  } catch (e) {
-                                    console.warn("registerPlace failed in SearchClient:", e.response?.status, e.response?.data, e);
-                                  }
-
-                                  // 2. 선택한 그룹에 장소 담기
-                                  await appendFavoriteLocation({
-                                    iPK: 0,
-                                    iFavoriteFK: Number(group.iPK),
-                                    iLocationFK: Number(selectedPlace.id)
-                                  });
-
-                                  // 3. 로컬 스토리지 업데이트
-                                  const savedList = JSON.parse(localStorage.getItem("saved_places") || "[]");
-                                  if (!savedList.find((p) => p.id === selectedPlace.id)) {
-                                    savedList.push(selectedPlace);
-                                    localStorage.setItem("saved_places", JSON.stringify(savedList));
-                                  }
-
-                                  setShowGroupSelector(false);
-                                  setSelectedPlace(null);
-                                  setSearchQuery("");
-                                  setIsToastVisible(true);
-                                } catch (e) {
-                                  console.error("즐겨찾기 추가 실패:", e);
-                                  alert("장소를 저장하는 중 오류가 발생했습니다.");
-                                }
-                              }}
-                              className="w-full flex items-center gap-3 px-3 py-3 hover:bg-[#f8f9fa] rounded-xl transition-colors text-left"
-                            >
-                              <div className="w-10 h-10 bg-[#f2f4f6] rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Image src="/icons/location.svg" alt="folder" width={20} height={20} />
-                              </div>
-                              <span className="text-[15px] font-medium text-[#111]">{group.strName}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="h-[1px] bg-[#f2f4f6] mt-2" />
-
-                  <section>
-                    <div className="flex items-center justify-between mb-5">
-                      <h3 className="text-[16px] font-bold text-[#111111]">
-                        리뷰{" "}
-                        <span className="text-[#abb1b9] font-medium ml-1">
-                          {selectedPlace.reviewCount}
-                        </span>
-                      </h3>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[#7a28fa] text-[14px]">★</span>
-                        <span className="text-[16px] font-bold text-[#7a28fa]">
-                          {selectedPlace?.rating}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-6">
-                      {[
-                        {
-                          user: "김여행",
-                          rating: 5,
-                          content:
-                            "부모님 모시고 갔는데 정말 좋아하셨어요! 물이 정말 깨끗하고 시설도 훌륭합니다.",
-                        },
-                        {
-                          user: "이제주",
-                          rating: 4,
-                          content:
-                            "경치가 너무 예뻐요. 다음에 제주도 오면 또 올 거예요!",
-                        },
-                        {
-                          user: "박온천",
-                          rating: 5,
-                          content:
-                            "인생 온천을 만났습니다. 시설이 깨끗해서 너무 좋았어요.",
-                        },
-                      ].map((review, i) => (
-                        <div key={i} className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[14px] font-bold text-[#111111]">
-                              {review.user}
-                            </span>
-                            <div className="flex text-[#7a28fa] text-[10px]">
-                              {"★".repeat(review.rating)}
-                            </div>
-                          </div>
-                          <p className="text-[13px] text-[#6e6e6e] leading-snug">
-                            {review.content}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-              </div>
+              <PlaceDetailPanel
+                place={selectedPlace}
+                onClose={() => setSelectedPlace(null)}
+                onFavoriteSaved={() => setIsToastVisible(true)}
+              />
             ) : (
               <>
                 <h2 className="text-[22px] font-bold text-[#111111] mb-6 tracking-[-0.5px]">
@@ -602,6 +385,8 @@ export default function SearchClient() {
             />
           </button>
         </div>
+
+
 
         <div className="relative flex-1 h-full overflow-hidden">
           <div className="absolute inset-0 w-full h-full">

@@ -6,6 +6,7 @@ import Image from "next/image";
 import Script from "next/script";
 import { clsx } from "clsx";
 import SearchModal from "./SearchModal";
+import PlaceDetailPanel from "./PlaceDetailPanel"; // [ADD] 장소 상세(리뷰) 패널 추가
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
 import { Trash2 } from "lucide-react"; // [ADD] 휴지통 아이콘 추가
@@ -116,6 +117,7 @@ export default function TripDetailPage() {
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   // [ADD] 현재 선택(클릭)된 장소 인덱스 추적 (동일 좌표 마커 겹침 해결용)
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState(null);
+  const [selectedPlaceDetail, setSelectedPlaceDetail] = useState(null); // [ADD] 좌측 장소 상세(리뷰) 패널 상태
 
   // [ADD] 준비물 관련 상태
   const [isAddingPreparation, setIsAddingPreparation] = useState(false);
@@ -690,6 +692,7 @@ export default function TripDetailPage() {
   // [ADD] 장소 이름 클릭 시 지도를 해당 위치로 이동하는 핸들러
   const handlePlaceClick = (place, idx) => { // [MOD] 인덱스도 함께 받음
     setSelectedMarkerIndex(idx); // 상태는 UI(리스트) 갱신용으로만 저장
+    setSelectedPlaceDetail(place); // [ADD] 장소 상세 패널 표시를 위해 상태 설정
 
     // [ADD] 지도를 다시 그리지(useEffect 재실행) 않고, 생성되어 있는 마커들의 zIndex만 즉시 직접 조작하여 퍼포먼스(속도) 극대화
     if (markersRef.current && markersRef.current.length > 0) {
@@ -1901,7 +1904,7 @@ export default function TripDetailPage() {
         onLoad={initMap}
       />
       <div className="relative w-full h-screen bg-white overflow-hidden lg:flex lg:flex-row">
-        {/* Left Side Panel - Desktop Only (Moved from Right, Added Search Panel Style) */}
+        {/* Left Side Panel - Desktop Only */}
         <div
           className={clsx(
             "hidden lg:flex flex-col h-full bg-white shadow-[4px_0_24px_rgba(0,0,0,0.08)] z-10 relative transition-all duration-300 ease-in-out shrink-0",
@@ -2068,8 +2071,33 @@ export default function TripDetailPage() {
           </button>
         </div>
 
+        {/* [MOD] 장소 상세(리뷰) 패널 - PC: 사이드 패널 / 모바일: 전체 오버레이 */}
+        {selectedPlaceDetail && (
+          <>
+            {/* [MOD] 모바일: 지도는 유지하고 바텀시트 영역 위에만 PlaceDetailPanel 표시 */}
+            <div
+              className="lg:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white rounded-t-[24px] shadow-[0_-12px_40px_rgba(0,0,0,0.15)] overflow-hidden"
+              style={{ height: `${sheetHeight}px` }}
+            >
+              <PlaceDetailPanel
+                place={selectedPlaceDetail}
+                onClose={() => setSelectedPlaceDetail(null)}
+              />
+            </div>
+
+            {/* 기존 PC: 지도 왼쪽 사이드 패널 */}
+            <div className="hidden lg:block z-[5] w-[390px] shrink-0 border-l border-[#f2f4f6] bg-white h-full">
+              <PlaceDetailPanel
+                place={selectedPlaceDetail}
+                onClose={() => setSelectedPlaceDetail(null)}
+              />
+            </div>
+          </>
+        )}
+
+
         {/* Map Section */}
-        <div className="relative flex-1 h-full overflow-hidden">
+        <div className="relative flex-1 h-full overflow-hidden transition-all duration-300 ease-in-out">
           <Script
             src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
             strategy="afterInteractive"
