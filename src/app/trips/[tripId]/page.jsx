@@ -425,7 +425,7 @@ export default function TripDetailPage() {
     }
   };
 
-  // [MOD] 동행자 자동 검색 (입력 시 300ms 디바운스)
+  // [MOD] 동행자 자동 검색 (입력 시 1000ms 디바운스)
   useEffect(() => {
     if (!companionSearchQuery.trim()) {
       setCompanionSearchResults([]);
@@ -442,7 +442,7 @@ export default function TripDetailPage() {
       } finally {
         setIsSearchingCompanion(false);
       }
-    }, 300);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [companionSearchQuery]);
 

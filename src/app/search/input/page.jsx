@@ -104,7 +104,7 @@ function SearchInputContent() {
       }));
   };
 
-  // [ADD] 검색 API 호출 로직 (디바운스 적용)
+  // [ADD] 검색 API 호출 로직 (1000ms 디바운스)
   useEffect(() => {
     const fetchResults = async () => {
       if (!searchQuery.trim()) {
@@ -127,7 +127,7 @@ function SearchInputContent() {
 
     const timer = setTimeout(() => {
       fetchResults();
-    }, 300);
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCategory]); // [MOD] 카테고리 변경 시에도 검색 재실행
