@@ -631,42 +631,73 @@ export default function TripDetailPage() {
     mapInstance.current.panTo(moveLatLng); // 부드러운 이동
   };
 
-  // [MOD] SPA 네비게이션 대응: 컴포넌트 마운트 시 mapInstance 리셋 + 맵 재생성
+  // [MOD] SPA 네비게이션 대응: kakao.maps.Map이 이미 로드됐으면 직접 생성, 아니면 load() 콜백 사용
   const initMap = () => {
-    if (!window.kakao || !mapRef.current) return;
+    console.log("🗺️ initMap 호출:", {
+      kakaoExists: !!window.kakao,
+      kakaoMapsExists: !!window.kakao?.maps,
+      kakaoMapConstructor: !!window.kakao?.maps?.Map,
+      mapRefExists: !!mapRef.current
+    });
 
-    // [MOD] 기존 맵이 있으면 제거 (SPA 네비게이션 시 stale 참조 방지)
+    if (!window.kakao) {
+      console.log("🗺️ kakao SDK 아직 로드 안됨");
+      return;
+    }
+
+    if (!mapRef.current) {
+      console.log("🗺️ mapRef DOM 아직 준비 안됨, 100ms 후 재시도");
+      setTimeout(initMap, 100);
+      return;
+    }
+
+    // [MOD] 기존 맵이 있으면 마커 정리
     if (mapInstance.current) {
       try {
-        // 기존 마커 정리
         markersRef.current.forEach((m) => m.setMap(null));
         markersRef.current = [];
-      } catch (e) { /* ignore cleanup errors */ }
+      } catch (e) { /* ignore */ }
       mapInstance.current = null;
     }
 
-    window.kakao.maps.load(() => {
+    // [MOD] SDK가 완전히 로드된 경우 (Map 생성자가 존재) → 직접 생성
+    const createMap = () => {
       if (!mapRef.current) return;
-
+      console.log("🗺️ 카카오맵 생성 중...");
       const center = new window.kakao.maps.LatLng(37.5665, 126.978);
       mapInstance.current = new window.kakao.maps.Map(mapRef.current, {
         center,
         level: 4,
       });
-    });
+      console.log("🗺️ 카카오맵 생성 완료!");
+    };
+
+    if (window.kakao.maps?.Map) {
+      // SDK 이미 완전 로드됨 → 바로 생성
+      createMap();
+    } else {
+      // SDK 스크립트는 있지만 아직 maps API 로드 안됨 → load() 콜백 사용
+      window.kakao.maps.load(createMap);
+    }
   };
 
   // [MOD] 컴포넌트 마운트 시 맵 초기화 + 언마운트 시 정리
   useEffect(() => {
-    // mapInstance를 리셋하여 SPA 재진입 시 새 맵 생성 보장
     mapInstance.current = null;
 
+    // SDK가 이미 있으면 바로 초기화, 없으면 Script onLoad가 처리
     if (window.kakao) {
-      initMap();
+      // DOM 렌더링 완료 후 실행하기 위해 약간의 딜레이
+      const timer = setTimeout(initMap, 50);
+      return () => {
+        clearTimeout(timer);
+        markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
+        markersRef.current = [];
+        mapInstance.current = null;
+      };
     }
 
     return () => {
-      // 언마운트 시 정리
       markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
       markersRef.current = [];
       mapInstance.current = null;
