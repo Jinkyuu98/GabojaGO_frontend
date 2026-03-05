@@ -143,7 +143,7 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
     return (
         <div className="flex flex-col h-full bg-white relative w-full overflow-y-auto scrollbar-hide pt-2 lg:px-2">
             {/* 상단 닫기/뒤로가기 헤더 */}
-            <div className="sticky top-0 bg-white z-10 flex items-center mb-6 pb-2 px-4 pt-4">
+            <div className="bg-white flex items-center mb-6 pb-2 px-4 pt-4">
                 <button
                     onClick={onClose}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors"

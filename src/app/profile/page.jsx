@@ -497,7 +497,6 @@ export default function MyPage() {
                       "지하철역",
                       "주차장",
                       "주유소",
-                      "기타",
                     ].map((cat) => (
                       <button
                         key={cat}

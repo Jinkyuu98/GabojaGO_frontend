@@ -38,6 +38,20 @@ function SearchInputContent() {
   const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef(null);
 
+  // 뒤로가기 시 상태 복원
+  useEffect(() => {
+    const savedQuery = sessionStorage.getItem("searchQuery");
+    const savedCategory = sessionStorage.getItem("searchCategory");
+    if (savedQuery) setSearchQuery(savedQuery);
+    if (savedCategory) setSelectedCategory(savedCategory);
+  }, []);
+
+  // 상태 변경 시 저장
+  useEffect(() => {
+    sessionStorage.setItem("searchQuery", searchQuery);
+    sessionStorage.setItem("searchCategory", selectedCategory);
+  }, [searchQuery, selectedCategory]);
+
   // [ADD] 카테고리 목록 정의
   const categories = [
     "전체",
@@ -51,7 +65,6 @@ function SearchInputContent() {
     "지하철역",
     "주차장",
     "주유소",
-    "기타",
   ];
 
   const CATEGORY_MAP = {
@@ -182,115 +195,118 @@ function SearchInputContent() {
           </div>
         </div>
 
-        {/* Search Input Section */}
-        <div className="px-5 py-4 mt-[60px] flex flex-col gap-3">
-          {/* [ADD] Category Dropdown Filter */}
-          <div className="relative w-full">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full h-12 bg-white border border-[#f2f4f6] text-[#111111] text-[15px] font-medium rounded-xl px-4 appearance-none outline-none focus:border-[#7a28fa] focus:ring-1 focus:ring-[#7a28fa]/20 transition-all cursor-pointer shadow-sm"
-            >
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto flex flex-col w-full pt-[60px]">
+          {/* Search Input Section */}
+          <div className="px-5 py-4 flex flex-col gap-3 shrink-0">
+            {/* [ADD] Category Dropdown Filter */}
+            <div className="relative w-full">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full h-12 bg-white border border-[#f2f4f6] text-[#111111] text-[15px] font-medium rounded-xl px-4 appearance-none outline-none focus:border-[#7a28fa] focus:ring-1 focus:ring-[#7a28fa]/20 transition-all cursor-pointer shadow-sm"
               >
-                <path
-                  d="M2.5 4.5L6 8L9.5 4.5"
-                  stroke="#7e7e7e"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* Search Input */}
-          <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-4 rounded-xl border border-[#f2f4f6] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#7a28fa]/20 focus-within:border-[#7a28fa]">
-            <Image
-              src="/icons/search.svg"
-              alt="search"
-              width={20}
-              height={20}
-              className="opacity-50"
-            />
-            <input
-              ref={inputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="어디로 가고 싶으신가요?"
-              className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
-            />
-          </div>
-        </div>
-
-        {/* Results List */}
-        <div className="flex-1 overflow-y-auto px-5">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
-              <p className="text-[15px] font-medium animate-pulse">
-                검색 중...
-              </p>
-            </div>
-          ) : searchQuery.trim() && searchResults.length > 0 ? (
-            <div className="flex flex-col gap-5 pt-2">
-              {searchResults.map((place) => (
-                <div
-                  key={place.id}
-                  onClick={() => {
-                    localStorage.setItem(
-                      `place_${place.id}`,
-                      JSON.stringify(place),
-                    );
-                    const destUrl = tripId
-                      ? `/search/place/${place.id}?tripId=${tripId}&day=${day}&date=${encodeURIComponent(dateParam || "")}`
-                      : `/search/place/${place.id}`;
-                    router.push(destUrl);
-                  }}
-                  className="flex flex-col gap-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
                 >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-[16px] font-semibold text-[#111111]">
-                      <HighlightText text={place.name} keyword={searchQuery} />
-                    </h3>
-                    <span className="text-[12px] font-medium text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded">
-                      {place.category}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5 mt-0.5">
-                    <p className="text-[13px] text-[#898989] line-clamp-1">
-                      {place.address}
-                    </p>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[11px] font-bold text-[#7a28fa]">
-                        ★ {place.rating}
-                      </span>
-                      <span className="text-[11px] text-[#abb1b9]">
-                        ({place.reviewCount})
+                  <path
+                    d="M2.5 4.5L6 8L9.5 4.5"
+                    stroke="#7e7e7e"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            </div>
+
+            {/* Search Input */}
+            <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-4 rounded-xl border border-[#f2f4f6] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#7a28fa]/20 focus-within:border-[#7a28fa]">
+              <Image
+                src="/icons/search.svg"
+                alt="search"
+                width={20}
+                height={20}
+                className="opacity-50"
+              />
+              <input
+                ref={inputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="어디로 가고 싶으신가요?"
+                className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Results List */}
+          <div className="flex flex-col px-5 pb-5 shrink-0">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
+                <p className="text-[15px] font-medium animate-pulse">
+                  검색 중...
+                </p>
+              </div>
+            ) : searchQuery.trim() && searchResults.length > 0 ? (
+              <div className="flex flex-col gap-5 pt-2">
+                {searchResults.map((place) => (
+                  <div
+                    key={place.id}
+                    onClick={() => {
+                      localStorage.setItem(
+                        `place_${place.id}`,
+                        JSON.stringify(place),
+                      );
+                      const destUrl = tripId
+                        ? `/search/place/${place.id}?tripId=${tripId}&day=${day}&date=${encodeURIComponent(dateParam || "")}`
+                        : `/search/place/${place.id}`;
+                      router.push(destUrl);
+                    }}
+                    className="flex flex-col gap-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[16px] font-semibold text-[#111111]">
+                        <HighlightText text={place.name} keyword={searchQuery} />
+                      </h3>
+                      <span className="text-[12px] font-medium text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded">
+                        {place.category}
                       </span>
                     </div>
+                    <div className="flex flex-col gap-0.5 mt-0.5">
+                      <p className="text-[13px] text-[#898989] line-clamp-1">
+                        {place.address}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-[#7a28fa]">
+                          ★ {place.rating}
+                        </span>
+                        <span className="text-[11px] text-[#abb1b9]">
+                          ({place.reviewCount})
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-[1px] bg-[#f2f4f6] mt-4" />
                   </div>
-                  <div className="h-[1px] bg-[#f2f4f6] mt-4" />
-                </div>
-              ))}
-            </div>
-          ) : searchQuery.trim() ? (
-            <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
-              <p className="text-[15px] font-medium">검색 결과가 없습니다.</p>
-            </div>
-          ) : null}
+                ))}
+              </div>
+            ) : searchQuery.trim() ? (
+              <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
+                <p className="text-[15px] font-medium">검색 결과가 없습니다.</p>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </MobileContainer>

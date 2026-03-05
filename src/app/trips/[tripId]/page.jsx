@@ -877,7 +877,7 @@ export default function TripDetailPage() {
     HIGH: 800,
   };
 
-  const tabs = ["일정", "기록", "비용", "준비물", "동행자"];
+  const tabs = ["일정", "사진", "비용", "준비물", "동행자"];
 
   const getActualDateText = (dayIndex) => {
     const start = trip?.dtDate1 || trip?.startDate;
@@ -1312,99 +1312,100 @@ export default function TripDetailPage() {
           </div>
         )}
 
-        {/* --- 기록 탭 --- */}
-        {selectedTab === "기록" && (
-          <div className="flex flex-col gap-5">
-            {currentDayRecords.length > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#111111]">
-                  108개의 사진
-                </span>
-                <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                  사진 등록
-                </span>
-              </div>
-            )}
+        {/* --- 사진(기록) 탭 --- */}
+        {
+          selectedTab === "사진" && (
+            <div className="flex flex-col gap-5">
+              {currentDayRecords.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[#111111]">
+                    108개의 사진
+                  </span>
+                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
+                    사진 등록
+                  </span>
+                </div>
+              )}
 
-            {currentDayRecords.length > 0 ? (
-              currentDayRecords.map((record, idx) => (
-                <div key={idx} className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between gap-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
-                        {idx + 1}
+              {currentDayRecords.length > 0 ? (
+                currentDayRecords.map((record, idx) => (
+                  <div key={idx} className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
+                          {idx + 1}
+                        </div>
+                        <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
+                          {record.name}
+                        </h3>
                       </div>
-                      <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
-                        {record.name}
-                      </h3>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Image
-                        src="/icons/edit.svg"
-                        alt="edit"
-                        width={13}
-                        height={13}
-                      />
-                      <span className="text-sm font-medium text-[#c7c8d8] tracking-[-0.35px]">
-                        리뷰
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-[2px] overflow-x-auto scrollbar-hide">
-                    {record.photos.map((photo, photoIdx) => (
-                      <div
-                        key={photoIdx}
-                        className="relative w-[110px] h-[110px] flex-shrink-0"
-                      >
+                      <div className="flex items-center gap-1">
                         <Image
-                          src={photo.src}
-                          alt={`photo-${photoIdx}`}
-                          fill
-                          className={clsx(
-                            "object-cover",
-                            photoIdx === 0 && "rounded-l-lg",
-                            photoIdx === record.photos.length - 1 &&
-                            "rounded-r-lg",
-                          )}
+                          src="/icons/edit.svg"
+                          alt="edit"
+                          width={13}
+                          height={13}
                         />
-                        {photoIdx === 0 && photo.likes && (
-                          <div className="absolute bottom-2 left-2 flex items-center gap-1">
-                            <Image
-                              src="/icons/heart-fill.svg"
-                              alt="likes"
-                              width={17}
-                              height={15}
-                            />
-                            <span className="text-[15px] font-medium text-white">
-                              {photo.likes}
-                            </span>
-                          </div>
-                        )}
-                        {photoIdx === record.photos.length - 1 &&
-                          photo.moreCount && (
-                            <div className="absolute inset-0 bg-black/50 rounded-r-lg flex items-center justify-center">
-                              <span className="text-base font-semibold text-white tracking-[-0.1px]">
-                                +{photo.moreCount}
+                        <span className="text-sm font-medium text-[#c7c8d8] tracking-[-0.35px]">
+                          리뷰
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-[2px] overflow-x-auto scrollbar-hide">
+                      {record.photos.map((photo, photoIdx) => (
+                        <div
+                          key={photoIdx}
+                          className="relative w-[110px] h-[110px] flex-shrink-0"
+                        >
+                          <Image
+                            src={photo.src}
+                            alt={`photo-${photoIdx}`}
+                            fill
+                            className={clsx(
+                              "object-cover",
+                              photoIdx === 0 && "rounded-l-lg",
+                              photoIdx === record.photos.length - 1 &&
+                              "rounded-r-lg",
+                            )}
+                          />
+                          {photoIdx === 0 && photo.likes && (
+                            <div className="absolute bottom-2 left-2 flex items-center gap-1">
+                              <Image
+                                src="/icons/heart-fill.svg"
+                                alt="likes"
+                                width={17}
+                                height={15}
+                              />
+                              <span className="text-[15px] font-medium text-white">
+                                {photo.likes}
                               </span>
                             </div>
                           )}
-                      </div>
-                    ))}
+                          {photoIdx === record.photos.length - 1 &&
+                            photo.moreCount && (
+                              <div className="absolute inset-0 bg-black/50 rounded-r-lg flex items-center justify-center">
+                                <span className="text-base font-semibold text-white tracking-[-0.1px]">
+                                  +{photo.moreCount}
+                                </span>
+                              </div>
+                            )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
+                  <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
+                  <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                    {"사진으로 여행 이야기를 채워보세요"}
+                  </p>
+                  <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">사진 추가</button>
                 </div>
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-                <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
-                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                  {"사진으로 여행 이야기를 채워보세요"}
-                </p>
-                <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">사진 추가</button>
-              </div>
-            )}
-          </div>
-        )
+              )}
+            </div>
+          )
         }
 
         {
@@ -2056,7 +2057,7 @@ export default function TripDetailPage() {
               </div>
 
               {/* Desktop Day Tabs */}
-              {["일정", "기록"].includes(selectedTab) && (
+              {["일정", "사진"].includes(selectedTab) && (
                 <div className="px-5 pt-4 pb-2 relative flex-shrink-0 group">
                   {/* [ADD] 좌측 화살표 */}
                   {showLeftArrow && (
@@ -2126,7 +2127,7 @@ export default function TripDetailPage() {
               <div
                 className={clsx(
                   "flex-1 overflow-y-auto px-5 pb-10 scrollbar-hide",
-                  !["일정", "기록"].includes(selectedTab) && "pt-5"
+                  !["일정", "사진"].includes(selectedTab) && "pt-5"
                 )}
               >
                 {renderTabContent()}
@@ -2279,7 +2280,7 @@ export default function TripDetailPage() {
           )}
 
           {/* Mobile Day Tabs - Visible only on specific tabs */}
-          {["일정", "기록"].includes(selectedTab) && (
+          {["일정", "사진"].includes(selectedTab) && (
             <div className="px-5 pt-4 pb-3 flex gap-1 overflow-x-auto scrollbar-hide">
               {days.map((day, index) => (
                 <button
@@ -2303,7 +2304,7 @@ export default function TripDetailPage() {
             <div
               className={clsx(
                 "flex-1 px-5 pb-24 overflow-y-auto w-full",
-                !["일정", "기록"].includes(selectedTab) && "pt-5"
+                !["일정", "사진"].includes(selectedTab) && "pt-5"
               )}
             >
               {renderTabContent()}

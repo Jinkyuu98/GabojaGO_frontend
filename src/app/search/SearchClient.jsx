@@ -45,6 +45,50 @@ export default function SearchClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
 
+  // [ADD] 모바일 바텀시트 상태
+  const [isMobile, setIsMobile] = useState(false);
+  const [sheetHeight, setSheetHeight] = useState(400);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const [maxHeight, setMaxHeight] = useState(800);
+  const minHeight = 100;
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const handleTouchStart = (e) => {
+    setIsDragging(true);
+    setStartY(e.touches[0].clientY);
+    setCurrentY(sheetHeight);
+    setMaxHeight(window.innerHeight - 100);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const deltaY = startY - e.touches[0].clientY;
+    const newHeight = Math.min(Math.max(currentY + deltaY, minHeight), maxHeight);
+    setSheetHeight(newHeight);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    if (sheetHeight > maxHeight * 0.7) setSheetHeight(maxHeight);
+    else if (sheetHeight < maxHeight * 0.3) setSheetHeight(minHeight);
+    else setSheetHeight(maxHeight * 0.5);
+  };
+
+  // [ADD] 지도 리사이징 동기화
+  useEffect(() => {
+    if (mapInstance.current && window.kakao) {
+      mapInstance.current.relayout();
+    }
+  }, [sheetHeight, isMobile]);
+
   useEffect(() => {
     // [ADD] 장소 자동 선택 처리 (select 쿼리 파라미터 기반)
     const selectId = searchParams.get("select");
@@ -154,8 +198,8 @@ export default function SearchClient() {
         selectedPlace.longitude,
       );
       const content = `
-        <div class="mt-10 bg-black/80 backdrop-blur-md px-2 py-0 rounded-[6px] border border-white/20 shadow-lg">
-          <span class="text-white text-[13px] font-medium whitespace-nowrap">
+        <div class="mb-10 bg-[#222222] px-3 py-1.5 rounded-lg shadow-lg relative after:content-[''] after:absolute after:-bottom-1.5 after:left-1/2 after:-translate-x-1/2 after:border-t-[6px] after:border-t-[#222222] after:border-x-[6px] after:border-x-transparent">
+          <span class="text-white text-[13px] font-bold whitespace-nowrap tracking-[-0.3px]">
             ${selectedPlace.name}
           </span>
         </div>
@@ -164,12 +208,12 @@ export default function SearchClient() {
       const customOverlay = new window.kakao.maps.CustomOverlay({
         position: position,
         content: content,
-        yAnchor: 0.5,
+        yAnchor: 1,
       });
 
       customOverlay.setMap(map);
       overlayRef.current = customOverlay;
-      map.setCenter(position);
+      map.panTo(position);
     }
   }, [searchResults, selectedPlace]);
 
@@ -222,6 +266,131 @@ export default function SearchClient() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const renderSearchContent = () => (
+    <>
+      {selectedPlace ? (
+        <PlaceDetailPanel
+          place={selectedPlace}
+          onClose={() => setSelectedPlace(null)}
+          onFavoriteSaved={() => setIsToastVisible(true)}
+        />
+      ) : (
+        <>
+          <h2 className="text-[22px] font-bold text-[#111111] mb-6 tracking-[-0.5px] hidden lg:block">
+            장소 검색
+          </h2>
+
+          <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-4 rounded-xl border border-[#f2f4f6] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#7a28fa]/20 focus-within:border-[#7a28fa] shrink-0">
+            <Image
+              src="/icons/search.svg"
+              alt="search"
+              width={20}
+              height={20}
+              className="opacity-50"
+            />
+            <input
+              type="text"
+              placeholder="장소, 숙소, 지하철 역 검색"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-[#abb1b9] p-0.5 hover:text-[#7a28fa] transition-colors"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {searchQuery.trim() ? (
+            <div className="flex-1 overflow-y-auto mt-6 scrollbar-hide">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
+                  <p className="text-[14px] font-medium animate-pulse">
+                    검색 중...
+                  </p>
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="flex flex-col gap-5 pb-10">
+                  {searchResults.map((place) => (
+                    <div
+                      key={`${place.id}-${place.name}`}
+                      onClick={() => {
+                        localStorage.setItem(
+                          `place_${place.id}`,
+                          JSON.stringify(place),
+                        );
+                        // [MOD] 모바일에서도 바텀시트에서 검색 결과를 보여주므로 setSelectedPlace 엑세스
+                        setSelectedPlace(place);
+                        if (mapInstance.current && place.latitude && place.longitude) {
+                          const moveLatLng = new window.kakao.maps.LatLng(place.latitude, place.longitude);
+                          mapInstance.current.setLevel(3);
+                          mapInstance.current.panTo(moveLatLng);
+                        }
+                      }}
+                      className="flex flex-col gap-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-[15px] font-semibold text-[#111111] group-hover:text-[#7a28fa] transition-colors truncate">
+                          <HighlightText
+                            text={place.name}
+                            keyword={searchQuery}
+                          />
+                        </h3>
+                        <span className="text-[11px] font-medium text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded shrink-0">
+                          {place.category}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-0.5 mt-1">
+                        <p className="text-[12px] text-[#898989] line-clamp-1">
+                          {place.address}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-bold text-[#7a28fa]">
+                            ★ {place.rating}
+                          </span>
+                          <span className="text-[11px] text-[#abb1b9]">
+                            ({place.reviewCount})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-[1px] bg-[#f2f4f6] mt-4" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
+                  <p className="text-[15px] font-medium">검색 결과가 없습니다.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="mt-4 shrink-0">
+              {/* [DEL] 2km 반경 카테고리 검색 기능은 추후 구현 예정 (backend_source/search_category_2km_plan.md 참고) */}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+
   return (
     <MobileContainer showNav={true} className="!max-w-none">
       <Script
@@ -230,9 +399,10 @@ export default function SearchClient() {
         onLoad={initMap}
       />
       <div className="relative w-full h-screen bg-white overflow-hidden lg:flex lg:flex-row">
+        {/* Desktop Side Panel */}
         <div
           className={clsx(
-            "hidden lg:flex flex-col h-full bg-white border-r border-[#f2f4f6] z-20 transition-all duration-300 ease-in-out relative",
+            "hidden lg:flex flex-col h-full bg-white border-r border-[#f2f4f6] z-20 transition-all duration-300 ease-in-out relative shrink-0",
             isSidePanelOpen ? "w-[400px] lg:shadow-2xl" : "w-0 border-none",
           )}
         >
@@ -242,137 +412,7 @@ export default function SearchClient() {
               isSidePanelOpen ? "opacity-100" : "opacity-0 pointer-events-none",
             )}
           >
-            {selectedPlace ? (
-              <PlaceDetailPanel
-                place={selectedPlace}
-                onClose={() => setSelectedPlace(null)}
-                onFavoriteSaved={() => setIsToastVisible(true)}
-              />
-            ) : (
-              <>
-                <h2 className="text-[22px] font-bold text-[#111111] mb-6 tracking-[-0.5px]">
-                  장소 검색
-                </h2>
-
-                <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-4 rounded-xl border border-[#f2f4f6] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#7a28fa]/20 focus-within:border-[#7a28fa]">
-                  <Image
-                    src="/icons/search.svg"
-                    alt="search"
-                    width={20}
-                    height={20}
-                    className="opacity-50"
-                  />
-                  <input
-                    type="text"
-                    placeholder="장소, 숙소, 지하철 역 검색"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="text-[#abb1b9] p-0.5 hover:text-[#7a28fa] transition-colors"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-
-                {searchQuery.trim() ? (
-                  <div className="flex-1 overflow-y-auto mt-6 scrollbar-hide">
-                    {isLoading ? (
-                      <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
-                        <p className="text-[14px] font-medium animate-pulse">
-                          검색 중...
-                        </p>
-                      </div>
-                    ) : searchResults.length > 0 ? (
-                      <div className="flex flex-col gap-5 pb-10">
-                        {searchResults.map((place) => (
-                          <div
-                            key={`${place.id}-${place.name}`}
-                            onClick={() => {
-                              localStorage.setItem(
-                                `place_${place.id}`,
-                                JSON.stringify(place),
-                              );
-                              if (window.innerWidth < 1024) {
-                                router.push(`/search/place/${place.id}`);
-                              } else {
-                                setSelectedPlace(place);
-                              }
-                            }}
-                            className="flex flex-col gap-1 cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1 rounded-lg transition-colors group"
-                          >
-                            <div className="flex items-center justify-between">
-                              <h3 className="text-[15px] font-semibold text-[#111111] group-hover:text-[#7a28fa] transition-colors">
-                                <HighlightText
-                                  text={place.name}
-                                  keyword={searchQuery}
-                                />
-                              </h3>
-                              <span className="text-[11px] font-medium text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded">
-                                {place.category}
-                              </span>
-                            </div>
-                            <div className="flex flex-col gap-0.5 mt-1">
-                              <p className="text-[12px] text-[#898989] line-clamp-1">
-                                {place.address}
-                              </p>
-                              <div className="flex items-center gap-1">
-                                <span className="text-[11px] font-bold text-[#7a28fa]">
-                                  ★ {place.rating}
-                                </span>
-                                <span className="text-[11px] text-[#abb1b9]">
-                                  ({place.reviewCount})
-                                </span>
-                              </div>
-                            </div>
-                            <div className="h-[1px] bg-[#f2f4f6] mt-4" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9]">
-                        <p className="text-[15px] font-medium">
-                          검색 결과가 없습니다.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-4">
-                    <div className="flex flex-wrap gap-2">
-                      {["음식점", "카페", "편의점", "숙소", "버스"].map(
-                        (category) => (
-                          <button
-                            key={category}
-                            className="whitespace-nowrap px-4 py-2 bg-white rounded-full text-[14px] font-semibold text-[#111111] border border-[#DBDBDB] hover:bg-gray-50 active:scale-95 transition-all"
-                          >
-                            {category}
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            {renderSearchContent()}
           </div>
 
           <button
@@ -409,40 +449,41 @@ export default function SearchClient() {
           </button>
         </div>
 
-
-
+        {/* Mobile Map Area */}
         <div className="relative flex-1 h-full overflow-hidden">
-          <div className="absolute inset-0 w-full h-full">
+          <div
+            className="absolute top-0 left-0 right-0 w-full transition-all duration-300"
+            style={{ bottom: isMobile ? `${sheetHeight}px` : '0px' }}
+          >
             <div ref={mapRef} className="absolute inset-0 w-full h-full" />
           </div>
 
-          <div className="lg:hidden absolute top-0 left-0 right-0 px-5 pt-6 pb-4 z-20">
-            <div
-              className="flex items-center gap-3 bg-white h-14 px-4 rounded-xl border border-[#111111] cursor-pointer shadow-md"
-              onClick={() => router.push("/search/input")}
-            >
-              <Image
-                src="/icons/search.svg"
-                alt="search"
-                width={20}
-                height={20}
-                className="opacity-100"
-              />
-              <div className="flex-1 text-[16px] font-medium text-[#abb1b9]">
-                장소, 숙소, 지하철 역 검색
-              </div>
-            </div>
+          <div className="lg:hidden fixed top-0 left-0 right-0 px-5 pt-6 pb-4 z-20 pointer-events-none">
+            {/* Header placeholder if needed */}
+          </div>
+        </div>
 
-            <div className="mt-3 flex overflow-x-auto gap-1 scrollbar-hide pb-2 px-5 -mx-5 text-black">
-              {["음식점", "카페", "편의점", "숙소", "버스"].map((category) => (
-                <button
-                  key={category}
-                  className="whitespace-nowrap px-3 py-1.5 bg-white rounded-full text-[14px] font-medium text-[#111111] transition-all shadow-md"
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
+        {/* Mobile Bottom Sheet */}
+        <div
+          className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.08)] transition-all z-30 flex flex-col"
+          style={{
+            height: `${sheetHeight}px`,
+            bottom: 0,
+            transition: isDragging ? "none" : "height 0.3s ease-out",
+          }}
+        >
+          {/* Drag Handle */}
+          <div
+            className="pt-3 pb-2 cursor-grab active:cursor-grabbing flex justify-center shrink-0"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-10 h-1 bg-gray-300 rounded-full" />
+          </div>
+
+          <div className="flex-1 overflow-hidden flex flex-col px-5 pb-5">
+            {renderSearchContent()}
           </div>
         </div>
 
@@ -457,6 +498,6 @@ export default function SearchClient() {
 
         <BottomNavigation />
       </div>
-    </MobileContainer >
+    </MobileContainer>
   );
 }
