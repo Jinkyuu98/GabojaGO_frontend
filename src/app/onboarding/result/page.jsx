@@ -421,11 +421,18 @@ export default function ResultPage() {
                 <span className="text-sm font-semibold text-[#111111]">
                   예산 {trip.budget.total.toLocaleString()}원
                 </span>
-                <Image
-                  src="/icons/edit-purple.svg"
-                  alt="edit"
-                  width={15}
-                  height={15}
+                <div
+                  className="w-[15px] h-[15px] bg-[#7a28fa]"
+                  style={{
+                    WebkitMaskImage: "url('/icons/edit.svg')",
+                    maskImage: "url('/icons/edit.svg')",
+                    WebkitMaskSize: "contain",
+                    maskSize: "contain",
+                    WebkitMaskRepeat: "no-repeat",
+                    maskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                    maskPosition: "center",
+                  }}
                 />
               </div>
               <div className="flex items-center gap-3">

@@ -79,7 +79,7 @@ export default function MyPage() {
   };
 
   const tabs = [
-    { id: "장소", label: "찜/등록된 장소" },
+    { id: "장소", label: "찜한 장소" },
     { id: "사진", label: "찜한 사진" },
   ];
 

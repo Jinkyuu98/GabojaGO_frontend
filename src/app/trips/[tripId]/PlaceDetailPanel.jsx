@@ -324,7 +324,19 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
                                             {isMine && (
                                                 <div className="flex items-center gap-1 ml-2">
                                                     <button onClick={() => openModifyReview(r)} className="p-1 hover:bg-gray-100 rounded flex items-center justify-center relative group">
-                                                        <Image src="/icons/edit-purple.svg" alt="edit" width={14} height={14} className="opacity-60 group-hover:opacity-100" />
+                                                        <div
+                                                            className="w-[14px] h-[14px] bg-[#7a28fa] opacity-60 group-hover:opacity-100 transition-opacity"
+                                                            style={{
+                                                                WebkitMaskImage: "url('/icons/edit.svg')",
+                                                                maskImage: "url('/icons/edit.svg')",
+                                                                WebkitMaskSize: "contain",
+                                                                maskSize: "contain",
+                                                                WebkitMaskRepeat: "no-repeat",
+                                                                maskRepeat: "no-repeat",
+                                                                WebkitMaskPosition: "center",
+                                                                maskPosition: "center",
+                                                            }}
+                                                        />
                                                     </button>
                                                     <button onClick={() => handleDeleteReview(r.iPK)} className="p-1 hover:bg-gray-100 rounded text-[#969696] hover:text-[#ff4d4f] flex items-center justify-center">
                                                         <Trash2 size={14} />

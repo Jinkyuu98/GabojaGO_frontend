@@ -1263,7 +1263,7 @@ export default function TripDetailPage() {
                       </div>
 
                       <div className="flex-1">
-                        <div className="flex items-center justify-between gap-5 mb-2">
+                        <div className="flex items-center justify-between gap-5 mb-0.25">
                           {/* [MOD] 장소 이름 클릭 시 지도 해당 위치로 이동 */}
                           <h3
                             className="text-base font-semibold text-[#111111] tracking-[-0.06px] hover:text-[#7a28fa] transition-colors"
@@ -1438,11 +1438,18 @@ export default function TripDetailPage() {
                       className="bg-transparent border-none p-0 cursor-pointer"
                       onClick={() => setEditingBudget({ total: trip.budget.total })}
                     >
-                      <Image
-                        src="/icons/edit-purple.svg"
-                        alt="edit"
-                        width={15}
-                        height={15}
+                      <div
+                        className="w-[15px] h-[15px] bg-[#7a28fa]"
+                        style={{
+                          WebkitMaskImage: "url('/icons/edit.svg')",
+                          maskImage: "url('/icons/edit.svg')",
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                        }}
                       />
                     </button>
                   </div>
@@ -1452,13 +1459,13 @@ export default function TripDetailPage() {
                       className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='영수증 촬영'"
                       onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
                     >
-                      <Camera size={20} />
+                      <Camera size={23} />
                     </button>
                     <button
                       className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='불러오기'"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <ImageIcon size={20} />
+                      <ImageIcon size={23} />
                     </button>
                     {/* [ADD] 숨겨진 파일 선택기 */}
                     <input
@@ -1520,45 +1527,12 @@ export default function TripDetailPage() {
                         setIsAddingExpense(true);
                       }}
                     >
-                      <CheckSquare size={20} />
+                      <CheckSquare size={23} />
                     </button>
                   </div>
                 </div>
 
                 <div className="h-[1px] bg-[#f2f4f6]" />
-
-                {/* [ADD] 예산 초과 경고 배너 - alarmRatio > 0 이고 카테고리 잔여 예산이 경고 임계값 이하일 때 표시 */}
-                {trip.budget.alarmRatio > 0 && trip.budget.total > 0 && trip.budget.spent?.length > 0 && (() => {
-                  const total = trip.budget.total;
-                  const alarmPct = trip.budget.alarmRatio; // 예: 25 = 25% 남으면 경고
-                  const ratioMap = {
-                    "숙박비": trip.budget.lodgingRatio || 25,
-                    "식비": trip.budget.foodRatio || 25,
-                    "교통비": trip.budget.transportRatio || 25,
-                  };
-                  const warnings = [];
-                  trip.budget.spent.forEach(cat => {
-                    const ratio = ratioMap[cat.category];
-                    if (!ratio) return;
-                    const allocated = Math.round(total * ratio / 100);
-                    const remaining = allocated - cat.amount;
-                    const threshold = Math.round(allocated * alarmPct / 100);
-                    if (remaining <= threshold && remaining >= 0) {
-                      warnings.push(`${cat.category}: 잔여 ${remaining.toLocaleString()}원 (경고 기준 ${threshold.toLocaleString()}원 이하)`);
-                    } else if (remaining < 0) {
-                      warnings.push(`${cat.category}: ${Math.abs(remaining).toLocaleString()}원 초과!`);
-                    }
-                  });
-                  if (warnings.length === 0) return null;
-                  return (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
-                      <p className="text-[13px] font-bold text-red-600 mb-1">⚠️ 예산 경고</p>
-                      {warnings.map((w, i) => (
-                        <p key={i} className="text-[12px] text-red-500">{w}</p>
-                      ))}
-                    </div>
-                  );
-                })()}
 
                 {/* [MOD] 차트 뷰 항상 렌더링 */}
                 <div className="flex flex-col gap-4">
@@ -1566,7 +1540,7 @@ export default function TripDetailPage() {
                     사용 금액
                   </h3>
                   <div className="flex gap-6 items-center">
-                    <div className="relative w-[159px] h-[159px] flex-shrink-0">
+                    <div className="relative w-[150px] h-[150px] min-h-[150px] min-w-[150px] flex-shrink-0">
                       <svg viewBox="0 0 36 36" className="w-full h-full" style={{ transform: "rotate(-90deg)" }}>
                         {(() => {
                           const spentData = trip.budget.spent || [];
@@ -1650,27 +1624,37 @@ export default function TripDetailPage() {
                     </div>
                   </div>
 
-                  {/* [MOD] 예산 초과 경고 표시 */}
-                  {(() => {
-                    const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
-                    const hasExceeded = (trip.budget.spent || []).some(item => {
-                      const ratio = ratioMap[item.category];
-                      const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
-                      return budgetForCategory !== null && item.amount > budgetForCategory;
+                  {/* [MOD] 예산 초과 경고 표시를 상세 경고 메시지 배너로 대체 */}
+                  {trip.budget.alarmRatio > 0 && trip.budget.total > 0 && trip.budget.spent?.length > 0 && (() => {
+                    const total = trip.budget.total;
+                    const alarmPct = trip.budget.alarmRatio;
+                    const ratioMap = {
+                      "숙박비": trip.budget.lodgingRatio || 25,
+                      "식비": trip.budget.foodRatio || 25,
+                      "교통비": trip.budget.transportRatio || 25,
+                    };
+                    const warnings = [];
+                    trip.budget.spent.forEach(cat => {
+                      const ratio = ratioMap[cat.category];
+                      if (!ratio) return;
+                      const allocated = Math.round(total * ratio / 100);
+                      const remaining = allocated - cat.amount;
+                      const threshold = Math.round(allocated * alarmPct / 100);
+                      if (remaining <= threshold && remaining >= 0) {
+                        warnings.push(`${cat.category}: 잔여 ${remaining.toLocaleString()}원 (경고 기준 ${threshold.toLocaleString()}원 이하)`);
+                      } else if (remaining < 0) {
+                        warnings.push(`${cat.category}: ${Math.abs(remaining).toLocaleString()}원 초과!`);
+                      }
                     });
-                    return hasExceeded ? (
-                      <div className="flex items-center justify-center gap-1.5 bg-[#fff1f1] rounded-lg py-3 mt-2">
-                        <Image
-                          src="/icons/danger.svg"
-                          alt="warning"
-                          width={15}
-                          height={14}
-                        />
-                        <span className="text-[13px] font-medium text-[#ff0909]">
-                          예상 비용을 초과한 사용 금액이 있어요
-                        </span>
+                    if (warnings.length === 0) return null;
+                    return (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl mt-2">
+                        <p className="text-[13px] font-bold text-red-600 mb-1">⚠️ 예산 경고</p>
+                        {warnings.map((w, i) => (
+                          <p key={i} className="text-[12px] text-red-500">{w}</p>
+                        ))}
                       </div>
-                    ) : null;
+                    );
                   })()}
                 </div>
 
@@ -1728,65 +1712,73 @@ export default function TripDetailPage() {
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-[14px] font-bold text-[#111]">{(exp.nMoney || 0).toLocaleString()}원</span>
-                                <button
-                                  className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
-                                  title="지출 수정"
-                                  onClick={() => {
-                                    setEditingExpense({
-                                      iPK: exp.iPK,
-                                      iScheduleFK: exp.iScheduleFK || tripId,
-                                      iUserFK: exp.iUserFK || 1,
-                                      nMoney: exp.nMoney || 0,
-                                      dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
-                                      chCategory: exp.chCategory || "E",
-                                      strMemo: exp.strMemo || ""
-                                    });
-                                  }}
-                                >
-                                  <Image
-                                    src="/icons/edit-purple.svg"
-                                    alt="edit"
-                                    width={16}
-                                    height={16}
-                                    className="grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
-                                  />
-                                </button>
-                                <button
-                                  className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                                  title="지출 삭제"
-                                  onClick={async () => {
-                                    if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
-                                    try {
-                                      await removeScheduleExpense(exp.iPK);
-                                      setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
-                                      setApiTrip(prev => {
-                                        if (!prev) return prev;
-                                        const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
-                                        const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
-                                        const remaining = expenseRawList.filter(e => e.iPK !== exp.iPK);
-                                        const grouped = {};
-                                        remaining.forEach(e => {
-                                          const label = categoryLabelMap[e.chCategory] || "기타";
-                                          if (!grouped[label]) grouped[label] = 0;
-                                          grouped[label] += (e.nMoney || 0);
-                                        });
-                                        const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
-                                        const newSpent = Object.entries(grouped).map(([label, amount]) => ({
-                                          category: label, amount,
-                                          color: categoryColors[label] || "#b115fa",
-                                          percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
-                                        })).sort((a, b) => b.amount - a.amount);
-                                        return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
+                                    title="지출 수정"
+                                    onClick={() => {
+                                      setEditingExpense({
+                                        iPK: exp.iPK,
+                                        iScheduleFK: exp.iScheduleFK || tripId,
+                                        iUserFK: exp.iUserFK || 1,
+                                        nMoney: exp.nMoney || 0,
+                                        dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
+                                        chCategory: exp.chCategory || "E",
+                                        strMemo: exp.strMemo || ""
                                       });
-                                      alert("삭제되었습니다.");
-                                    } catch (err) {
-                                      console.error("지출 삭제 실패:", err);
-                                      alert("지출 삭제 중 오류가 발생했습니다.");
-                                    }
-                                  }}
-                                >
-                                  <Trash2 size={16} />
-                                </button>
+                                    }}
+                                  >
+                                    <div
+                                      className="w-[16px] h-[16px] bg-[#7a28fa] grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
+                                      style={{
+                                        WebkitMaskImage: "url('/icons/edit.svg')",
+                                        maskImage: "url('/icons/edit.svg')",
+                                        WebkitMaskSize: "contain",
+                                        maskSize: "contain",
+                                        WebkitMaskRepeat: "no-repeat",
+                                        maskRepeat: "no-repeat",
+                                        WebkitMaskPosition: "center",
+                                        maskPosition: "center",
+                                      }}
+                                    />
+                                  </button>
+                                  <button
+                                    className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                                    title="지출 삭제"
+                                    onClick={async () => {
+                                      if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
+                                      try {
+                                        await removeScheduleExpense(exp.iPK);
+                                        setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
+                                        setApiTrip(prev => {
+                                          if (!prev) return prev;
+                                          const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+                                          const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
+                                          const remaining = expenseRawList.filter(e => e.iPK !== exp.iPK);
+                                          const grouped = {};
+                                          remaining.forEach(e => {
+                                            const label = categoryLabelMap[e.chCategory] || "기타";
+                                            if (!grouped[label]) grouped[label] = 0;
+                                            grouped[label] += (e.nMoney || 0);
+                                          });
+                                          const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
+                                          const newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                                            category: label, amount,
+                                            color: categoryColors[label] || "#b115fa",
+                                            percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+                                          })).sort((a, b) => b.amount - a.amount);
+                                          return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                                        });
+                                        alert("삭제되었습니다.");
+                                      } catch (err) {
+                                        console.error("지출 삭제 실패:", err);
+                                        alert("지출 삭제 중 오류가 발생했습니다.");
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1834,7 +1826,7 @@ export default function TripDetailPage() {
 
         {
           selectedTab === "준비물" && (
-            <div className="flex flex-col gap-4 pt-1">
+            <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-5">
                 <span className="text-sm font-semibold text-[#111111]">
                   준비물 {trip.checklist ? trip.checklist.length : 0}개
@@ -1937,7 +1929,7 @@ export default function TripDetailPage() {
         {
           selectedTab === "동행자" && (
             trip.companions && trip.companions.length > 0 ? (
-              <div className="flex flex-col gap-4 pt-1">
+              <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between gap-5">
                   <span className="text-sm font-semibold text-[#111111]">
                     등록된 동행자 {trip.companions.length}명
@@ -2148,7 +2140,12 @@ export default function TripDetailPage() {
               )}
 
               {/* Desktop Content Scroll Area */}
-              <div className="flex-1 overflow-y-auto px-5 pt-4 pb-10 scrollbar-hide">
+              <div
+                className={clsx(
+                  "flex-1 overflow-y-auto px-5 pb-10 scrollbar-hide",
+                  !["일정", "기록"].includes(selectedTab) && "pt-5"
+                )}
+              >
                 {renderTabContent()}
               </div>
             </div>
@@ -2259,7 +2256,7 @@ export default function TripDetailPage() {
         {/* Bottom Sheet - Mobile Only */}
         <div
           ref={sheetRef}
-          className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20"
+          className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20 flex flex-col"
           style={{
             height: `${sheetHeight}px`,
             bottom: 0,
@@ -2321,8 +2318,10 @@ export default function TripDetailPage() {
           {/* Mobile Content visible only when not collapsed */}
           {!isCollapsed && (
             <div
-              className="px-5 pb-24 overflow-y-auto"
-              style={{ maxHeight: `${sheetHeight - 160}px` }}
+              className={clsx(
+                "flex-1 px-5 pb-24 overflow-y-auto w-full",
+                !["일정", "기록"].includes(selectedTab) && "pt-5"
+              )}
             >
               {renderTabContent()}
             </div>
