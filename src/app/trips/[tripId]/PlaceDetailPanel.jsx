@@ -143,10 +143,10 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
     return (
         <div className="flex flex-col h-full bg-white relative w-full overflow-y-auto scrollbar-hide pt-2 lg:px-2">
             {/* 상단 닫기/뒤로가기 헤더 */}
-            <div className="sticky top-0 bg-white z-10 flex items-center mb-6 pb-2">
+            <div className="sticky top-0 bg-white z-10 flex items-center mb-6 pb-2 px-4 pt-4">
                 <button
                     onClick={onClose}
-                    className="p-1 -ml-1 hover:bg-gray-100 rounded-full transition-colors"
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                 >
                     <Image src="/icons/arrow-left.svg" alt="back" width={20} height={16} className="w-5 h-4" />
                 </button>
@@ -155,7 +155,7 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
                 </h2>
             </div>
 
-            <div className="flex flex-col gap-6 px-2">
+            <div className="flex flex-col gap-6 px-4">
                 <div className="flex flex-col gap-2">
                     <div className="flex flex-col gap-1.5">
                         <div className="flex">

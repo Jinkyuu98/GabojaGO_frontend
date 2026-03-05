@@ -2177,7 +2177,7 @@ export default function TripDetailPage() {
           <>
             {/* [MOD] 모바일: 지도는 유지하고 바텀시트 영역 위에만 PlaceDetailPanel 표시 */}
             <div
-              className="lg:hidden fixed bottom-0 left-0 right-0 z-[60] bg-white rounded-t-[24px] shadow-[0_-12px_40px_rgba(0,0,0,0.15)] overflow-hidden"
+              className="lg:hidden fixed bottom-0 left-[2%] right-[2%] w-[96%] z-[60] bg-white rounded-t-[24px] shadow-[0_-12px_40px_rgba(0,0,0,0.15)] overflow-hidden"
               style={{ height: `${sheetHeight}px` }}
             >
               <PlaceDetailPanel
