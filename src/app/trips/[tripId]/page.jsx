@@ -265,9 +265,6 @@ export default function TripDetailPage() {
                 ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
                 : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
 
-              // [ADD] 디버그: user_list 응답 구조 확인 (삭제 PK 매핑 검증용)
-              console.log("👥 동행자 API 응답 (user_list):", JSON.stringify(uList));
-
               newCompanions = uList.map((usr) => ({
                 id: `user-${usr.iPK}`,
                 // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
@@ -745,20 +742,11 @@ export default function TripDetailPage() {
 
   // [MOD] SPA 네비게이션 대응: kakao.maps.Map이 이미 로드됐으면 직접 생성, 아니면 load() 콜백 사용
   const initMap = () => {
-    console.log("🗺️ initMap 호출:", {
-      kakaoExists: !!window.kakao,
-      kakaoMapsExists: !!window.kakao?.maps,
-      kakaoMapConstructor: !!window.kakao?.maps?.Map,
-      mapRefExists: !!mapRef.current
-    });
-
     if (!window.kakao) {
-      console.log("🗺️ kakao SDK 아직 로드 안됨");
       return;
     }
 
     if (!mapRef.current) {
-      console.log("🗺️ mapRef DOM 아직 준비 안됨, 100ms 후 재시도");
       setTimeout(initMap, 100);
       return;
     }
@@ -775,13 +763,11 @@ export default function TripDetailPage() {
     // [MOD] SDK가 완전히 로드된 경우 (Map 생성자가 존재) → 직접 생성
     const createMap = () => {
       if (!mapRef.current) return;
-      console.log("🗺️ 카카오맵 생성 중...");
       const center = new window.kakao.maps.LatLng(37.5665, 126.978);
       mapInstance.current = new window.kakao.maps.Map(mapRef.current, {
         center,
         level: 4,
       });
-      console.log("🗺️ 카카오맵 생성 완료!");
       setIsMapLoaded(true); // [ADD] 로드 완료 시점 상태 갱신
     };
 
@@ -1211,9 +1197,6 @@ export default function TripDetailPage() {
 
   // [ADD] 장소 삭제 이벤트 핸들러 추가
   const handleDeletePlace = async (placeId) => {
-    console.log("=== handleDeletePlace 호출됨 ===");
-    console.log("대상 placeId:", placeId, typeof placeId);
-
     if (!placeId) {
       alert("삭제할 장소 정보가 없습니다.");
       return;
