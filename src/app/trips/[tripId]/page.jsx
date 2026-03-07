@@ -28,7 +28,8 @@ import {
   removeScheduleLocation, modifyScheduleLocation,
   removeScheduleExpense, modifyScheduleExpense, addScheduleExpense, // [ADD] addScheduleExpense 추가
   getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation,
-  addScheduleUser, removeScheduleUser, getScheduleUsers // [ADD] 동행자 API 추가
+  addScheduleUser, removeScheduleUser, getScheduleUsers, // [ADD] 동행자 API 추가
+  addScheduleImage // [ADD] 클라우드플레어 업로드 위임 신규 함수
 } from "../../../services/schedule";
 import { searchUserByName } from "../../../services/auth"; // [ADD] 사용자 검색 API
 
@@ -132,6 +133,8 @@ export default function TripDetailPage() {
   const [isProcessingReceipt, setIsProcessingReceipt] = useState(false); // [ADD] 영수증 파싱 로딩 상태
 
   const fileInputRef = useRef(null); // [ADD] 불러오기 파일 선택기 참조
+  const photoInputRef = useRef(null); // [ADD] 사진 탭 파일 선택기 참조
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false); // [ADD] 사진 업로드 로딩 상태
 
   // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -1325,8 +1328,11 @@ export default function TripDetailPage() {
                   <span className="text-sm font-semibold text-[#111111]">
                     108개의 사진
                   </span>
-                  <span className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                    사진 등록
+                  <span
+                    className="text-sm font-semibold text-[#7a28fa] cursor-pointer"
+                    onClick={() => photoInputRef.current?.click()}
+                  >
+                    {isUploadingPhoto ? "업로드 중..." : "사진 등록"}
                   </span>
                 </div>
               )}
@@ -1405,9 +1411,40 @@ export default function TripDetailPage() {
                   <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
                     {"사진으로 여행 이야기를 채워보세요"}
                   </p>
-                  <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">사진 추가</button>
+                  <button
+                    className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                  >
+                    {isUploadingPhoto ? "업로드 중..." : "사진 추가"}
+                  </button>
                 </div>
               )}
+              {/* [ADD] 숨겨진 파일 선택기 (사진 탭 전용) */}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                ref={photoInputRef}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    setIsUploadingPhoto(true);
+                    // iLocationPK에 해당하는 선택 장소가 있으면 해당 PK, 현재는 전일정 처리(0)
+                    await addScheduleImage(parseInt(tripId), 0, file);
+                    alert("사진이 성공적으로 업로드되었습니다.");
+                    // TODO: 업로드 완료 후 사진 목록 재호출 로직 필요 (임시로 페이지 새로고침)
+                    window.location.reload();
+                  } catch (err) {
+                    console.error("사진 업로드 실패:", err);
+                    alert("사진 업로드 중 오류가 발생했습니다.");
+                  } finally {
+                    setIsUploadingPhoto(false);
+                    e.target.value = '';
+                  }
+                }}
+              />
             </div>
           )
         }

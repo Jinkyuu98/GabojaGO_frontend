@@ -211,3 +211,41 @@ export const removeSchedulePreparation = async (iSchedulePreparationPK) => {
     });
     return res.data;
 };
+
+// ==========================================
+// [ADD] 이미지(Image) 관련 API (백엔드 클라우드플레어 위임 버전)
+// ==========================================
+
+/**
+ * 일정 이미지 등록 API (FormData)
+ * @param {number} iSchedulePK - 일정 PK
+ * @param {number} iLocationPK - 장소 PK (전체 일정인 경우 0 등)
+ * @param {File} file - 브라우저의 File 객체
+ */
+export const addScheduleImage = async (iSchedulePK, iLocationPK, file) => {
+    const formData = new FormData();
+    formData.append("file", file); // 파라미터 이름 'file' 필수
+
+    const res = await api.post(`/schedule/image/append?iSchedulePK=${iSchedulePK}&iLocationPK=${iLocationPK}`, formData);
+    return res.data;
+};
+
+/**
+ * 일정 이미지 삭제 API
+ * @param {number} iScheduleImagePK - ScheduleImage 매핑 테이블 PK
+ * @param {number} iImagePK - 원본 Image 테이블 PK
+ */
+export const removeScheduleImage = async (iScheduleImagePK, iImagePK) => {
+    const res = await api.post(`/schedule/image/remove?iScheduleImagePK=${iScheduleImagePK}&iImagePK=${iImagePK}`);
+    return res.data;
+};
+
+/**
+ * 일정 이미지 목록 조회 API
+ * @param {number} iSchedulePK 
+ */
+export const getScheduleImages = async (iSchedulePK) => {
+    const res = await api.get(`/schedule/image/list?iSchedulePK=${iSchedulePK}`);
+    return res.data;
+};
+
