@@ -149,6 +149,7 @@ export default function TripsListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isActionSheetOpen, setIsActionSheetOpen] = useState(false);
   const [editingTrip, setEditingTrip] = useState(null); // [ADD] 수정 모달 상태
+  const [nFilter, setNFilter] = useState(3); // [ADD] 동행자 필터 상태: 3(전체), 1(내 일정), 2(동행 일정)
 
   // [ADD] 일정 삭제 이벤트 핸들러 추가
   const handleDeleteSchedule = async (iPK) => {
@@ -214,11 +215,11 @@ export default function TripsListPage() {
         // [DEL] 백엔드가 이미 전체 목록을 반환하므로 1번만 호출하여 트래픽 최적화 (기본값이 'A'이므로 누락발생)
         // const res = await getScheduleList();
 
-        // [MOD] A(예정), B(진행 중), C(과거 기록) 상태의 일정을 모두 불러오도록 병렬 호출
+        // [MOD] A(예정), B(진행 중), C(과거 기록) 상태의 일정을 모두 불러오도록 병렬 호출, nFilter 전달
         const [resA, resB, resC] = await Promise.all([
-          getScheduleList("a"),
-          getScheduleList("b"),
-          getScheduleList("c"),
+          getScheduleList("a", nFilter),
+          getScheduleList("b", nFilter),
+          getScheduleList("c", nFilter),
         ]);
 
         // 방어 로직: 혹시 모를 중복 방관을 위해 iPK 기준 유니크 처리
@@ -237,7 +238,7 @@ export default function TripsListPage() {
       }
     };
     fetchSchedules();
-  }, []);
+  }, [nFilter]); // [MOD] nFilter가 변경되면 일정 목록 갱신
 
   const handleCreateNew = () => {
     setIsActionSheetOpen(true);
@@ -335,7 +336,32 @@ export default function TripsListPage() {
               </button>
             </div>
 
-            <div className="bg-[#fafafa] lg:bg-white px-5 py-5 lg:py-8 lg:rounded-b-2xl lg:px-8 min-h-[700px] lg:border lg:border-[#eceff4]">
+            {/* [ADD] nFilter 선택 UI */}
+            <div className="flex gap-2 px-5 py-4 bg-[#fafafa] lg:bg-white lg:px-8 lg:border-x lg:border-[#eceff4] lg:pt-6">
+              <button
+                className={`px-4 py-2 text-[14px] lg:text-[15px] font-medium rounded-full transition-colors ${nFilter === 3 ? "bg-[#111111] text-white" : "bg-[#f2f4f6] text-[#6e6e6e] hover:bg-[#e2e4e6]"
+                  }`}
+                onClick={() => setNFilter(3)}
+              >
+                전체 일정
+              </button>
+              <button
+                className={`px-4 py-2 text-[14px] lg:text-[15px] font-medium rounded-full transition-colors ${nFilter === 1 ? "bg-[#111111] text-white" : "bg-[#f2f4f6] text-[#6e6e6e] hover:bg-[#e2e4e6]"
+                  }`}
+                onClick={() => setNFilter(1)}
+              >
+                내 일정
+              </button>
+              <button
+                className={`px-4 py-2 text-[14px] lg:text-[15px] font-medium rounded-full transition-colors ${nFilter === 2 ? "bg-[#111111] text-white" : "bg-[#f2f4f6] text-[#6e6e6e] hover:bg-[#e2e4e6]"
+                  }`}
+                onClick={() => setNFilter(2)}
+              >
+                동행 일정
+              </button>
+            </div>
+
+            <div className="bg-[#fafafa] lg:bg-white px-5 pb-5 lg:pb-8 lg:rounded-b-2xl lg:px-8 min-h-[700px] lg:border-x lg:border-b lg:border-[#eceff4]">
               {isLoading ? (
                 <div className="flex items-center justify-center p-20 text-[#898989] text-[15px]">
                   여행 일정을 불러오는 중입니다...

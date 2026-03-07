@@ -46,10 +46,14 @@ export const requestScheduleLocations = async (data) => {
 /**
  * 일정 목록 조회 API
  * @param {string} status - 조회할 일정 상태 (예: "A", "B", "C")
+ * @param {number} nFilter - 필터 조건 (1: 내 일정, 2: 동행 일정, 3: 전체)
  * @returns {Promise}
  */
-export const getScheduleList = async (status = "A") => {
-    const url = status ? `/schedule/list?chStatus=${status}` : "/schedule/list";
+export const getScheduleList = async (status = "A", nFilter = 3) => {
+    // [MOD] nFilter 쿼리 파라미터 추가
+    const url = status
+        ? `/schedule/list?chStatus=${status}&nFilter=${nFilter}`
+        : `/schedule/list?nFilter=${nFilter}`;
     const res = await api.get(url);
     return res.data;
 };

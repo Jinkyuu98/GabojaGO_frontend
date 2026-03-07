@@ -286,8 +286,12 @@ export default function TripDetailPage() {
               const token = localStorage.getItem("token");
               if (token) {
                 const payload = JSON.parse(atob(token.split(".")[1]));
-                ownerName = payload.strName || payload.name || payload.sub || ownerName;
-                ownerUserId = payload.strUserID || payload.sub || "";
+                // [MOD] 로그인한 유저 본인이 스케줄 생성자일 경우에만 토큰에서 이름을 가져옵니다.
+                // (단순 동행자가 조회 시 본인 이름 + 왕관이 나오는 버그 수정)
+                if (payload.iPK === ownerUserFK) {
+                  ownerName = payload.strName || payload.name || payload.sub || ownerName;
+                  ownerUserId = payload.strUserID || payload.sub || "";
+                }
               }
             } catch (e) { /* token decode 실패 시 기본값 사용 */ }
 
