@@ -215,17 +215,15 @@ export default function TripsListPage() {
         // [DEL] 백엔드가 이미 전체 목록을 반환하므로 1번만 호출하여 트래픽 최적화 (기본값이 'A'이므로 누락발생)
         // const res = await getScheduleList();
 
-        // [MOD] A(예정), B(진행 중), C(과거 기록) 상태의 일정을 모두 불러오도록 병렬 호출, nFilter 전달
-        const [resA, resB, resC] = await Promise.all([
+        // [MOD] A(준비+진행), C(과거 기록) 상태의 일정만 불러오도록 최적화 (A가 B를 이미 포함함)
+        const [resA, resC] = await Promise.all([
           getScheduleList("a", nFilter),
-          getScheduleList("b", nFilter),
           getScheduleList("c", nFilter),
         ]);
 
-        // 방어 로직: 혹시 모를 중복 방관을 위해 iPK 기준 유니크 처리
+        // 중복 방지를 위해 iPK 기준 유니크 처리
         const allTrips = [
           ...(resA?.schedule_list || []),
-          ...(resB?.schedule_list || []),
           ...(resC?.schedule_list || []),
         ];
         const uniqueTrips = Array.from(new Map(allTrips.map(trip => [trip.iPK, trip])).values());
