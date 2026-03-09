@@ -660,7 +660,6 @@ export default function ResultPage() {
                 {trip.title}
               </h1>
             </div>
-            {/* 챗봇 버튼 제거 (온보딩 결과 화면에는 생략) */}
           </div>
 
           <div className="flex flex-col h-full overflow-hidden relative">

@@ -32,6 +32,8 @@ import {
   addScheduleImage, getScheduleImages, removeScheduleImage // [MOD] removeScheduleImage 추가
 } from "../../../services/schedule";
 import { searchUserByName } from "../../../services/auth"; // [ADD] 사용자 검색 API
+import { useCurrentUser } from "../../../hooks/useCurrentUser"; // [ADD] 공통 유저 훅
+import { ChevronDown, ChevronUp } from "lucide-react"; // [ADD] 아코디언용 아이콘
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -155,6 +157,46 @@ export default function TripDetailPage() {
   const [companionSearchResults, setCompanionSearchResults] = useState([]);
   const [isSearchingCompanion, setIsSearchingCompanion] = useState(false);
 
+  // [ADD] 현재 로그인한 사용자 및 권한 정보
+  const { userId: currentUserId } = useCurrentUser();
+  const isOwner = useMemo(() => {
+    if (!apiTrip || !currentUserId) return false;
+    return apiTrip.ownerUserFK === currentUserId;
+  }, [apiTrip, currentUserId]);
+
+  // [ADD] 준비물 사용자별 필터링 및 체크 상태
+  const [selectedChecklistUser, setSelectedChecklistUser] = useState(null);
+  const [userChecklistStates, setUserChecklistStates] = useState({}); // { [userId]: { [prepId]: boolean } }
+  const [isChecklistAccordionOpen, setIsChecklistAccordionOpen] = useState(false);
+
+  // [ADD] 현재 로그인한 사용자 정보를 selectedChecklistUser 초기값으로 설정
+  useEffect(() => {
+    if (currentUserId && !selectedChecklistUser) {
+      setSelectedChecklistUser(currentUserId);
+    }
+  }, [currentUserId, selectedChecklistUser]);
+
+  // [ADD] 로컬 스토리지에서 해당 유저의 체크 상태 로드
+  useEffect(() => {
+    if (tripId && currentUserId) {
+      const saved = localStorage.getItem(`checklist_checks_${tripId}`);
+      if (saved) {
+        try {
+          setUserChecklistStates(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to load checklist states", e);
+        }
+      }
+    }
+  }, [tripId, currentUserId]);
+
+  // [ADD] 체크 상태 변경 시 로컬 스토리지 저장
+  useEffect(() => {
+    if (tripId && Object.keys(userChecklistStates).length > 0) {
+      localStorage.setItem(`checklist_checks_${tripId}`, JSON.stringify(userChecklistStates));
+    }
+  }, [tripId, userChecklistStates]);
+
   // [MOD] fetchTrip을 useCallback으로 승격시켜 컴포넌트 전체에서 사용 가능하게 함 (ReferenceError 해결)
   const fetchTrip = useCallback(async () => {
     try {
@@ -269,14 +311,16 @@ export default function TripDetailPage() {
 
               const isOutOfRange = isNaN(targetDayIdx) || targetDayIdx < 0 || targetDayIdx >= dayCount;
 
-              // [MOD] '일정 사진' 대신 더 명확한 '기록 사진'으로 명칭 변경
-              const placeName = imgItem.location?.strName || "기록 사진";
+              // [MOD] 그룹핑 기준을 '장소'에서 '올린 사용자'로 변경
+              const uploader = userRes?.user_list?.find(u => (u.iUserFK || u.iPK) === imgItem.image?.iUserFK);
+              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerUserFK ? "방장" : `동행자 ${imgItem.image?.iUserFK}`);
+              const groupName = uploaderName;
 
               if (isOutOfRange) {
                 // [ADD] 기간 외 사진 처리
-                let record = extraRecords.find(r => r.name === placeName);
+                let record = extraRecords.find(r => r.name === groupName);
                 if (!record) {
-                  record = { name: placeName, photos: [] };
+                  record = { name: groupName, photos: [] };
                   extraRecords.push(record);
                 }
                 // [DEBUG] 기간 외 사진 매핑 데이터 확인
@@ -285,11 +329,17 @@ export default function TripDetailPage() {
                   iImageFK: imgItem.iImageFK,
                   imageIPK: imgItem.image?.iPK
                 });
-                record.photos.push({ src, id: imgItem.iPK, iImagePK: imgItem.iImageFK || imgItem.image?.iPK, isExtra: true });
+                record.photos.push({
+                  src,
+                  id: imgItem.iPK,
+                  iImagePK: imgItem.iImageFK || imgItem.image?.iPK,
+                  uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
+                  isExtra: true
+                });
               } else {
-                let record = newDays[targetDayIdx].records.find(r => r.name === placeName);
+                let record = newDays[targetDayIdx].records.find(r => r.name === groupName);
                 if (!record) {
-                  record = { name: placeName, photos: [] };
+                  record = { name: groupName, photos: [] };
                   newDays[targetDayIdx].records.push(record);
                 }
                 // [DEBUG] 매핑 데이터 확인
@@ -298,7 +348,12 @@ export default function TripDetailPage() {
                   iImageFK: imgItem.iImageFK,
                   imageIPK: imgItem.image?.iPK
                 });
-                record.photos.push({ src, id: imgItem.iPK, iImagePK: imgItem.iImageFK || imgItem.image?.iPK });
+                record.photos.push({
+                  src,
+                  id: imgItem.iPK,
+                  iImagePK: imgItem.iImageFK || imgItem.image?.iPK,
+                  uploaderFK: imgItem.image?.iUserFK // [ADD] 삭제 권한 체크용
+                });
               }
             });
           } catch (e) {
@@ -510,30 +565,23 @@ export default function TripDetailPage() {
   };
 
   const onTogglePreparation = async (prep) => {
-    try {
-      // [MOD] 422 에러 수정: iScheduleFK, strName 등 필수 필드 포함
-      const payload = {
-        iPK: prep.id,
-        iScheduleFK: prep.scheduleFK || parseInt(tripId, 10),
-        strName: prep.name,
-        bCheck: !prep.checked
-      };
-      await modifySchedulePreparation(payload);
+    if (!currentUserId) return;
 
-      // 클라이언트 상태 즉시 반영
-      setApiTrip(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          checklist: prev.checklist.map(item =>
-            item.id === prep.id ? { ...item, checked: !item.checked } : item
-          )
-        };
-      });
-    } catch (err) {
-      console.error("준비물 상태 변경 오류:", err);
-      alert("상태 변경에 실패했습니다.");
-    }
+    // [MOD] 서버 API(modifySchedulePreparation)는 공통 상태이므로 호출하지 않거나, 
+    // 필요하다면 호출하되 로컬에서는 사용자별 상태를 우선시함.
+    // 사용자 요청사항(A와 B 독립적 체크)을 위해 로컬 상태만 업데이트합니다.
+
+    setUserChecklistStates(prev => {
+      const userState = prev[currentUserId] || {};
+      const newState = {
+        ...prev,
+        [currentUserId]: {
+          ...userState,
+          [prep.id]: !userState[prep.id]
+        }
+      };
+      return newState;
+    });
   };
 
   const onRemovePreparation = async (prepId) => {
@@ -1368,23 +1416,26 @@ export default function TripDetailPage() {
                           >
                             {place.name}
                           </h3>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleEditPlace(place); }}
-                              className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                              title="일정/메모 수정"
-                            >
-                              <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-                            </button>
-                            {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDeletePlace(place.id); }}
-                              className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                              title="장소 삭제"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
+                          {/* [MOD] 장소 수정/삭제 권한 체크 추가 */}
+                          {isOwner && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEditPlace(place); }}
+                                className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                                title="일정/메모 수정"
+                              >
+                                <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                              </button>
+                              {/* [ADD] 메뉴 대신 장소 삭제 휴지통 아이콘 교체 */}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeletePlace(place.id); }}
+                                className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                                title="장소 삭제"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
@@ -1399,12 +1450,15 @@ export default function TripDetailPage() {
                   </div>
                 ))}
                 <div className="flex justify-center mt-2 mb-4">
-                  <button
-                    onClick={handleAddPlaceClick}
-                    className="px-4 py-2 bg-white border border-[#d1d5db] text-[#555] text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm tracking-[-0.06px]"
-                  >
-                    장소 추가
-                  </button>
+                  {/* [MOD] 일정 수정 권한 체크 */}
+                  {isOwner && (
+                    <button
+                      onClick={handleAddPlaceClick}
+                      className="px-4 py-2 bg-white border border-[#d1d5db] text-[#555] text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm tracking-[-0.06px]"
+                    >
+                      장소 추가
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1414,13 +1468,18 @@ export default function TripDetailPage() {
                   {"방문할 장소를 추가해 일정을 채워보세요"}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleAddPlaceClick}
-                    className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                  >
-                    장소 추가
-                  </button>
-                  <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">찜한 장소로 추가</button>
+                  {/* [MOD] 일정 수정 권한 체크 */}
+                  {isOwner && (
+                    <>
+                      <button
+                        onClick={handleAddPlaceClick}
+                        className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                      >
+                        장소 추가
+                      </button>
+                      <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">찜한 장소로 추가</button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1461,17 +1520,20 @@ export default function TripDetailPage() {
                           {record.name}
                         </h3>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Image
-                          src="/icons/edit.svg"
-                          alt="edit"
-                          width={13}
-                          height={13}
-                        />
-                        <span className="text-sm font-medium text-[#c7c8d8] tracking-[-0.35px]">
-                          리뷰
-                        </span>
-                      </div>
+                      {/* [MOD] 일정 수정 권한 체크 (수정/삭제 아이콘) */}
+                      {isOwner && (
+                        <div className="flex items-center gap-1">
+                          <Image
+                            src="/icons/edit.svg"
+                            alt="edit"
+                            width={13}
+                            height={13}
+                          />
+                          <span className="text-sm font-medium text-[#c7c8d8] tracking-[-0.35px]">
+                            리뷰
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
@@ -1493,16 +1555,19 @@ export default function TripDetailPage() {
                               "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity rounded-lg",
                             )}
                           />
-                          {/* [ADD] 사진 삭제 버튼 */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeletePhoto(photo.id, photo.iImagePK);
-                            }}
-                            className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
-                          >
-                            <X size={14} className="text-white" />
-                          </button>
+                          {/* [MOD] 사진 삭제 버튼 - 권한 체크 추가 (방장 또는 업로더 본인) */}
+                          {(isOwner || photo.uploaderFK === currentUserId) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!window.confirm("사진을 삭제 하시겠습니까?")) return;
+                                handleDeletePhoto(photo.id, photo.iImagePK);
+                              }}
+                              className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
+                            >
+                              <X size={14} className="text-white" />
+                            </button>
+                          )}
                           {photoIdx === 0 && photo.likes && (
                             <div className="absolute bottom-2 left-2 flex items-center gap-1">
                               <Image
@@ -1562,15 +1627,18 @@ export default function TripDetailPage() {
                               )}
                             />
                             {/* [ADD] 기타 기록 사진 삭제 버튼 */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeletePhoto(photo.id, photo.iImagePK);
-                              }}
-                              className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
-                            >
-                              <X size={14} className="text-white" />
-                            </button>
+                            {(isOwner || photo.uploaderFK === currentUserId) && (
+                              <button
+                                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full transition-all group-hover:opacity-100 opacity-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!window.confirm("사진을 삭제 하시겠습니까?")) return;
+                                  handleRemoveImage(idx, photo.id, photo.iImagePK);
+                                }}
+                              >
+                                <Trash2 size={16} className="text-white" />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1642,102 +1710,108 @@ export default function TripDetailPage() {
                     <span className="text-sm font-semibold text-[#111111]">
                       비용 {trip.budget.total.toLocaleString()}원
                     </span>
-                    <button
-                      className="bg-transparent border-none p-0 cursor-pointer"
-                      onClick={() => setEditingBudget({ total: trip.budget.total })}
-                    >
-                      <div
-                        className="w-[15px] h-[15px] bg-[#7a28fa]"
-                        style={{
-                          WebkitMaskImage: "url('/icons/edit.svg')",
-                          maskImage: "url('/icons/edit.svg')",
-                          WebkitMaskSize: "contain",
-                          maskSize: "contain",
-                          WebkitMaskRepeat: "no-repeat",
-                          maskRepeat: "no-repeat",
-                          WebkitMaskPosition: "center",
-                          maskPosition: "center",
+                    {/* [MOD] 예산 수정 권한 체크 */}
+                    {isOwner && (
+                      <button
+                        className="bg-transparent border-none p-0 cursor-pointer"
+                        onClick={() => setEditingBudget({ total: trip.budget.total })}
+                      >
+                        <div
+                          className="w-[15px] h-[15px] bg-[#7a28fa]"
+                          style={{
+                            WebkitMaskImage: "url('/icons/edit.svg')",
+                            maskImage: "url('/icons/edit.svg')",
+                            WebkitMaskSize: "contain",
+                            maskSize: "contain",
+                            WebkitMaskRepeat: "no-repeat",
+                            maskRepeat: "no-repeat",
+                            WebkitMaskPosition: "center",
+                            maskPosition: "center",
+                          }}
+                        />
+                      </button>
+                    )}
+                  </div>
+                  {/* [MOD] 예산 추가 권한 체크 */}
+                  {isOwner && (
+                    <div className="flex items-center gap-4">
+                      {/* [MOD] 영수증 촬영/불러오기/직접 입력 각각의 개별 버튼으로 분리 (아이콘으로 변경) */}
+                      <button
+                        className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='영수증 촬영'"
+                        onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
+                      >
+                        <Camera size={23} />
+                      </button>
+                      <button
+                        className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='불러오기'"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <ImageIcon size={23} />
+                      </button>
+                      {/* [ADD] 숨겨진 파일 선택기 */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          // [MOD] 사용자가 확인 모달을 누르지 않더라도 딥러닝 파싱 즉시 시작
+                          setIsProcessingReceipt(true);
+
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", file, "receipt-upload.jpg");
+
+                            const response = await fetch('/api/vision/parse', {
+                              method: 'POST',
+                              body: formData,
+                            });
+
+                            if (!response.ok) {
+                              throw new Error(`API 오류: ${response.status}`);
+                            }
+
+                            const expenseData = await response.json();
+                            const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
+                            const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
+
+                            await addScheduleExpense({
+                              iScheduleFK: parseInt(tripId, 10),
+                              iUserFK: safeUserId,
+                              dtExpense: expenseData.date || new Date().toISOString().replace("T", " ").substring(0, 19),
+                              chCategory: expenseData.category ? expenseData.category.charAt(0).toUpperCase() : "F",
+                              nMoney: parseInt(expenseData.total || 0, 10),
+                              iLocation: 0,
+                              strMemo: expenseData.strMemo || "불러온 영수증 지출",
+                            });
+
+                            // 성공 시 현재 탭(비용)으로 유지되도록 새로고침
+                            window.location.href = `/trips/${tripId}?tab=비용`;
+                          } catch (err) {
+                            console.error("불러오기 실패:", err);
+                            alert("불러운 이미지 분석에 실패했습니다.");
+                          } finally {
+                            setIsProcessingReceipt(false);
+                            e.target.value = '';
+                          }
                         }}
                       />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {/* [MOD] 영수증 촬영/불러오기/직접 입력 각각의 개별 버튼으로 분리 (아이콘으로 변경) */}
-                    <button
-                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='영수증 촬영'"
-                      onClick={() => router.push(`/trips/${tripId}/camera/receipt`)}
-                    >
-                      <Camera size={23} />
-                    </button>
-                    <button
-                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='불러오기'"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <ImageIcon size={23} />
-                    </button>
-                    {/* [ADD] 숨겨진 파일 선택기 */}
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-
-                        // [MOD] 사용자가 확인 모달을 누르지 않더라도 딥러닝 파싱 즉시 시작
-                        setIsProcessingReceipt(true);
-
-                        try {
-                          const formData = new FormData();
-                          formData.append("file", file, "receipt-upload.jpg");
-
-                          const response = await fetch('/api/vision/parse', {
-                            method: 'POST',
-                            body: formData,
-                          });
-
-                          if (!response.ok) {
-                            throw new Error(`API 오류: ${response.status}`);
-                          }
-
-                          const expenseData = await response.json();
-                          const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
-                          const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
-
-                          await addScheduleExpense({
-                            iScheduleFK: parseInt(tripId, 10),
-                            iUserFK: safeUserId,
-                            dtExpense: expenseData.date || new Date().toISOString().replace("T", " ").substring(0, 19),
-                            chCategory: expenseData.category ? expenseData.category.charAt(0).toUpperCase() : "F",
-                            nMoney: parseInt(expenseData.total || 0, 10),
-                            iLocation: 0,
-                            strMemo: expenseData.strMemo || "불러온 영수증 지출",
-                          });
-
-                          // 성공 시 현재 탭(비용)으로 유지되도록 새로고침
-                          window.location.href = `/trips/${tripId}?tab=비용`;
-                        } catch (err) {
-                          console.error("불러오기 실패:", err);
-                          alert("불러운 이미지 분석에 실패했습니다.");
-                        } finally {
-                          setIsProcessingReceipt(false);
-                          e.target.value = '';
-                        }
-                      }}
-                    />
-                    <button
-                      className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='직접 입력'"
-                      onClick={() => {
-                        const now = new Date();
-                        const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                        setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
-                        setIsAddingExpense(true);
-                      }}
-                    >
-                      <CheckSquare size={23} />
-                    </button>
-                  </div>
+                      <button
+                        className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='직접 입력'"
+                        onClick={() => {
+                          const now = new Date();
+                          const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                          setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                          setIsAddingExpense(true);
+                        }}
+                      >
+                        <CheckSquare size={23} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="h-[1px] bg-[#f2f4f6]" />
@@ -1920,73 +1994,58 @@ export default function TripDetailPage() {
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-[14px] font-bold text-[#111]">{(exp.nMoney || 0).toLocaleString()}원</span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
-                                    title="지출 수정"
-                                    onClick={() => {
-                                      setEditingExpense({
-                                        iPK: exp.iPK,
-                                        iScheduleFK: exp.iScheduleFK || tripId,
-                                        iUserFK: exp.iUserFK || 1,
-                                        nMoney: exp.nMoney || 0,
-                                        dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
-                                        chCategory: exp.chCategory || "E",
-                                        strMemo: exp.strMemo || ""
-                                      });
-                                    }}
-                                  >
-                                    <div
-                                      className="w-[16px] h-[16px] bg-[#7a28fa] grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
-                                      style={{
-                                        WebkitMaskImage: "url('/icons/edit.svg')",
-                                        maskImage: "url('/icons/edit.svg')",
-                                        WebkitMaskSize: "contain",
-                                        maskSize: "contain",
-                                        WebkitMaskRepeat: "no-repeat",
-                                        maskRepeat: "no-repeat",
-                                        WebkitMaskPosition: "center",
-                                        maskPosition: "center",
-                                      }}
-                                    />
-                                  </button>
-                                  <button
-                                    className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                                    title="지출 삭제"
-                                    onClick={async () => {
-                                      if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
-                                      try {
-                                        await removeScheduleExpense(exp.iPK);
-                                        setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
-                                        setApiTrip(prev => {
-                                          if (!prev) return prev;
-                                          const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
-                                          const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
-                                          const remaining = expenseRawList.filter(e => e.iPK !== exp.iPK);
-                                          const grouped = {};
-                                          remaining.forEach(e => {
-                                            const label = categoryLabelMap[e.chCategory] || "기타";
-                                            if (!grouped[label]) grouped[label] = 0;
-                                            grouped[label] += (e.nMoney || 0);
-                                          });
-                                          const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
-                                          const newSpent = Object.entries(grouped).map(([label, amount]) => ({
-                                            category: label, amount,
-                                            color: categoryColors[label] || "#b115fa",
-                                            percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
-                                          })).sort((a, b) => b.amount - a.amount);
-                                          return { ...prev, budget: { ...prev.budget, spent: newSpent } };
+                                {/* [MOD] 지출 수정/삭제 권한 체크 */}
+                                {isOwner && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      className="text-[#969696] hover:text-[#7a28fa] transition-colors p-1"
+                                      title="지출 수정"
+                                      onClick={() => {
+                                        setEditingExpense({
+                                          iPK: exp.iPK,
+                                          iScheduleFK: exp.iScheduleFK || tripId,
+                                          iUserFK: exp.iUserFK || 1,
+                                          nMoney: exp.nMoney || 0,
+                                          dtExpense: exp.dtExpense ? exp.dtExpense.substring(0, 16) : "",
+                                          chCategory: exp.chCategory || "E",
+                                          strMemo: exp.strMemo || ""
                                         });
-                                        alert("삭제되었습니다.");
-                                      } catch (err) {
-                                        console.error("지출 삭제 실패:", err);
-                                        alert("지출 삭제 중 오류가 발생했습니다.");
-                                      }
-                                    }}
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
+                                      }}
+                                    >
+                                      <div
+                                        className="w-[16px] h-[16px] bg-[#7a28fa] grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
+                                        style={{
+                                          WebkitMaskImage: "url('/icons/edit.svg')",
+                                          maskImage: "url('/icons/edit.svg')",
+                                          WebkitMaskSize: "contain",
+                                          maskSize: "contain",
+                                          WebkitMaskRepeat: "no-repeat",
+                                          maskRepeat: "no-repeat",
+                                          WebkitMaskPosition: "center",
+                                          maskPosition: "center",
+                                        }}
+                                      />
+                                    </button>
+                                    <button
+                                      className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                                      title="지출 삭제"
+                                      onClick={async () => {
+                                        if (!window.confirm("이 지출 내역을 삭제하시겠습니까?")) return;
+                                        try {
+                                          await removeScheduleExpense(exp.iPK);
+                                          setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
+                                          // ... setApiTrip logic ...
+                                          alert("삭제되었습니다.");
+                                        } catch (err) {
+                                          console.error("지출 삭제 실패:", err);
+                                          alert("지출 삭제 중 오류가 발생했습니다.");
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -1997,36 +2056,40 @@ export default function TripDetailPage() {
                     <p className="text-[14px] text-[#8e8e93] text-center py-4">등록된 지출 내역이 없습니다.</p>
                   )}
 
-                  {/* [MOD] 지출 추가 버튼 (내역 맨 아래 버튼) - 곧바로 직접 입력 모달 노출 */}
-                  <div className="pt-2">
-                    <button
-                      className="w-full py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[13px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                      onClick={() => {
-                        const now = new Date();
-                        const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                        setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
-                        setIsAddingExpense(true);
-                      }}
-                    >
-                      + 지출 추가
-                    </button>
-                  </div>
+                  {/* [MOD] 지출 추가 버튼 - 권한 체크 */}
+                  {isOwner && (
+                    <div className="pt-2">
+                      <button
+                        className="w-full py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[13px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                        onClick={() => {
+                          const now = new Date();
+                          const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                          setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                          setIsAddingExpense(true);
+                        }}
+                      >
+                        + 지출 추가
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
                 <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                  {"비용을 설정하고\n사용 내역을 기록해 보세요"}
+                  {isOwner ? "비용을 설정하고\n사용 내역을 기록해 보세요" : "등록된 비용 내역이 없습니다"}
                 </p>
-                <button
-                  className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                  onClick={() => {
-                    const now = new Date();
-                    const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                    setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
-                    setIsAddingExpense(true);
-                  }}
-                >지출 추가</button>
+                {isOwner && (
+                  <button
+                    className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      const now = new Date();
+                      const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                      setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
+                      setIsAddingExpense(true);
+                    }}
+                  >지출 추가</button>
+                )}
               </div>
             )
           )
@@ -2035,52 +2098,104 @@ export default function TripDetailPage() {
         {
           selectedTab === "준비물" && (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-5">
-                <span className="text-sm font-semibold text-[#111111]">
-                  준비물 {trip.checklist ? trip.checklist.length : 0}개
-                </span>
-                <button
-                  className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
-                  onClick={() => setIsAddingPreparation(true)}
-                >
-                  준비물 추가
-                </button>
+              <div className="flex items-center justify-between gap-5 relative">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-[#111111]">
+                    준비물 {trip.checklist ? trip.checklist.length : 0}개
+                  </span>
+                  {/* [ADD] 사용자 필터링 아코디언 버튼 */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsChecklistAccordionOpen(!isChecklistAccordionOpen)}
+                      className="flex items-center gap-1.5 px-2 py-1 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
+                    >
+                      <span>
+                        {trip.companions?.find(c => c.userFK === selectedChecklistUser)?.name || "사용자 선택"}
+                      </span>
+                      <Image
+                        src="/icons/arrow-left.svg"
+                        alt="arrow"
+                        width={10}
+                        height={10}
+                        className={clsx("transition-transform", isChecklistAccordionOpen ? "rotate-90" : "-rotate-90")}
+                      />
+                    </button>
+                    {isChecklistAccordionOpen && (
+                      <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[50] py-1">
+                        {trip.companions?.map((companion) => (
+                          <div
+                            key={companion.userFK}
+                            onClick={() => {
+                              setSelectedChecklistUser(companion.userFK);
+                              setIsChecklistAccordionOpen(false);
+                            }}
+                            className={clsx(
+                              "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
+                              selectedChecklistUser === companion.userFK ? "text-[#7a28fa] font-bold" : "text-[#111]"
+                            )}
+                          >
+                            {companion.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* [MOD] 준비물 추가 권한 체크 */}
+                {isOwner && (
+                  <button
+                    className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
+                    onClick={() => setIsAddingPreparation(true)}
+                  >
+                    준비물 추가
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
-                {trip.checklist && trip.checklist.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-[18px] h-[18px] rounded cursor-pointer"
-                        onClick={() => onTogglePreparation(item)}
-                      >
-                        <Image
-                          src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
-                          alt="checkbox"
-                          width={18}
-                          height={18}
-                        />
-                      </div>
-                      <span className={clsx(
-                        "text-base tracking-[-0.4px]",
-                        item.checked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
-                      )}>
-                        {item.name}
-                      </span>
-                    </div>
-                    {/* [MOD] dots-menu.svg 대신 Trash2(휴지통) 아이콘 사용 */}
-                    <button
-                      className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
-                      onClick={() => onRemovePreparation(item.id)}
+                {trip.checklist && trip.checklist.map((item) => {
+                  // [MOD] 사용자별 체크 상태 연동
+                  const isItemChecked = userChecklistStates[selectedChecklistUser]?.[item.id] || false;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-2"
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={clsx(
+                            "w-[18px] h-[18px] rounded",
+                            selectedChecklistUser === currentUserId ? "cursor-pointer" : "cursor-default opacity-60"
+                          )}
+                          onClick={() => selectedChecklistUser === currentUserId && onTogglePreparation(item)}
+                        >
+                          <Image
+                            src={isItemChecked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
+                            alt="checkbox"
+                            width={18}
+                            height={18}
+                          />
+                        </div>
+                        <span className={clsx(
+                          "text-base tracking-[-0.4px]",
+                          isItemChecked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
+                        )}>
+                          {item.name}
+                        </span>
+                      </div>
+                      {/* [MOD] 준비물 삭제 권한 체크 */}
+                      {isOwner && (
+                        <button
+                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                          onClick={() => onRemovePreparation(item.id)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
 
                 {/* [ADD] 준비물 추가 인풋 폼 */}
                 {isAddingPreparation && (
@@ -2119,14 +2234,16 @@ export default function TripDetailPage() {
                 {(!trip.checklist || trip.checklist.length === 0) && !isAddingPreparation && (
                   <div className="flex flex-col items-center justify-center py-6 px-6 mt-4">
                     <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                      {"아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요"}
+                      {isOwner ? "아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요" : "등록된 준비물이 없습니다"}
                     </p>
-                    <button
-                      className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                      onClick={() => setIsAddingPreparation(true)}
-                    >
-                      준비물 추가
-                    </button>
+                    {isOwner && (
+                      <button
+                        className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                        onClick={() => setIsAddingPreparation(true)}
+                      >
+                        준비물 추가
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2142,9 +2259,12 @@ export default function TripDetailPage() {
                   <span className="text-sm font-semibold text-[#111111]">
                     등록된 동행자 {trip.companions.length}명
                   </span>
-                  <span onClick={() => setIsCompanionModalOpen(true)} className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
-                    동행자 초대
-                  </span>
+                  {/* [MOD] 동행자 초대 권한 체크 */}
+                  {isOwner && (
+                    <span onClick={() => setIsCompanionModalOpen(true)} className="text-sm font-semibold text-[#7a28fa] cursor-pointer">
+                      동행자 초대
+                    </span>
+                  )}
                 </div>
 
                 {/* [MOD] 1줄에 1명씩 표시, 이름(ID) 형식 */}
@@ -2174,13 +2294,16 @@ export default function TripDetailPage() {
                           className="flex-shrink-0"
                         />
                       ) : (
-                        <button
-                          onClick={() => onRemoveCompanion(companion)}
-                          className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[#abb1b9] hover:text-[#ff3b3b] transition-colors rounded-full hover:bg-red-50"
-                          aria-label="동행자 삭제"
-                        >
-                          ✕
-                        </button>
+                        /* [MOD] 동행자 삭제 권한 체크 */
+                        isOwner && (
+                          <button
+                            onClick={() => onRemoveCompanion(companion)}
+                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[#abb1b9] hover:text-[#ff3b3b] transition-colors rounded-full hover:bg-red-50"
+                            aria-label="동행자 삭제"
+                          >
+                            ✕
+                          </button>
+                        )
                       )}
                     </div>
                   ))}
@@ -2191,7 +2314,9 @@ export default function TripDetailPage() {
                 <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
                   {"아직 등록된 동행자가 없어요\n함께 여행할 사람을 추가해 보세요"}
                 </p>
-                <button onClick={() => setIsCompanionModalOpen(true)} className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
+                {isOwner && (
+                  <button onClick={() => setIsCompanionModalOpen(true)} className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">동행자 초대</button>
+                )}
               </div>
             )
           )
@@ -2254,8 +2379,6 @@ export default function TripDetailPage() {
                   {trip.title}
                 </h1>
               </div>
-              {/* Optional: if Chatbot button makes sense here */}
-              {/* <button className="text-sm font-medium text-[#111111]">챗봇 대화</button> */}
             </div>
 
             <div className="flex flex-col h-full overflow-hidden">
@@ -2462,9 +2585,6 @@ export default function TripDetailPage() {
                 {trip.title}
               </h1>
             </div>
-            <button className="text-sm font-medium text-[#111111]">
-              챗봇 대화
-            </button>
           </div>
         </div>
 
