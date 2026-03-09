@@ -21,6 +21,8 @@ import {
   removeFavoriteLocation,
   appendFavoriteGroup,
   removeFavoriteGroup,
+  getFavoriteImageList,       // [ADD] 찜한 사진 목록
+  removeFavoriteImage         // [ADD] 찜한 사진 삭제
 } from "../../services/favorite";
 import { getPlaceReviews, modifyPlaceReview, removePlaceReview } from "../../services/review"; // [MOD] 수정/삭제 추가
 import { useCurrentUser } from "../../hooks/useCurrentUser"; // [ADD] 유저 정보 훅
@@ -55,6 +57,7 @@ export default function MyPage() {
   // [ADD] 즐겨찾기 그룹 관리를 위한 상태
   const [favoriteGroups, setFavoriteGroups] = useState([]);
   const [selectedGroupPK, setSelectedGroupPK] = useState(1);
+  const [favoriteImages, setFavoriteImages] = useState([]); // [ADD] 찜한 사진 상태
 
   // [ADD] 실제 리뷰 개수 상태
   const [actualReviewCount, setActualReviewCount] = useState(0);
@@ -219,6 +222,28 @@ export default function MyPage() {
     }
   };
 
+  // [ADD] 즐겨찾기 그룹 목록 통합 조회 및 초기화
+  useEffect(() => {
+    if (isMounted && userId) {
+      const initGroups = async () => {
+        try {
+          const res = await getFavoriteList();
+          if (res.data?.favorite_list?.length > 0) {
+            setFavoriteGroups(res.data.favorite_list);
+            // 만약 현재 선택된 PK가 유효하지 않다면 첫 번째 그룹으로 설정
+            const currentValid = res.data.favorite_list.find(g => g.iPK === selectedGroupPK);
+            if (!currentValid) {
+              setSelectedGroupPK(res.data.favorite_list[0].iPK);
+            }
+          }
+        } catch (e) {
+          console.error("그룹 목록 초기화 실패:", e);
+        }
+      };
+      initGroups();
+    }
+  }, [isMounted, userId, selectedGroupPK]);
+
   useEffect(() => {
     if (activeTab === "장소") {
       const fetchSavedPlaces = async () => {
@@ -233,18 +258,7 @@ export default function MyPage() {
           let apiData = [];
           let fetchSuccess = false;
           try {
-            let favoriteId = 1;
-            try {
-              const favListRes = await getFavoriteList();
-              if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
-                // [MOD] favoriteGroups 상태 업데이트
-                setFavoriteGroups(favListRes.data.favorite_list);
-                // 이미 선택된 그룹 유지 로직
-                const found = favListRes.data.favorite_list.find(g => g.iPK === selectedGroupPK);
-                favoriteId = found ? selectedGroupPK : favListRes.data.favorite_list[0].iPK;
-                if (favoriteId !== selectedGroupPK) setSelectedGroupPK(favoriteId);
-              }
-            } catch (e) { /* ignore */ }
+            const favoriteId = selectedGroupPK;
 
             const response = await getFavoriteLocationList(favoriteId);
             if (response.data && response.data.location_list) {
@@ -328,7 +342,69 @@ export default function MyPage() {
     }
   }, [activeTab, sortBy, selectedGroupPK]);
 
+  // [ADD] "사진" 탭 활성화 시 즐겨찾기 사진 로드
+  const fetchFavoriteImages = async () => {
+    setIsLoading(true);
+    try {
+      const response = await getFavoriteImageList(selectedGroupPK); // 1번 그룹(혹은 현재 선택 그룹)
+      if (response.data && response.data.image_list) {
+        const rawData = Array.isArray(response.data.image_list)
+          ? response.data.image_list
+          : [response.data.image_list];
+
+        const formattedImages = rawData.map(item => {
+          let src = item.image?.strFile || item.image?.strImageFile || item.strFile || item.strImageFile || "";
+          // src 정제 (Proxy 혹은 Base URL 적용 등)
+          const imageBase = process.env.NEXT_PUBLIC_IMAGE_BASE_URL || "/proxy/";
+          if (src && !src.startsWith("http") && !src.startsWith("/")) {
+            src = imageBase + (imageBase.endsWith("/") ? "" : "/") + src;
+          } else if (src && src.startsWith("/proxy/")) {
+            src = src.replace("/proxy/", imageBase + (imageBase.endsWith("/") ? "" : "/"));
+          }
+
+          return {
+            id: item.iPK,                     // favorite_image_pk
+            iImagePK: item.iImageFK,          // 원본 image pk
+            src: src || "/icons/camera.svg",
+            ...item,
+            dtFavorite: item.dtFavorite
+          }
+        });
+
+        // 최신순 (최근 찜한 순)
+        formattedImages.sort((a, b) => new Date(b.dtFavorite || 0) - new Date(a.dtFavorite || 0));
+        setFavoriteImages(formattedImages);
+      } else {
+        setFavoriteImages([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch favorite images", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "사진") {
+      fetchFavoriteImages();
+    }
+  }, [activeTab, selectedGroupPK]);
+
+  // [ADD] 즐겨찾기 사진 해제 (하트 클릭)
+  const handleRemoveFavoriteImage = async (e, iFavoriteImagePK, photoId) => {
+    e.stopPropagation();
+    if (!window.confirm("찜한 사진을 해제하시겠습니까?")) return;
+    try {
+      await removeFavoriteImage(iFavoriteImagePK);
+      setFavoriteImages(prev => prev.filter(img => img.id !== photoId));
+    } catch (e) {
+      console.error("Failed to remove favorite image", e);
+      alert("해제에 실패했습니다.");
+    }
+  };
+
   // [ADD] 즐겨찾기 그룹 관리 핸들러
+
   const handleCreateGroup = async () => {
     const groupName = window.prompt("새로 생성할 즐겨찾기 그룹 이름을 입력하세요.");
     if (!groupName || groupName.trim() === "") return;
@@ -371,8 +447,6 @@ export default function MyPage() {
       alert("그룹 삭제에 실패했습니다.");
     }
   };
-
-  const savedPhotos = [{ id: 6, src: "/images/trip-photo-3.png" }];
 
   // [MOD] 카테고리 필터링 적용 (strGroupCode 기준)
   const filteredPlaces = useMemo(() => {
@@ -970,31 +1044,47 @@ export default function MyPage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-2 lg:gap-3">
-                  {savedPhotos.map((photo) => (
-                    <div
-                      key={photo.id}
-                      className="relative aspect-square rounded-xl overflow-hidden group"
-                    >
-                      <Image
-                        src={photo.src}
-                        alt="saved-photo"
-                        fill
-                        className="object-cover group-hover:scale-110 transition-transform"
-                      />
+                <div className="flex flex-col gap-2">
+
+                  {isLoading ? (
+                    <div className="flex justify-center py-20">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7a28fa]" />
                     </div>
-                  ))}
-                  {savedPhotos.length === 0 && (
-                    <div className="col-span-3 md:col-span-4 flex flex-col items-center justify-center py-20 px-5 text-center bg-white rounded-2xl border border-[#eceff4]">
-                      <div className="w-16 h-16 bg-[#F2F4F6] rounded-full flex items-center justify-center mb-4">
-                        <Image src="/icons/profile.svg" alt="profile" width={24} height={24} className="grayscale opacity-20" />
-                      </div>
-                      <p className="text-[#898F97] text-[16px] font-medium mb-1">
-                        아직 찜한 사진이 없습니다
-                      </p>
-                      <p className="text-[#ABB1B9] text-[14px]">
-                        가고 싶은 여행지의 사진을 찜해보세요!
-                      </p>
+                  ) : (
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2 lg:gap-3">
+                      {favoriteImages.map((photo) => (
+                        <div
+                          key={photo.id}
+                          className="relative aspect-square rounded-xl overflow-hidden group bg-[#f2f4f6]"
+                        >
+                          <Image
+                            src={photo.src}
+                            alt="saved-photo"
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform"
+                          />
+                          {/* [ADD] 찜 해제 하트 버튼 (상태 유지: 빨간색 채워짐) */}
+                          <button
+                            onClick={(e) => handleRemoveFavoriteImage(e, photo.id, photo.id)}
+                            className="absolute bottom-1 left-1 p-1.5 hover:bg-black/10 rounded-full transition-all z-10"
+                          >
+                            <Heart size={18} fill="#ff3b3b" color="#ff3b3b" strokeWidth={0} />
+                          </button>
+                        </div>
+                      ))}
+                      {favoriteImages.length === 0 && (
+                        <div className="col-span-3 md:col-span-4 flex flex-col items-center justify-center py-20 px-5 text-center bg-white rounded-2xl border border-[#eceff4]">
+                          <div className="w-16 h-16 bg-[#F2F4F6] rounded-full flex items-center justify-center mb-4">
+                            <Image src="/icons/profile.svg" alt="profile" width={24} height={24} className="grayscale opacity-20" />
+                          </div>
+                          <p className="text-[#898F97] text-[16px] font-medium mb-1">
+                            아직 찜한 사진이 없습니다
+                          </p>
+                          <p className="text-[#ABB1B9] text-[14px]">
+                            가고 싶은 여행지의 사진을 찜해보세요!
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

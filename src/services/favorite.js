@@ -48,3 +48,30 @@ export const appendFavoriteGroup = (payload) =>
  */
 export const removeFavoriteGroup = (iFavoritePK) =>
     api.post("/favorite/remove", null, { params: { iFavoritePK } });
+
+/**
+ * [ADD] 즐겨찾기에 등록된 이미지 목록 조회
+ * @param {number} iFavoritePK - 즐겨찾기 그룹 PK
+ */
+export const getFavoriteImageList = (iFavoritePK) =>
+    api.get("/favorite/image/list", { params: { iFavoritePK } });
+
+/**
+ * [ADD] 이미지를 즐겨찾기에 추가
+ * @param {Object} payload 
+ * @param {number} payload.iFavoriteFK - 즐겨찾기 그룹 PK
+ * @param {number} payload.iImageFK - 추가할 이미지의 DB PK
+ */
+export const appendFavoriteImage = (payload) => {
+    const now = new Date();
+    const dtFavorite = payload.dtFavorite ||
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    return api.post("/favorite/image/append", { ...payload, dtFavorite });
+};
+
+/**
+ * [ADD] 즐겨찾기에서 이미지 삭제
+ * @param {number} iFavoriteImagePK - 즐겨찾기-이미지 매핑 테이블 PK
+ */
+export const removeFavoriteImage = (iFavoriteImagePK) =>
+    api.post("/favorite/image/remove", null, { params: { iFavoriteImagePK } });

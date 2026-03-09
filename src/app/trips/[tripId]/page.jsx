@@ -22,8 +22,10 @@ import {
   X,
   Camera,
   Image as ImageIcon,
-  CheckSquare
-} from "lucide-react"; // [ADD] 휴지통 아이콘 추가
+  CheckSquare,
+  Heart // [ADD] 찜하기 하트 아이콘
+} from "lucide-react";
+// [ADD] 휴지통 아이콘 추가
 import {
   removeScheduleLocation, modifyScheduleLocation,
   removeScheduleExpense, modifyScheduleExpense, addScheduleExpense, // [ADD] addScheduleExpense 추가
@@ -31,9 +33,14 @@ import {
   addScheduleUser, removeScheduleUser, getScheduleUsers, // [ADD] 동행자 API 추가
   addScheduleImage, getScheduleImages, removeScheduleImage // [MOD] removeScheduleImage 추가
 } from "../../../services/schedule";
-import { searchUserByName } from "../../../services/auth"; // [ADD] 사용자 검색 API
-import { useCurrentUser } from "../../../hooks/useCurrentUser"; // [ADD] 공통 유저 훅
-import { ChevronDown, ChevronUp } from "lucide-react"; // [ADD] 아코디언용 아이콘
+import { searchUserByName } from "../../../services/auth";
+import { useCurrentUser } from "../../../hooks/useCurrentUser";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import {
+  getFavoriteImageList,
+  appendFavoriteImage,
+  removeFavoriteImage
+} from "../../../services/favorite"; // [ADD] 즐겨찾기 사진 관련 서비스 함수 임포트
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -147,6 +154,9 @@ export default function TripDetailPage() {
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState(null);
   const [selectedPlaceDetail, setSelectedPlaceDetail] = useState(null); // [ADD] 좌측 장소 상세(리뷰) 패널 상태
 
+  // [ADD] 찜한 사진 관리를 위한 상태
+  const [favoriteImages, setFavoriteImages] = useState([]);
+
   // [ADD] 준비물 관련 상태
   const [isAddingPreparation, setIsAddingPreparation] = useState(false);
   const [newPreparationName, setNewPreparationName] = useState("");
@@ -202,8 +212,20 @@ export default function TripDetailPage() {
     try {
       const { getScheduleList, getScheduleLocations, getScheduleExpenses, getScheduleUsers, getSchedulePreparations, getScheduleImages } = await import("../../../services/schedule");
 
-      // 1) 기본 정보와 4가지 상세 정보를 병렬로 호출합니다.
-      const [resA, resB, resC, locationRes, expenseRes, userRes, prepRes, imageRes] = await Promise.all([
+      // [ADD] 즐겨찾기 그룹 목록을 먼저 조회하여 기본 그룹 PK를 가져옵니다.
+      let defaultFavoritePK = 1;
+      try {
+        const { getFavoriteList } = await import("../../../services/favorite");
+        const favListRes = await getFavoriteList();
+        if (favListRes.data?.favorite_list?.length > 0) {
+          defaultFavoritePK = favListRes.data.favorite_list[0].iPK;
+        }
+      } catch (e) {
+        console.error("즐겨찾기 그룹 조회 실패, 기본값 1 사용", e);
+      }
+
+      // 1) 기본 정보와 상세 정보를 병렬로 호출합니다.
+      const [resA, resB, resC, locationRes, expenseRes, userRes, prepRes, imageRes, favoriteImageRes] = await Promise.all([
         getScheduleList("a"),
         getScheduleList("b"),
         getScheduleList("c"),
@@ -211,7 +233,8 @@ export default function TripDetailPage() {
         getScheduleExpenses(tripId).catch(() => null),
         getScheduleUsers(tripId).catch(() => null),
         getSchedulePreparations(tripId).catch(() => null), // [ADD] 준비물 데이터 로드
-        getScheduleImages(tripId).catch(() => null) // [ADD] 일정 이미지 데이터 로드
+        getScheduleImages(tripId).catch(() => null), // [ADD] 일정 이미지 데이터 로드
+        getFavoriteImageList(defaultFavoritePK).catch(() => null) // [MOD] 하드코딩된 1 대신 동적 PK 사용
       ]);
 
       const allTrips = [
@@ -266,6 +289,18 @@ export default function TripDetailPage() {
             const iList = typeof imageRes.image_list === "string"
               ? JSON.parse(imageRes.image_list.replace(/'/g, '"'))
               : (Array.isArray(imageRes.image_list) ? imageRes.image_list : []);
+
+            // [ADD] 찜한 사진 목록 파싱
+            let favoriteImagesMap = new Map();
+            if (favoriteImageRes?.data?.image_list) {
+              const favList = Array.isArray(favoriteImageRes.data.image_list) ? favoriteImageRes.data.image_list :
+                (typeof favoriteImageRes.data.image_list === "string" ? JSON.parse(favoriteImageRes.data.image_list.replace(/'/g, '"')) : []);
+
+              favList.forEach(fav => {
+                // imagePK 기준 매핑 (추적 용이하게)
+                favoriteImagesMap.set(fav.iImageFK, fav.iPK);
+              });
+            }
 
             iList.forEach(imgItem => {
               const locFK = imgItem.iLocationFK;
@@ -346,7 +381,9 @@ export default function TripDetailPage() {
                   uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
                   latitude: imgLat,
                   longitude: imgLng,
-                  isExtra: true
+                  isExtra: true,
+                  isFavorite: favoriteImagesMap.has(imgItem.iImageFK || imgItem.image?.iPK),
+                  iFavoriteImagePK: favoriteImagesMap.get(imgItem.iImageFK || imgItem.image?.iPK) || null
                 });
               } else {
                 let record = newDays[targetDayIdx].records.find(r => r.name === groupName);
@@ -374,7 +411,9 @@ export default function TripDetailPage() {
                   uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
                   latitude: imgLat,
                   longitude: imgLng,
-                  dtImage: imgItem.image?.dtImage || imgItem.dtImage // [ADD] 시간순 정렬을 위해 저장
+                  dtImage: imgItem.image?.dtImage || imgItem.dtImage, // [ADD] 시간순 정렬을 위해 저장
+                  isFavorite: favoriteImagesMap.has(imgItem.iImageFK || imgItem.image?.iPK),
+                  iFavoriteImagePK: favoriteImagesMap.get(imgItem.iImageFK || imgItem.image?.iPK) || null
                 });
               }
             });
@@ -1026,7 +1065,7 @@ export default function TripDetailPage() {
 
     // [ADD] 사진 탭일 경우 사진 마커 표시
     if (selectedTab === "사진") {
-      const photosToShow = selectedDay === "기타" 
+      const photosToShow = selectedDay === "기타"
         ? trip.extraRecords?.flatMap(r => r.photos) || []
         : currentDayRecords?.flatMap(r => r.photos) || [];
 
@@ -1071,7 +1110,7 @@ export default function TripDetailPage() {
       // [ADD] 사진 동선(Polyline) 그리기
       // 각 레코드(업로더)별로 사진들을 선으로 연결합니다.
       const recordsToLink = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
-      
+
       // 색상 세트 (업로더별로 다른 색상 부여 가능)
       const pathColors = ["#7a28fa", "#FF5733", "#33FF57", "#3357FF", "#F333FF"];
 
@@ -1216,7 +1255,98 @@ export default function TripDetailPage() {
     }
   };
 
+  // [ADD] 사진 찜하기 토글 핸들러
+  const handleToggleFavoriteImage = async (e, photo) => {
+    e.stopPropagation(); // 클릭 이벤트 버블링 방지 (상세보기 등 방지)
+    try {
+      if (photo.isFavorite) {
+        // 이미 찜한 상태라면 해제
+        if (!photo.iFavoriteImagePK) {
+          console.warn("PK가 없어 삭제 불가능");
+          return;
+        }
+        await removeFavoriteImage(photo.iFavoriteImagePK);
+        // 상태 즉각 반영을 위한 fallback 업데이트
+        setApiTrip(prev => {
+          if (!prev) return prev;
+          const updatedTrip = JSON.parse(JSON.stringify(prev)); // Deep copy
+
+          updatedTrip.days.forEach(day => {
+            day.records.forEach(record => {
+              record.photos.forEach(p => {
+                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
+                  p.isFavorite = false;
+                  p.iFavoriteImagePK = null;
+                }
+              });
+            });
+          });
+          if (updatedTrip.extraRecords) {
+            updatedTrip.extraRecords.forEach(record => {
+              record.photos.forEach(p => {
+                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
+                  p.isFavorite = false;
+                  p.iFavoriteImagePK = null;
+                }
+              });
+            });
+          }
+          return updatedTrip;
+        });
+      } else {
+        // 찜하지 않은 상태라면 추가
+        // [MOD] 사용자의 실제 즐겨찾기 목록을 조회하여 첫 번째 그룹에 추가
+        let favoriteId = 1;
+        try {
+          const favListRes = await getFavoriteList();
+          if (favListRes.data?.favorite_list?.length > 0) {
+            favoriteId = favListRes.data.favorite_list[0].iPK;
+          }
+        } catch (e) { /* fallback 1 */ }
+
+        const payload = {
+          iPK: 0,
+          iFavoriteFK: favoriteId, // [MOD] 하드코딩된 1 대신 동적 PK 사용
+          iImageFK: photo.iImagePK || photo.id
+        };
+        const response = await appendFavoriteImage(payload);
+        const newFavoritePK = response?.data?.iPK;
+
+        setApiTrip(prev => {
+          if (!prev) return prev;
+          const updatedTrip = JSON.parse(JSON.stringify(prev));
+
+          updatedTrip.days.forEach(day => {
+            day.records.forEach(record => {
+              record.photos.forEach(p => {
+                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
+                  p.isFavorite = true;
+                  if (newFavoritePK) p.iFavoriteImagePK = newFavoritePK;
+                }
+              });
+            });
+          });
+          if (updatedTrip.extraRecords) {
+            updatedTrip.extraRecords.forEach(record => {
+              record.photos.forEach(p => {
+                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
+                  p.isFavorite = true;
+                  if (newFavoritePK) p.iFavoriteImagePK = newFavoritePK;
+                }
+              });
+            });
+          }
+          return updatedTrip;
+        });
+      }
+    } catch (error) {
+      console.error("사진 찜하기 토글 실패:", error);
+      alert("찜하기 변경에 실패했습니다.");
+    }
+  };
+
   const handleTouchStart = (e) => {
+
     setIsDragging(true);
     setStartY(e.touches[0].clientY);
     setCurrentY(sheetHeight);
@@ -1670,14 +1800,24 @@ export default function TripDetailPage() {
                               <X size={14} className="text-white" />
                             </button>
                           )}
+
+                          {/* [ADD] 사진 찜하기(하트) 버튼 (좌측 하단) */}
+                          <button
+                            onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                            className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                          >
+                            <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                          </button>
+
                           {photoIdx === 0 && photo.likes && (
-                            <div className="absolute bottom-2 left-2 flex items-center gap-1">
+                            <div className="absolute bottom-2 left-6 ml-2 flex items-center gap-1">
                               <Image
                                 src="/icons/heart-fill.svg"
                                 alt="likes"
                                 width={17}
                                 height={15}
                               />
+
                               <span className="text-[15px] font-medium text-white">
                                 {photo.likes}
                               </span>
@@ -1741,9 +1881,18 @@ export default function TripDetailPage() {
                                 <Trash2 size={16} className="text-white" />
                               </button>
                             )}
+
+                            {/* [ADD] 기타 상세사진 찜하기(하트) 버튼 */}
+                            <button
+                              onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                              className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                            >
+                              <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                            </button>
                           </div>
                         ))}
                       </div>
+
                     </div>
                   ))}
                 </div>
