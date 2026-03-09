@@ -1474,7 +1474,8 @@ export default function TripDetailPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-[2px] overflow-x-auto scrollbar-hide">
+                    {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
+                    <div className="flex flex-wrap gap-2">
                       {record.photos.map((photo, photoIdx) => (
                         <div
                           key={photoIdx}
@@ -1489,10 +1490,7 @@ export default function TripDetailPage() {
                             }}
                             onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
                             className={clsx(
-                              "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity",
-                              photoIdx === 0 && "rounded-l-lg",
-                              photoIdx === record.photos.length - 1 &&
-                              "rounded-r-lg",
+                              "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity rounded-lg",
                             )}
                           />
                           {/* [ADD] 사진 삭제 버튼 */}
@@ -1520,7 +1518,7 @@ export default function TripDetailPage() {
                           )}
                           {photoIdx === record.photos.length - 1 &&
                             photo.moreCount && (
-                              <div className="absolute inset-0 bg-black/50 rounded-r-lg flex items-center justify-center">
+                              <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                                 <span className="text-base font-semibold text-white tracking-[-0.1px]">
                                   +{photo.moreCount}
                                 </span>
@@ -1547,7 +1545,8 @@ export default function TripDetailPage() {
                   {trip.extraRecords.map((record, idx) => (
                     <div key={`extra-${idx}`} className="flex flex-col gap-3">
                       <h4 className="text-sm font-medium text-[#8e8e93] px-1">{record.name}</h4>
-                      <div className="flex gap-[2px] overflow-x-auto scrollbar-hide">
+                      {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
+                      <div className="flex flex-wrap gap-2">
                         {record.photos.map((photo, photoIdx) => (
                           <div key={photoIdx} className="relative w-[110px] h-[110px] flex-shrink-0">
                             <img
@@ -1559,9 +1558,7 @@ export default function TripDetailPage() {
                               }}
                               onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
                               className={clsx(
-                                "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity",
-                                photoIdx === 0 && "rounded-l-lg",
-                                photoIdx === record.photos.length - 1 && "rounded-r-lg",
+                                "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity rounded-lg",
                               )}
                             />
                             {/* [ADD] 기타 기록 사진 삭제 버튼 */}
