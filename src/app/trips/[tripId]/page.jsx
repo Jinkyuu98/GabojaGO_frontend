@@ -373,9 +373,20 @@ export default function TripDetailPage() {
                   iImagePK: imgItem.iImageFK || imgItem.image?.iPK,
                   uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
                   latitude: imgLat,
-                  longitude: imgLng
+                  longitude: imgLng,
+                  dtImage: imgItem.image?.dtImage || imgItem.dtImage // [ADD] 시간순 정렬을 위해 저장
                 });
               }
+            });
+
+            // [ADD] 모든 레코드의 사진들을 시간순(dtImage)으로 정렬
+            newDays.forEach(day => {
+              day.records?.forEach(record => {
+                record.photos.sort((a, b) => (a.dtImage || "").localeCompare(b.dtImage || ""));
+              });
+            });
+            extraRecords.forEach(record => {
+              record.photos.sort((a, b) => (a.dtImage || "").localeCompare(b.dtImage || ""));
             });
           } catch (e) {
             console.error("Image parse error", e);
@@ -745,6 +756,7 @@ export default function TripDetailPage() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
+  const polylinesRef = useRef([]); // [ADD] 사진 동선(Polyline) 관리를 위한 Ref
   // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
   const dayTabsRef = useRef(null);
   const [isMouseDragging, setIsMouseDragging] = useState(false);
@@ -951,6 +963,8 @@ export default function TripDetailPage() {
         clearTimeout(timer);
         markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
         markersRef.current = [];
+        polylinesRef.current.forEach((p) => { try { p.setMap(null); } catch (e) { } }); // [ADD] 폴라인 초기화
+        polylinesRef.current = [];
         mapInstance.current = null;
       };
     }
@@ -958,6 +972,8 @@ export default function TripDetailPage() {
     return () => {
       markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
       markersRef.current = [];
+      polylinesRef.current.forEach((p) => { try { p.setMap(null); } catch (e) { } }); // [ADD] 폴라인 초기화
+      polylinesRef.current = [];
       mapInstance.current = null;
     };
   }, [tripId, trip]); // [MOD] trip 데이터가 로드된 시점에 지도를 확실히 초기화하기 위해 의존성 추가
@@ -968,9 +984,11 @@ export default function TripDetailPage() {
 
     const map = mapInstance.current;
 
-    // 기존 마커 제거
+    // 기존 마커 및 폴라인 제거
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
+    polylinesRef.current.forEach((p) => p.setMap(null));
+    polylinesRef.current = [];
 
     if (currentDayPlaces.length === 0) return;
 
@@ -1025,35 +1043,55 @@ export default function TripDetailPage() {
         const photoPos = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
         bounds.extend(photoPos);
 
-        // [MOD] 문자열 대신 DOM 엘리먼트를 직접 생성하여 이벤트 바인딩 신뢰성 확보
+        // [MOD] 미리보기 썸네일 대신 심플한 점(Dot) 마커 사용 (가독성 개선)
         const container = document.createElement('div');
-        container.className = "photo-marker cursor-pointer transition-transform hover:scale-110 active:scale-95";
-        container.style.width = "44px";
-        container.style.height = "44px";
-        container.style.border = "3px solid white";
-        container.style.borderRadius = "8px";
-        container.style.overflow = "hidden";
-        container.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
-        container.style.background = "white";
+        container.className = "photo-dot-marker cursor-pointer transition-transform hover:scale-125 active:scale-90 shadow-lg";
+        container.style.width = "14px";
+        container.style.height = "14px";
+        container.style.backgroundColor = "#7a28fa";
+        container.style.border = "2px solid white";
+        container.style.borderRadius = "50%";
         container.onclick = (e) => {
           e.stopPropagation();
           setEnlargedImage(photo.src);
         };
 
-        const img = document.createElement('img');
-        img.src = photo.src;
-        img.className = "w-full h-full object-cover";
-        container.appendChild(img);
 
         const photoOverlay = new window.kakao.maps.CustomOverlay({
           position: photoPos,
           content: container,
           yAnchor: 0.5,
-          zIndex: 50
+          zIndex: 60 // [MOD] 동선보다 위로 보이도록 zIndex 조정
         });
 
         photoOverlay.setMap(map);
         markersRef.current.push(photoOverlay);
+      });
+
+      // [ADD] 사진 동선(Polyline) 그리기
+      // 각 레코드(업로더)별로 사진들을 선으로 연결합니다.
+      const recordsToLink = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
+      
+      // 색상 세트 (업로더별로 다른 색상 부여 가능)
+      const pathColors = ["#7a28fa", "#FF5733", "#33FF57", "#3357FF", "#F333FF"];
+
+      recordsToLink.forEach((record, rIdx) => {
+        const pathPoints = record.photos
+          .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
+          .map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
+
+        if (pathPoints.length >= 2) {
+          const polyline = new window.kakao.maps.Polyline({
+            path: pathPoints,
+            strokeWeight: 3,
+            strokeColor: pathColors[rIdx % pathColors.length],
+            strokeOpacity: 0.7,
+            strokeStyle: 'solid'
+          });
+
+          polyline.setMap(map);
+          polylinesRef.current.push(polyline);
+        }
       });
     }
 
