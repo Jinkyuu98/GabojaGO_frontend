@@ -9,10 +9,12 @@ export const searchPlaces = (query) =>
   api.post("/location/search/keyword", { query });
 
 /**
- * 장소 상세 정보 조회
- * (현재 백엔드 명세에는 별도 조회가 없으며 검색 결과에 상세 정보가 포함됨)
+ * 장소 상세 정보 조회 API
+ * @param {number} iLocationPK - 장소 PK
+ * @returns {Promise}
  */
-// export const getPlaceDetail = (id) => api.get(`/places/${id}`);
+export const getLocation = (iLocationPK) =>
+  api.get("/location/get", { params: { iLocationPK } });
 
 /**
  * 장소 등록 API

@@ -2,11 +2,12 @@ import { api } from "../lib/api";
 
 /**
  * 장소 리뷰 목록 조회 API
- * @param {number} iLocationPK - 장소 PK
+ * @param {number} iLocationPK - 장소 PK (0이면 모든 장소)
+ * @param {number} iUserPK - 유저 PK (0이면 모든 유저)
  * @returns {Promise}
  */
-export const getPlaceReviews = async (iLocationPK) => {
-    const res = await api.get(`/location/review/list?iLocationPK=${iLocationPK}`);
+export const getPlaceReviews = async (iLocationPK = 0, iUserPK = 0) => {
+    const res = await api.get(`/location/review/list?iLocationPK=${iLocationPK}&iUserPK=${iUserPK}`);
     return res.data;
 };
 

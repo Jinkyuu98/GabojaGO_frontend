@@ -313,7 +313,7 @@ export default function TripDetailPage() {
 
               // [MOD] 그룹핑 기준을 '장소'에서 '올린 사용자'로 변경
               const uploader = userRes?.user_list?.find(u => (u.iUserFK || u.iPK) === imgItem.image?.iUserFK);
-              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerUserFK ? "방장" : `동행자 ${imgItem.image?.iUserFK}`);
+              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === found.ownerUserFK ? "방장" : `동행자 ${imgItem.image?.iUserFK}`);
               const groupName = uploaderName;
 
               if (isOutOfRange) {

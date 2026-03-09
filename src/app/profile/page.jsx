@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ChevronDown, Heart } from "lucide-react"; // [MOD] Heart 추가
+import { MoreVertical, ChevronDown, Heart, ChevronUp, Trash2 } from "lucide-react"; // [MOD] Trash2 추가
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { Toast } from "../../components/common/Toast"; // [ADD] Toast 임포트
@@ -12,6 +12,7 @@ import {
   getSavedPlaces,
   unregisterPlace,
   registerPlace,
+  getLocation,
 } from "../../services/place";
 import {
   getFavoriteList,
@@ -21,7 +22,7 @@ import {
   appendFavoriteGroup,
   removeFavoriteGroup,
 } from "../../services/favorite";
-import { getPlaceReviews } from "../../services/review"; // [ADD] 실제 리뷰 점수 반영
+import { getPlaceReviews, modifyPlaceReview, removePlaceReview } from "../../services/review"; // [MOD] 수정/삭제 추가
 import { useCurrentUser } from "../../hooks/useCurrentUser"; // [ADD] 유저 정보 훅
 import { useEffect, useRef } from "react";
 import Script from "next/script";
@@ -55,6 +56,18 @@ export default function MyPage() {
   const [favoriteGroups, setFavoriteGroups] = useState([]);
   const [selectedGroupPK, setSelectedGroupPK] = useState(1);
 
+  // [ADD] 실제 리뷰 개수 상태
+  const [actualReviewCount, setActualReviewCount] = useState(0);
+  const [myReviewsGrouped, setMyReviewsGrouped] = useState([]); // [ADD] 장소별 그룹핑된 리뷰
+  const [openAccordions, setOpenAccordions] = useState([]); // [ADD] 아코디언 상태
+  const [isReviewLoading, setIsReviewLoading] = useState(false); // [ADD] 리뷰 로딩 상태
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false); // [ADD] 리뷰 수정 모달 상태
+  const [editingReviewId, setEditingReviewId] = useState(null);
+  const [reviewScore, setReviewScore] = useState(5);
+  const [reviewContent, setReviewContent] = useState("");
+  const [isRevisit, setIsRevisit] = useState(true);
+  const [currentReviewLocId, setCurrentReviewLocId] = useState(null);
+
   // [ADD] Toast 및 되돌리기 기능용 상태
   const [isToastOpen, setIsToastOpen] = useState(false);
   const [toastPlace, setToastPlace] = useState(null);
@@ -65,7 +78,7 @@ export default function MyPage() {
   const modalMapRef = useRef(null);
   const modalMapInstance = useRef(null);
 
-  const { userName } = useCurrentUser(); // [ADD] 실제 로그인 유저 이름 가져오기
+  const { userName, userId } = useCurrentUser(); // [ADD] 실제 로그인 유저 이름 및 ID 가져오기
   const [isMounted, setIsMounted] = useState(false); // [ADD] Hydration 에러 방지용
 
   useEffect(() => {
@@ -74,7 +87,7 @@ export default function MyPage() {
 
   const user = {
     name: (isMounted && userName) ? `${userName}님` : "로그인 필요",
-    reviewCount: savedPlaces.length, // [MOD] 실제 찜한 장소 개수 반영
+    reviewCount: actualReviewCount, // [MOD] 실제 리뷰 개수 반영
     profileImage: "/icons/profile.svg",
   };
 
@@ -86,7 +99,125 @@ export default function MyPage() {
   const tabs = [
     { id: "장소", label: "찜한 장소" },
     { id: "사진", label: "찜한 사진" },
+    { id: "리뷰", label: "나의 리뷰" },
   ];
+
+  // [ADD] 실제 작성한 리뷰 개수 가져오기
+  useEffect(() => {
+    if (isMounted && userId) {
+      const fetchReviewCount = async () => {
+        try {
+          const res = await getPlaceReviews(0, userId);
+          if (res?.review_list) {
+            setActualReviewCount(res.review_list.length);
+          }
+        } catch (e) {
+          console.error("Failed to fetch review count", e);
+        }
+      };
+      fetchReviewCount();
+    }
+  }, [isMounted, userId]);
+
+  // [ADD] 나의 리뷰 페칭 로직을 함수로 분리
+  const fetchMyReviews = async () => {
+    if (!userId) return;
+    setIsReviewLoading(true);
+    try {
+      const res = await getPlaceReviews(0, userId);
+      if (res?.review_list) {
+        const list = typeof res.review_list === "string"
+          ? JSON.parse(res.review_list.replace(/'/g, '"'))
+          : res.review_list;
+
+        const uniqueLocIds = [...new Set(list.map(r => r.iLocationFK))];
+        const locResList = await Promise.allSettled(
+          uniqueLocIds.map(id => getLocation(id))
+        );
+
+        const locMap = {};
+        locResList.forEach((result, idx) => {
+          if (result.status === "fulfilled" && result.value?.data) {
+            locMap[uniqueLocIds[idx]] = result.value.data.strName || "알 수 없는 장소";
+          } else {
+            locMap[uniqueLocIds[idx]] = "정보 없음";
+          }
+        });
+
+        const grouped = {};
+        list.forEach(review => {
+          const locId = review.iLocationFK;
+          const locName = locMap[locId] || "정보 없음";
+          if (!grouped[locId]) {
+            grouped[locId] = { id: locId, name: locName, reviews: [] };
+          }
+          grouped[locId].reviews.push(review);
+        });
+
+        setMyReviewsGrouped(Object.values(grouped));
+        // 리뷰 개수도 최신화
+        setActualReviewCount(list.length);
+      }
+    } catch (e) {
+      console.error("Failed to fetch my reviews", e);
+    } finally {
+      setIsReviewLoading(false);
+    }
+  };
+
+  // [ADD] 나의 리뷰 탭 진입 시 데이터 페칭
+  useEffect(() => {
+    if (activeTab === "리뷰" && userId) {
+      fetchMyReviews();
+    }
+  }, [activeTab, userId]);
+
+  const openModifyReview = (review) => {
+    setEditingReviewId(review.iPK);
+    setReviewScore(review.nScore);
+    setReviewContent(review.strReview);
+    setIsRevisit(review.bRevisit);
+    setCurrentReviewLocId(review.iLocationFK);
+    setIsReviewModalOpen(true);
+  };
+
+  const handleSaveReview = async () => {
+    if (!reviewContent.trim()) {
+      alert("리뷰 내용을 입력해주세요.");
+      return;
+    }
+    try {
+      const payload = {
+        iPK: editingReviewId,
+        iLocationFK: Number(currentReviewLocId),
+        iUserFK: userId,
+        nScore: reviewScore,
+        bRevisit: isRevisit,
+        strReview: reviewContent,
+        dtCreate: new Date().toISOString()
+      };
+
+      await modifyPlaceReview(payload);
+      alert("리뷰가 수정되었습니다.");
+      setIsReviewModalOpen(false);
+      fetchMyReviews();
+    } catch (err) {
+      console.error("리뷰 수정 불가:", err);
+      alert("리뷰 수정에 실패했습니다.");
+    }
+  };
+
+  const handleDeleteReview = async (iPK) => {
+    if (!window.confirm("정말 리뷰를 삭제하시겠습니까?")) return;
+    try {
+      await removePlaceReview(iPK);
+      alert("리뷰가 삭제되었습니다.");
+      fetchMyReviews();
+    } catch (err) {
+      console.error("리뷰 삭제 실패:", err);
+      alert("리뷰 삭제에 실패했습니다.");
+    }
+  };
 
   useEffect(() => {
     if (activeTab === "장소") {
@@ -140,7 +271,7 @@ export default function MyPage() {
 
               // [ADD] 장소별 실제 리뷰 점수를 병렬로 조회하여 반영
               const reviewResults = await Promise.allSettled(
-                apiData.map((place) => getPlaceReviews(Number(place.id)))
+                apiData.map((place) => getPlaceReviews(Number(place.id), 0))
               );
               apiData = apiData.map((place, idx) => {
                 const result = reviewResults[idx];
@@ -447,17 +578,7 @@ export default function MyPage() {
                     <h1 className="text-[20px] font-semibold text-[#111111] tracking-[-0.5px] lg:text-[24px]">
                       {user.name}
                     </h1>
-                    <div className="flex items-center gap-1 cursor-pointer group">
-                      <span className="text-[14px] font-regular text-[#556574] group-hover:text-[#7a28fa] transition-colors lg:text-[16px]">
-                        내 리뷰 {user.reviewCount}개
-                      </span>
-                      <Image
-                        src="/icons/arrow-right.svg"
-                        alt="arrow-right"
-                        width={16}
-                        height={16}
-                      />
-                    </div>
+
                   </div>
                 </div>
               </div>
@@ -755,6 +876,99 @@ export default function MyPage() {
                     )}
                   </div>
                 </div>
+              ) : activeTab === "리뷰" ? (
+                <div className="flex flex-col gap-4">
+                  {isReviewLoading ? (
+                    <div className="flex justify-center py-20">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7a28fa]" />
+                    </div>
+                  ) : myReviewsGrouped.length > 0 ? (
+                    myReviewsGrouped.map((group) => {
+                      const isOpen = openAccordions.includes(group.id);
+                      return (
+                        <div key={group.id} className="bg-white rounded-2xl border border-[#eceff4] overflow-hidden">
+                          <button
+                            onClick={() => {
+                              setOpenAccordions(prev =>
+                                prev.includes(group.id)
+                                  ? prev.filter(id => id !== group.id)
+                                  : [...prev, group.id]
+                              );
+                            }}
+                            className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-[#f2f4f6] rounded-lg flex items-center justify-center">
+                                <Image src="/icons/location.svg" alt="location" width={16} height={16} />
+                              </div>
+                              <span className="text-[16px] font-bold text-[#111]">{group.name}</span>
+                              <span className="text-[14px] font-medium text-[#abb1b9]">{group.reviews.length}</span>
+                            </div>
+                            {isOpen ? <ChevronUp size={20} className="text-[#abb1b9] transition-transform" /> : <ChevronDown size={20} className="text-[#abb1b9] transition-transform" />}
+                          </button>
+
+                          {isOpen && (
+                            <div className="px-5 pb-4 flex flex-col gap-4 border-t border-[#f2f4f6] pt-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                              {group.reviews.map((review, idx) => (
+                                <div key={review.iPK || idx} className="flex flex-col gap-2 bg-[#f9f9fb] p-3 rounded-xl">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="flex text-[#7a28fa] text-[12px]">
+                                        {"★".repeat(review.nScore)}{"☆".repeat(5 - review.nScore)}
+                                      </div>
+                                      <p className="text-[14px] text-[#555] leading-relaxed">
+                                        {review.strReview}
+                                      </p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-2">
+                                      <span className="text-[12px] text-[#abb1b9]">
+                                        {(review.dtCreate || "").split(" ")[0].replace(/-/g, ".")}
+                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => openModifyReview(review)}
+                                          className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                                        >
+                                          <div
+                                            className="w-[14px] h-[14px] bg-[#7a28fa] opacity-60"
+                                            style={{
+                                              WebkitMaskImage: "url('/icons/edit.svg')",
+                                              maskImage: "url('/icons/edit.svg')",
+                                              WebkitMaskSize: "contain",
+                                              maskSize: "contain",
+                                              WebkitMaskRepeat: "no-repeat",
+                                              maskRepeat: "no-repeat",
+                                              WebkitMaskPosition: "center",
+                                              maskPosition: "center",
+                                            }}
+                                          />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteReview(review.iPK)}
+                                          className="p-1.5 hover:bg-red-50 text-[#abb1b9] hover:text-[#ff3b3b] rounded-md transition-colors"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-20 px-5 text-center bg-white rounded-2xl border border-[#eceff4]">
+                      <div className="w-16 h-16 bg-[#F2F4F6] rounded-full flex items-center justify-center mb-4">
+                        <Image src="/icons/profile.svg" alt="profile" width={24} height={24} className="grayscale opacity-20" />
+                      </div>
+                      <p className="text-[#898F97] text-[16px] font-medium mb-1">작성한 리뷰가 없습니다</p>
+                      <p className="text-[#ABB1B9] text-[14px]">방문하신 장소에 대한 소중한 리뷰를 남겨보세요!</p>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="grid grid-cols-3 md:grid-cols-4 gap-2 lg:gap-3">
                   {savedPhotos.map((photo) => (
@@ -771,9 +985,15 @@ export default function MyPage() {
                     </div>
                   ))}
                   {savedPhotos.length === 0 && (
-                    <div className="col-span-3 flex flex-col items-center justify-center py-20 text-[#abb1b9]">
-                      <p className="text-[16px] font-medium">
-                        찜한 사진이 없습니다.
+                    <div className="col-span-3 md:col-span-4 flex flex-col items-center justify-center py-20 px-5 text-center bg-white rounded-2xl border border-[#eceff4]">
+                      <div className="w-16 h-16 bg-[#F2F4F6] rounded-full flex items-center justify-center mb-4">
+                        <Image src="/icons/profile.svg" alt="profile" width={24} height={24} className="grayscale opacity-20" />
+                      </div>
+                      <p className="text-[#898F97] text-[16px] font-medium mb-1">
+                        아직 찜한 사진이 없습니다
+                      </p>
+                      <p className="text-[#ABB1B9] text-[14px]">
+                        가고 싶은 여행지의 사진을 찜해보세요!
                       </p>
                     </div>
                   )}
@@ -783,7 +1003,6 @@ export default function MyPage() {
           </div>
         </div>
 
-        {/* [ADD] 찜 해제 알림 Toast */}
         <Toast
           isVisible={isToastOpen}
           onClose={() => setIsToastOpen(false)}
@@ -791,62 +1010,123 @@ export default function MyPage() {
           position="bottom"
         />
 
-        {/* Bottom Navigation */}
         <BottomNavigation />
       </div>
 
-      {/* [ADD] PC 전용 상세 정보 모달 */}
-      {selectedPlaceForModal && (
-        <div className="hidden lg:flex fixed inset-0 z-[100] items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-[600px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
-            {/* Modal Header */}
-            <div className="p-8 pb-4 flex flex-col gap-2">
-              <div className="flex flex-col gap-1.5 items-start">
-                <span className="text-[13px] font-bold text-[#7a28fa] bg-[#f8f6ff] px-3 py-1 rounded-full">
-                  {selectedPlaceForModal.category}
-                </span>
-                <h2 className="text-[28px] font-bold text-[#111111] tracking-tight">
-                  {selectedPlaceForModal.name}
-                </h2>
+      {/* [ADD] 리뷰 수정 모달 */}
+      {isReviewModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm bg-white rounded-xl p-5 shadow-lg relative">
+            <h3 className="text-[17px] font-bold text-[#111] mb-5">리뷰 수정</h3>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-[14px] font-semibold text-[#111] mb-2 block">별점</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setReviewScore(s)}
+                      className={clsx("text-2xl", reviewScore >= s ? "text-[#7a28fa]" : "text-gray-200")}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="text-[16px] text-[#6d818f]">
-                {selectedPlaceForModal.address}
-              </p>
+              <div>
+                <label className="flex items-center gap-2 text-[14px] font-semibold text-[#111] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isRevisit}
+                    onChange={(e) => setIsRevisit(e.target.checked)}
+                    className="accent-[#7a28fa] w-4 h-4"
+                  />
+                  다음에 또 방문할래요
+                </label>
+              </div>
+              <div>
+                <label className="text-[14px] font-semibold text-[#111] mb-2 block">리뷰 내용</label>
+                <textarea
+                  value={reviewContent}
+                  onChange={(e) => setReviewContent(e.target.value)}
+                  placeholder="방문 경험을 들려주세요 (최대 1000자)"
+                  className="w-full h-32 border border-gray-200 rounded-lg p-3 text-[14px] resize-none focus:outline-none focus:border-[#7a28fa]"
+                  maxLength={1000}
+                />
+              </div>
             </div>
-
-            {/* Map Area */}
-            <div className="flex-1 min-h-[300px] relative">
-              <div
-                ref={modalMapRef}
-                className="absolute inset-0 w-full h-full"
-              />
-              <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_0px_40px_rgba(0,0,0,0.05)]" />
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-8 flex items-center justify-between bg-[#fbfbfc]">
+            <div className="flex gap-2 mt-6">
               <button
-                onClick={() => {
-                  localStorage.setItem(
-                    `place_${selectedPlaceForModal.id}`,
-                    JSON.stringify(selectedPlaceForModal),
-                  );
-                  router.push(`/search?select=${selectedPlaceForModal.id}`);
-                }}
-                className="h-[56px] px-8 bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
+                onClick={() => setIsReviewModalOpen(false)}
+                className="flex-1 py-3.5 bg-gray-100 text-[#555] font-semibold rounded-lg hover:bg-gray-200"
               >
-                상세보기
+                취소
               </button>
               <button
-                onClick={() => setSelectedPlaceForModal(null)}
-                className="h-[56px] px-8 border border-[#eceff4] bg-white text-[#6d818f] rounded-2xl text-[16px] font-bold hover:bg-gray-50 active:scale-95 transition-all"
+                onClick={handleSaveReview}
+                className="flex-1 py-3.5 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
               >
-                닫기
+                저장
               </button>
             </div>
           </div>
         </div>
       )}
-    </MobileContainer>
+
+      {/* [ADD] PC 전용 상세 정보 모달 */}
+      {
+        selectedPlaceForModal && (
+          <div className="hidden lg:flex fixed inset-0 z-[100] items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-[600px] rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+              {/* Modal Header */}
+              <div className="p-8 pb-4 flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5 items-start">
+                  <span className="text-[13px] font-bold text-[#7a28fa] bg-[#f8f6ff] px-3 py-1 rounded-full">
+                    {selectedPlaceForModal.category}
+                  </span>
+                  <h2 className="text-[28px] font-bold text-[#111111] tracking-tight">
+                    {selectedPlaceForModal.name}
+                  </h2>
+                </div>
+                <p className="text-[16px] text-[#6d818f]">
+                  {selectedPlaceForModal.address}
+                </p>
+              </div>
+
+              {/* Map Area */}
+              <div className="flex-1 min-h-[300px] relative">
+                <div
+                  ref={modalMapRef}
+                  className="absolute inset-0 w-full h-full"
+                />
+                <div className="absolute inset-0 pointer-events-none shadow-[inset_0px_0px_40px_rgba(0,0,0,0.05)]" />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-8 flex items-center justify-between bg-[#fbfbfc]">
+                <button
+                  onClick={() => {
+                    localStorage.setItem(
+                      `place_${selectedPlaceForModal.id}`,
+                      JSON.stringify(selectedPlaceForModal),
+                    );
+                    router.push(`/search?select=${selectedPlaceForModal.id}`);
+                  }}
+                  className="h-[56px] px-8 bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
+                >
+                  상세보기
+                </button>
+                <button
+                  onClick={() => setSelectedPlaceForModal(null)}
+                  className="h-[56px] px-8 border border-[#eceff4] bg-white text-[#6d818f] rounded-2xl text-[16px] font-bold hover:bg-gray-50 active:scale-95 transition-all"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+    </MobileContainer >
   );
 }
