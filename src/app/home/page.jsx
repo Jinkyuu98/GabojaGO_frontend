@@ -245,18 +245,7 @@ export default function HomePage() {
                     )}>
                       {index + 1}
                     </span>
-                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-[22px] overflow-hidden relative bg-[#f5f5f5] flex-shrink-0 shadow-sm flex items-center justify-center">
-                      {(item.strFile || item.first_image) ? (
-                        <Image
-                          src={item.strFile || item.first_image}
-                          alt={item.strName}
-                          fill
-                          className="object-cover group-hover:scale-110 transition-transform"
-                        />
-                      ) : (
-                        <Filter className="text-gray-300" size={24} />
-                      )}
-                    </div>
+                    {/* [DEL] 이미지 영역 삭제 */}
                     <div className="flex flex-col flex-1 min-w-0">
                       <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-2">
                         {item.strName || item.place_name}
@@ -335,7 +324,7 @@ export default function HomePage() {
                       <div className="flex flex-col gap-3 mb-6">
                         <div className="flex justify-between items-center">
                           <span className="text-[16px] font-medium text-[#556574]">
-                            남은 예산 (임시)
+                            남은 예산
                           </span>
                           <span className="text-[16px] text-[#556574]">
                             <span className="font-bold text-[#111]">
@@ -413,21 +402,7 @@ export default function HomePage() {
                       )}>
                         {index + 1}
                       </span>
-                      <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl overflow-hidden relative bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
-                        {(item.strFile || item.first_image) ? (
-                          <Image
-                            src={item.strFile || item.first_image}
-                            alt={item.strName}
-                            fill
-                            className="object-cover group-hover:scale-110 transition-transform"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <Filter className="text-gray-200" size={20} />
-                        )}
-                      </div>
+                      {/* [DEL] 이미지 영역 삭제 */}
                       <div className="flex flex-col flex-1 min-w-0">
                         <h3 className="text-[16px] lg:text-[17px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
                           {item.strName || item.place_name}
