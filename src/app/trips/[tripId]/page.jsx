@@ -250,7 +250,7 @@ export default function TripDetailPage() {
                 return; // 경로 없으면 표시하지 않음
               }
 
-              const imageDateStr = imgItem.image?.dtCreate || imgItem.dtCreate;
+              const imageDateStr = imgItem.image?.dtImage || imgItem.dtImage;
 
               let targetDayIdx = 0;
               if (locFK > 0 && locationRes?.location_list) {
@@ -903,7 +903,7 @@ export default function TripDetailPage() {
       markersRef.current = [];
       mapInstance.current = null;
     };
-  }, [tripId]);
+  }, [tripId, trip]); // [MOD] trip 데이터가 로드된 시점에 지도를 확실히 초기화하기 위해 의존성 추가
 
   useEffect(() => {
     // [MOD] mapInstance뿐 아니라 isMapLoaded 상태도 의존성으로 추가하여 로드 즉시 재실행 보장
