@@ -1430,11 +1430,14 @@ export default function TripDetailPage() {
         {
           selectedTab === "사진" && (
             <div className="flex flex-col gap-5">
-              {(currentDayRecords.length > 0 || trip.extraRecords?.length > 0) && (
+              {/* [MOD] 선택된 탭이 '기타'인지 일반 일차인지에 따라 렌더링 조건 분기 */}
+              {((selectedDay !== "기타" && currentDayRecords.length > 0) || (selectedDay === "기타" && trip.extraRecords?.length > 0)) && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-[#111111]">
-                    {currentDayRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0) +
-                      (trip.extraRecords?.reduce((sum, r) => sum + (r.photos?.length || 0), 0) || 0)}개의 사진
+                    {selectedDay === "기타"
+                      ? (trip.extraRecords?.reduce((sum, r) => sum + (r.photos?.length || 0), 0) || 0) + "개의 사진"
+                      : currentDayRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0) + "개의 사진"
+                    }
                   </span>
                   <span
                     className="text-sm font-semibold text-[#7a28fa] cursor-pointer"
@@ -1445,7 +1448,7 @@ export default function TripDetailPage() {
                 </div>
               )}
 
-              {currentDayRecords.length > 0 && (
+              {selectedDay !== "기타" && currentDayRecords.length > 0 && (
                 currentDayRecords.map((record, idx) => (
                   <div key={idx} className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-5">
@@ -1528,9 +1531,9 @@ export default function TripDetailPage() {
                 ))
               )}
 
-              {/* [ADD] 여행 기간 외 사진(기타 기록) 표시 */}
-              {trip.extraRecords?.length > 0 && (
-                <div className="flex flex-col gap-5 mt-4 pt-8 border-t border-dashed border-gray-200">
+              {/* [MOD] 여행 기간 외 사진(기타 기록) 표시 - '기타' 탭 선택 시에만 표시되도록 수정 */}
+              {selectedDay === "기타" && trip.extraRecords?.length > 0 && (
+                <div className="flex flex-col gap-5 mt-4">
                   <div className="flex items-center gap-3">
                     <div className="w-6 h-6 rounded-full bg-[#8e8e93] text-white text-sm font-bold flex items-center justify-center">
                       !
@@ -1576,9 +1579,12 @@ export default function TripDetailPage() {
                 </div>
               )}
 
-              {currentDayRecords.length === 0 && (!trip.extraRecords || trip.extraRecords.length === 0) && (
+              {/* [MOD] 빈 화면 메시지 처리 분기 */}
+              {((selectedDay !== "기타" && currentDayRecords.length === 0) || (selectedDay === "기타" && (!trip.extraRecords || trip.extraRecords.length === 0))) && (
                 <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-                  <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
+                  <p className="text-[16px] font-semibold text-[#111111] mb-2">
+                    {selectedDay === "기타" ? "기타 기록" : getActualDateText(selectedDay)}
+                  </p>
                   <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
                     {"사진으로 여행 이야기를 채워보세요"}
                   </p>
@@ -2259,7 +2265,10 @@ export default function TripDetailPage() {
                   {tabs.map((tab) => (
                     <button
                       key={tab}
-                      onClick={() => setSelectedTab(tab)}
+                      onClick={() => {
+                        setSelectedTab(tab);
+                        if (selectedDay === "기타") setSelectedDay(1);
+                      }}
                       className={clsx(
                         "text-[15px] font-semibold tracking-[-0.3px] py-4 transition-all relative lg:text-[16px]",
                         selectedTab === tab ? "text-[#111111]" : "text-[#898989]",
@@ -2299,20 +2308,24 @@ export default function TripDetailPage() {
                       isMouseDragging ? "cursor-grabbing" : "cursor-pointer"
                     )}
                   >
-                    {days.map((day, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setSelectedDay(index + 1)}
-                        className={clsx(
-                          "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border shrink-0",
-                          selectedDay === index + 1
-                            ? "bg-[#111111] text-white border-[#111111] font-semibold"
-                            : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
-                        )}
-                      >
-                        {day}
-                      </button>
-                    ))}
+                    {/* [MOD] 사진 탭일 경우 '기타' 탭 추가 */}
+                    {(selectedTab === "사진" ? [...days, "기타"] : days).map((day, index) => {
+                      const tabValue = day === "기타" ? "기타" : index + 1;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => setSelectedDay(tabValue)}
+                          className={clsx(
+                            "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border shrink-0",
+                            selectedDay === tabValue
+                              ? "bg-[#111111] text-white border-[#111111] font-semibold"
+                              : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
+                          )}
+                        >
+                          {day}
+                        </button>
+                      )
+                    })}
                   </div>
 
                   {/* [ADD] 우측 화살표 */}
@@ -2481,7 +2494,10 @@ export default function TripDetailPage() {
                 {tabs.map((tab) => (
                   <button
                     key={tab}
-                    onClick={() => setSelectedTab(tab)}
+                    onClick={() => {
+                      setSelectedTab(tab);
+                      if (selectedDay === "기타") setSelectedDay(1);
+                    }}
                     className={clsx(
                       "text-[15px] font-semibold tracking-[-0.3px] py-3 transition-all relative",
                       selectedTab === tab ? "text-[#111111]" : "text-[#898989]",
@@ -2500,20 +2516,24 @@ export default function TripDetailPage() {
           {/* Mobile Day Tabs - Visible only on specific tabs */}
           {["일정", "사진"].includes(selectedTab) && (
             <div className="px-5 pt-4 pb-3 flex gap-1 overflow-x-auto scrollbar-hide">
-              {days.map((day, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDay(index + 1)}
-                  className={clsx(
-                    "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border",
-                    selectedDay === index + 1
-                      ? "bg-[#111111] text-white border-[#111111] font-semibold"
-                      : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
-                  )}
-                >
-                  {day}
-                </button>
-              ))}
+              {/* [MOD] 사진 탭일 경우 '기타' 탭 추가 (모바일) */}
+              {(selectedTab === "사진" ? [...days, "기타"] : days).map((day, index) => {
+                const tabValue = day === "기타" ? "기타" : index + 1;
+                return (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedDay(tabValue)}
+                    className={clsx(
+                      "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border",
+                      selectedDay === tabValue
+                        ? "bg-[#111111] text-white border-[#111111] font-semibold"
+                        : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
+                    )}
+                  >
+                    {day}
+                  </button>
+                )
+              })}
             </div>
           )}
 
