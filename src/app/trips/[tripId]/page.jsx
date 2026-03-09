@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Script from "next/script";
@@ -29,16 +29,16 @@ import {
   removeScheduleExpense, modifyScheduleExpense, addScheduleExpense, // [ADD] addScheduleExpense 추가
   getSchedulePreparations, addSchedulePreparation, modifySchedulePreparation, removeSchedulePreparation,
   addScheduleUser, removeScheduleUser, getScheduleUsers, // [ADD] 동행자 API 추가
-  addScheduleImage // [ADD] 클라우드플레어 업로드 위임 신규 함수
+  addScheduleImage, getScheduleImages, removeScheduleImage // [MOD] removeScheduleImage 추가
 } from "../../../services/schedule";
 import { searchUserByName } from "../../../services/auth"; // [ADD] 사용자 검색 API
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
-    { id: "schedule", label: "일정", icon: MapIcon },
-    { id: "budget", label: "예산", icon: Wallet },
-    { id: "checklist", label: "준비물", icon: CheckSquare },
-    { id: "companion", label: "동행자", icon: Users },
+    { id: "schedule", label: "일정" },
+    { id: "budget", label: "예산" },
+    { id: "checklist", label: "준비물" },
+    { id: "companion", label: "동행자" },
   ];
 
   return (
@@ -62,6 +62,8 @@ const DetailTabs = ({ activeTab, onTabChange }) => {
     </div>
   );
 };
+
+
 
 export default function TripDetailPage() {
   const params = useParams();
@@ -152,214 +154,306 @@ export default function TripDetailPage() {
   const [companionSearchResults, setCompanionSearchResults] = useState([]);
   const [isSearchingCompanion, setIsSearchingCompanion] = useState(false);
 
-  useEffect(() => {
-    const fetchTrip = async () => {
-      try {
-        const { getScheduleList, getScheduleLocations, getScheduleExpenses, getScheduleUsers, getSchedulePreparations } = await import("../../../services/schedule");
+  // [MOD] fetchTrip을 useCallback으로 승격시켜 컴포넌트 전체에서 사용 가능하게 함 (ReferenceError 해결)
+  const fetchTrip = useCallback(async () => {
+    try {
+      const { getScheduleList, getScheduleLocations, getScheduleExpenses, getScheduleUsers, getSchedulePreparations, getScheduleImages } = await import("../../../services/schedule");
 
-        // 1) 기본 정보와 4가지 상세 정보를 병렬로 호출합니다.
-        const [resA, resB, resC, locationRes, expenseRes, userRes, prepRes] = await Promise.all([
-          getScheduleList("a"),
-          getScheduleList("b"),
-          getScheduleList("c"),
-          getScheduleLocations(tripId).catch(() => null),
-          getScheduleExpenses(tripId).catch(() => null),
-          getScheduleUsers(tripId).catch(() => null),
-          getSchedulePreparations(tripId).catch(() => null) // [ADD] 준비물 데이터 로드
-        ]);
+      // 1) 기본 정보와 4가지 상세 정보를 병렬로 호출합니다.
+      const [resA, resB, resC, locationRes, expenseRes, userRes, prepRes, imageRes] = await Promise.all([
+        getScheduleList("a"),
+        getScheduleList("b"),
+        getScheduleList("c"),
+        getScheduleLocations(tripId).catch(() => null),
+        getScheduleExpenses(tripId).catch(() => null),
+        getScheduleUsers(tripId).catch(() => null),
+        getSchedulePreparations(tripId).catch(() => null), // [ADD] 준비물 데이터 로드
+        getScheduleImages(tripId).catch(() => null) // [ADD] 일정 이미지 데이터 로드
+      ]);
 
-        const allTrips = [
-          ...(resA?.schedule_list || []),
-          ...(resB?.schedule_list || []),
-          ...(resC?.schedule_list || [])
-        ];
-        const found = allTrips.find(t => String(t.iPK) === String(tripId));
+      const allTrips = [
+        ...(resA?.schedule_list || []),
+        ...(resB?.schedule_list || []),
+        ...(resC?.schedule_list || [])
+      ];
+      const found = allTrips.find(t => String(t.iPK) === String(tripId));
 
-        if (found) {
-          // 일차 수 계산
-          const startDate = new Date(found.dtDate1 || found.startDate);
-          const endDate = new Date(found.dtDate2 || found.endDate);
-          const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-          const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-          const diffDays = Math.floor((endUtc - startUtc) / (1000 * 3600 * 24)) + 1;
-          const dayCount = (diffDays > 0 && !isNaN(diffDays)) ? diffDays : 1;
+      if (found) {
+        // 일차 수 계산
+        const startDate = new Date((found.dtDate1 || found.startDate).split(" ")[0].replace(/-/g, "/"));
+        const endDate = new Date((found.dtDate2 || found.endDate).split(" ")[0].replace(/-/g, "/"));
+        const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+        const diffDays = Math.floor((endUtc - startUtc) / (1000 * 3600 * 24)) + 1;
+        const dayCount = (diffDays > 0 && !isNaN(diffDays)) ? diffDays : 1;
 
-          // 장소 (location_list -> days)
-          const newDays = Array.from({ length: dayCount }, () => ({ places: [], records: [] }));
-          if (locationRes?.location_list) {
-            const list = Array.isArray(locationRes.location_list) ? locationRes.location_list :
-              (typeof locationRes.location_list === "string" ? JSON.parse(locationRes.location_list.replace(/'/g, '"')) : []);
+        // 장소 (location_list -> days)
+        const newDays = Array.from({ length: dayCount }, () => ({ places: [], records: [] }));
+        const extraRecords = []; // [ADD] 여행 기간 외 사진(예: 2019년 사진)을 위한 그룹
+        if (locationRes?.location_list) {
+          const list = Array.isArray(locationRes.location_list) ? locationRes.location_list :
+            (typeof locationRes.location_list === "string" ? JSON.parse(locationRes.location_list.replace(/'/g, '"')) : []);
 
-            list.forEach(locItem => {
-              if (!locItem.dtSchedule || !locItem.location) return;
-              const locDate = new Date(locItem.dtSchedule.split(" ")[0].replace(/-/g, "/")); // Safari 호환
-              const locUtc = Date.UTC(locDate.getFullYear(), locDate.getMonth(), locDate.getDate());
-              let dayIdx = Math.floor((locUtc - startUtc) / (1000 * 3600 * 24));
-              if (dayIdx < 0) dayIdx = 0;
-              if (dayIdx >= dayCount) dayIdx = dayCount - 1;
-              if (isNaN(dayIdx)) dayIdx = 0;
+          list.forEach(locItem => {
+            if (!locItem.dtSchedule || !locItem.location) return;
+            const locDate = new Date(locItem.dtSchedule.split(" ")[0].replace(/-/g, "/")); // Safari 호환
+            const locUtc = Date.UTC(locDate.getFullYear(), locDate.getMonth(), locDate.getDate());
+            let dayIdx = Math.floor((locUtc - startUtc) / (1000 * 3600 * 24));
+            if (dayIdx < 0) dayIdx = 0;
+            if (dayIdx >= dayCount) dayIdx = dayCount - 1;
+            if (isNaN(dayIdx)) dayIdx = 0;
 
-              const timeParts = locItem.dtSchedule.split(" ");
-              const timeStr = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
+            const timeParts = locItem.dtSchedule.split(" ");
+            const timeStr = timeParts.length > 1 ? timeParts[1].substring(0, 5) : "10:00";
 
-              newDays[dayIdx].places.push({
-                id: locItem.iPK || locItem.iScheduleLocationPK, // [ADD] 장소 삭제 시 필요한 PK값 매핑
-                name: locItem.location.strName,
-                time: timeStr,
-                duration: locItem.strMemo || "", // [MOD] 빈 메모일 때 "1시간" 대신 빈 문자열 사용
-                latitude: parseFloat(locItem.location.ptLatitude || 0),
-                longitude: parseFloat(locItem.location.ptLongitude || 0),
-                fullItem: locItem // [ADD] 수정을 위해 원본 데이터 추가
-              });
+            newDays[dayIdx].places.push({
+              id: locItem.iPK || locItem.iScheduleLocationPK, // [ADD] 장소 삭제 시 필요한 PK값 매핑
+              name: locItem.location.strName,
+              time: timeStr,
+              duration: locItem.strMemo || "", // [MOD] 빈 메모일 때 "1시간" 대신 빈 문자열 사용
+              latitude: parseFloat(locItem.location.ptLatitude || 0),
+              longitude: parseFloat(locItem.location.ptLongitude || 0),
+              fullItem: locItem // [ADD] 수정을 위해 원본 데이터 추가
             });
-          }
-
-          // [MOD] 비용 (expense_list -> budget.spent) - 카테고리 코드→한글 변환 및 카테고리별 그룹핑
-          let newSpent = [];
-          let rawExpenseItems = []; // [ADD] 개별 지출 원본 리스트
-          if (expenseRes?.expense_list) {
-            try {
-              const eList = typeof expenseRes.expense_list === "string"
-                ? JSON.parse(expenseRes.expense_list.replace(/'/g, '"'))
-                : (Array.isArray(expenseRes.expense_list) ? expenseRes.expense_list : []);
-
-              // [ADD] 카테고리 코드 → 한글 라벨 매핑
-              const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
-              // [ADD] 카테고리 라벨 → 색상 매핑
-              const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
-
-              // [ADD] 개별 항목에 한글 라벨/색상 매핑
-              rawExpenseItems = eList.map(exp => ({
-                ...exp,
-                categoryLabel: categoryLabelMap[exp.chCategory] || "기타",
-                color: categoryColors[categoryLabelMap[exp.chCategory] || "기타"] || "#b115fa",
-              }));
-
-              // [ADD] 카테고리별 금액 그룹핑
-              const grouped = {};
-              eList.forEach(exp => {
-                const label = categoryLabelMap[exp.chCategory] || "기타";
-                if (!grouped[label]) grouped[label] = 0;
-                grouped[label] += (exp.nMoney || 0);
-              });
-
-              const totalSpent = Object.values(grouped).reduce((sum, v) => sum + v, 0);
-
-              newSpent = Object.entries(grouped).map(([label, amount]) => ({
-                category: label,
-                amount,
-                color: categoryColors[label] || "#b115fa",
-                percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
-              }));
-
-              // [ADD] 금액 내림차순 정렬
-              newSpent.sort((a, b) => b.amount - a.amount);
-            } catch (e) { console.error("Expense parse error", e); }
-          }
-          // [ADD] 개별 지출 원본 리스트 저장
-          setExpenseRawList(rawExpenseItems);
-
-          // [MOD] 동행자 (user_list -> companions), 스케줄 생성자를 기준으로 왕관 표시
-          const ownerUserFK = found.iUserFK; // 스케줄 생성자의 userPK
-          let newCompanions = [];
-          if (userRes?.user_list) {
-            try {
-              const uList = typeof userRes.user_list === "string"
-                ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
-                : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
-
-              newCompanions = uList.map((usr) => ({
-                id: `user-${usr.iPK}`,
-                // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
-                // schedule_user iPK는 /schedule/user/list에서 제공하지 않음
-                scheduleUserPK: undefined,
-                userFK: usr.iUserFK || usr.iPK,
-                userId: usr.strUserID || "",
-                name: usr.strName || `유저 ${usr.iUserFK || usr.iPK}`,
-                isOwner: (usr.iUserFK || usr.iPK) === ownerUserFK
-              }));
-            } catch (e) { console.error("User parse error", e); }
-          }
-
-          // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
-          if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
-            let ownerName = `유저 ${ownerUserFK}`;
-            let ownerUserId = "";
-            try {
-              const token = localStorage.getItem("token");
-              if (token) {
-                const payload = JSON.parse(atob(token.split(".")[1]));
-                // [MOD] 로그인한 유저 본인이 스케줄 생성자일 경우에만 토큰에서 이름을 가져옵니다.
-                // (단순 동행자가 조회 시 본인 이름 + 왕관이 나오는 버그 수정)
-                if (payload.iPK === ownerUserFK) {
-                  ownerName = payload.strName || payload.name || payload.sub || ownerName;
-                  ownerUserId = payload.strUserID || payload.sub || "";
-                }
-              }
-            } catch (e) { /* token decode 실패 시 기본값 사용 */ }
-
-            newCompanions.unshift({
-              id: `owner-${ownerUserFK}`,
-              userFK: ownerUserFK,
-              userId: ownerUserId,
-              name: ownerName,
-              isOwner: true
-            });
-          }
-
-          // [ADD] 준비물 (preparation_list -> checklist)
-          let newChecklist = [];
-          if (prepRes?.preparation_list) {
-            try {
-              const pList = typeof prepRes.preparation_list === "string"
-                ? JSON.parse(prepRes.preparation_list.replace(/'/g, '"'))
-                : (Array.isArray(prepRes.preparation_list) ? prepRes.preparation_list : []);
-
-              newChecklist = pList.map(prep => ({
-                id: prep.iPK,
-                scheduleFK: prep.iScheduleFK, // [ADD] modify API 필수 필드
-                name: prep.strName,
-                checked: prep.bCheck || false
-              }));
-            } catch (e) { console.error("Preparation parse error", e); }
-          }
-
-          setApiTrip({
-            id: found.iPK,
-            title: found.strWhere ? `${found.strWhere} 여행` : "여행 일정",
-            startDate: found.dtDate1,
-            endDate: found.dtDate2,
-            dtDate1: found.dtDate1,
-            dtDate2: found.dtDate2,
-            companion: found.strWithWho,
-            totalBudget: found.nTotalBudget,
-            travelStyle: found.strTripStyle,
-            // 매핑한 상세 정보 연동
-            days: newDays.length > 0 ? newDays : MOCK_TRIP.days,
-            budget: {
-              total: found.nTotalBudget || 0, // [MOD] 기본값 0 (백엔드에서 설정 안 한 경우)
-              spent: newSpent, // [MOD] 실제 지출 내역만 표시 (없으면 빈 배열)
-              planned: [], // [MOD] MOCK 제거
-              // [ADD] 카테고리별 예산 비율 매핑
-              foodRatio: found.nFoodRatio || 25,
-              transportRatio: found.nTransportRatio || 25,
-              lodgingRatio: found.nLodgingRatio || 25,
-              // [MOD] nAlarmRatio를 별도 alarmRatio로 분리 (0이면 알림 끔)
-              alarmRatio: found.nAlarmRatio ?? 0,
-            },
-            ownerUserFK, // [ADD] 스케줄 생성자 userPK 보관
-            companions: newCompanions.length > 0 ? newCompanions : [],
-            checklist: newChecklist, // [MOD] 준비물 데이터 매핑
-            raw: found, // [ADD] 서버 통신용 원본 데이터 보관
           });
-
         }
-      } catch (err) {
-        console.error("일정 상세 조회 실패:", err);
+
+        if (imageRes?.image_list) {
+          try {
+            const iList = typeof imageRes.image_list === "string"
+              ? JSON.parse(imageRes.image_list.replace(/'/g, '"'))
+              : (Array.isArray(imageRes.image_list) ? imageRes.image_list : []);
+
+            iList.forEach(imgItem => {
+              const locFK = imgItem.iLocationFK;
+              // [MOD] 이미지 데이터 구조에 따라 다양한 필드에서 경로(URL/파일명) 추출
+              // API 명세 상으로는 image.strFile이 정석이나, 파생 필드들 모두 체크
+              let src = imgItem.image?.strFile || imgItem.image?.strImageFile ||
+                imgItem.strFile || imgItem.strImageFile || "";
+
+              // 만약 src가 여전히 없고 imgItem.image 자체가 문자열이면 그것을 사용
+              if (!src && typeof imgItem.image === "string") src = imgItem.image;
+
+              // [MOD] Cloudflare R2 Custom Domain 또는 Public URL 사용
+              const imageBase = process.env.NEXT_PUBLIC_IMAGE_BASE_URL || "/proxy/";
+              if (src && !src.startsWith("http") && !src.startsWith("/")) {
+                src = imageBase + (imageBase.endsWith("/") ? "" : "/") + src;
+              } else if (src && src.startsWith("/proxy/")) {
+                // 기존 /proxy/ 경로가 있다면 R2 주소로 교체
+                src = src.replace("/proxy/", imageBase + (imageBase.endsWith("/") ? "" : "/"));
+              }
+
+              // [DEBUG] 이미지 데이터가 있는데 경로를 못 찾는 경우 콘솔 출력
+              if (!src) {
+                console.warn("⚠️ Image path not found for item:", imgItem);
+                return; // 경로 없으면 표시하지 않음
+              }
+
+              const imageDateStr = imgItem.image?.dtCreate || imgItem.dtCreate;
+
+              let targetDayIdx = 0;
+              if (locFK > 0 && locationRes?.location_list) {
+                const locs = Array.isArray(locationRes.location_list) ? locationRes.location_list : [];
+                const foundLoc = locs.find(l => (l.iPK || l.iScheduleLocationPK) === locFK);
+                if (foundLoc && foundLoc.dtSchedule) {
+                  const d = new Date(foundLoc.dtSchedule.split(" ")[0].replace(/-/g, "/"));
+                  const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+                  targetDayIdx = Math.floor((u - startUtc) / (1000 * 3600 * 24));
+                }
+              } else if (imageDateStr) {
+                const d = new Date(imageDateStr.split(" ")[0].replace(/-/g, "/"));
+                const u = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+                targetDayIdx = Math.floor((u - startUtc) / (1000 * 3600 * 24));
+              }
+
+              const isOutOfRange = isNaN(targetDayIdx) || targetDayIdx < 0 || targetDayIdx >= dayCount;
+
+              // [MOD] '일정 사진' 대신 더 명확한 '기록 사진'으로 명칭 변경
+              const placeName = imgItem.location?.strName || "기록 사진";
+
+              if (isOutOfRange) {
+                // [ADD] 기간 외 사진 처리
+                let record = extraRecords.find(r => r.name === placeName);
+                if (!record) {
+                  record = { name: placeName, photos: [] };
+                  extraRecords.push(record);
+                }
+                // [DEBUG] 기간 외 사진 매핑 데이터 확인
+                console.log("📸 [Extra Photo Mapping Info]", {
+                  iPK: imgItem.iPK,
+                  iImageFK: imgItem.iImageFK,
+                  imageIPK: imgItem.image?.iPK
+                });
+                record.photos.push({ src, id: imgItem.iPK, iImagePK: imgItem.iImageFK || imgItem.image?.iPK, isExtra: true });
+              } else {
+                let record = newDays[targetDayIdx].records.find(r => r.name === placeName);
+                if (!record) {
+                  record = { name: placeName, photos: [] };
+                  newDays[targetDayIdx].records.push(record);
+                }
+                // [DEBUG] 매핑 데이터 확인
+                console.log("📸 [Photo Mapping Info]", {
+                  iPK: imgItem.iPK,
+                  iImageFK: imgItem.iImageFK,
+                  imageIPK: imgItem.image?.iPK
+                });
+                record.photos.push({ src, id: imgItem.iPK, iImagePK: imgItem.iImageFK || imgItem.image?.iPK });
+              }
+            });
+          } catch (e) {
+            console.error("Image parse error", e);
+          }
+        }
+
+        // [MOD] 비용 (expense_list -> budget.spent) - 카테고리 코드→한글 변환 및 카테고리별 그룹핑
+        let newSpent = [];
+        let rawExpenseItems = []; // [ADD] 개별 지출 원본 리스트
+        if (expenseRes?.expense_list) {
+          try {
+            const eList = typeof expenseRes.expense_list === "string"
+              ? JSON.parse(expenseRes.expense_list.replace(/'/g, '"'))
+              : (Array.isArray(expenseRes.expense_list) ? expenseRes.expense_list : []);
+
+            // [ADD] 카테고리 코드 → 한글 라벨 매핑
+            const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
+            // [ADD] 카테고리 라벨 → 색상 매핑
+            const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
+
+            // [ADD] 개별 항목에 한글 라벨/색상 매핑
+            rawExpenseItems = eList.map(exp => ({
+              ...exp,
+              categoryLabel: categoryLabelMap[exp.chCategory] || "기타",
+              color: categoryColors[categoryLabelMap[exp.chCategory] || "기타"] || "#b115fa",
+            }));
+
+            // [ADD] 카테고리별 금액 그룹핑
+            const grouped = {};
+            eList.forEach(exp => {
+              const label = categoryLabelMap[exp.chCategory] || "기타";
+              if (!grouped[label]) grouped[label] = 0;
+              grouped[label] += (exp.nMoney || 0);
+            });
+
+            const totalSpent = Object.values(grouped).reduce((sum, v) => sum + v, 0);
+
+            newSpent = Object.entries(grouped).map(([label, amount]) => ({
+              category: label,
+              amount,
+              color: categoryColors[label] || "#b115fa",
+              percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+            }));
+
+            // [ADD] 금액 내림차순 정렬
+            newSpent.sort((a, b) => b.amount - a.amount);
+          } catch (e) { console.error("Expense parse error", e); }
+        }
+        // [ADD] 개별 지출 원본 리스트 저장
+        setExpenseRawList(rawExpenseItems);
+
+        // [MOD] 동행자 (user_list -> companions), 스케줄 생성자를 기준으로 왕관 표시
+        const ownerUserFK = found.iUserFK; // 스케줄 생성자의 userPK
+        let newCompanions = [];
+        if (userRes?.user_list) {
+          try {
+            const uList = typeof userRes.user_list === "string"
+              ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
+              : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
+
+            newCompanions = uList.map((usr) => ({
+              id: `user-${usr.iPK}`,
+              // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
+              // schedule_user iPK는 /schedule/user/list에서 제공하지 않음
+              scheduleUserPK: undefined,
+              userFK: usr.iUserFK || usr.iPK,
+              userId: usr.strUserID || "",
+              name: usr.strName || `유저 ${usr.iUserFK || usr.iPK}`,
+              isOwner: (usr.iUserFK || usr.iPK) === ownerUserFK
+            }));
+          } catch (e) { console.error("User parse error", e); }
+        }
+
+        // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
+        if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
+          let ownerName = `유저 ${ownerUserFK}`;
+          let ownerUserId = "";
+          try {
+            const token = localStorage.getItem("token");
+            if (token) {
+              const payload = JSON.parse(atob(token.split(".")[1]));
+              // [MOD] 로그인한 유저 본인이 스케줄 생성자일 경우에만 토큰에서 이름을 가져옵니다.
+              // (단순 동행자가 조회 시 본인 이름 + 왕관이 나오는 버그 수정)
+              if (payload.iPK === ownerUserFK) {
+                ownerName = payload.strName || payload.name || payload.sub || ownerName;
+                ownerUserId = payload.strUserID || payload.sub || "";
+              }
+            }
+          } catch (e) { /* token decode 실패 시 기본값 사용 */ }
+
+          newCompanions.unshift({
+            id: `owner-${ownerUserFK}`,
+            userFK: ownerUserFK,
+            userId: ownerUserId,
+            name: ownerName,
+            isOwner: true
+          });
+        }
+
+        // [ADD] 준비물 (preparation_list -> checklist)
+        let newChecklist = [];
+        if (prepRes?.preparation_list) {
+          try {
+            const pList = typeof prepRes.preparation_list === "string"
+              ? JSON.parse(prepRes.preparation_list.replace(/'/g, '"'))
+              : (Array.isArray(prepRes.preparation_list) ? prepRes.preparation_list : []);
+
+            newChecklist = pList.map(prep => ({
+              id: prep.iPK,
+              scheduleFK: prep.iScheduleFK, // [ADD] modify API 필수 필드
+              name: prep.strName,
+              checked: prep.bCheck || false
+            }));
+          } catch (e) { console.error("Preparation parse error", e); }
+        }
+
+        setApiTrip({
+          id: found.iPK,
+          title: found.strWhere ? `${found.strWhere} 여행` : "여행 일정",
+          startDate: found.dtDate1,
+          endDate: found.dtDate2,
+          dtDate1: found.dtDate1,
+          dtDate2: found.dtDate2,
+          companion: found.strWithWho,
+          totalBudget: found.nTotalBudget,
+          travelStyle: found.strTripStyle,
+          // 매핑한 상세 정보 연동
+          days: newDays,
+          extraRecords, // [ADD] 기간 외 사진 저장
+          budget: {
+            total: found.nTotalBudget || 0, // [MOD] 기본값 0 (백엔드에서 설정 안 한 경우)
+            spent: newSpent, // [MOD] 실제 지출 내역만 표시 (없으면 빈 배열)
+            planned: [], // [MOD] MOCK 제거
+            // [ADD] 카테고리별 예산 비율 매핑
+            foodRatio: found.nFoodRatio || 25,
+            transportRatio: found.nTransportRatio || 25,
+            lodgingRatio: found.nLodgingRatio || 25,
+            // [MOD] nAlarmRatio를 별도 alarmRatio로 분리 (0이면 알림 끔)
+            alarmRatio: found.nAlarmRatio ?? 0,
+          },
+          ownerUserFK, // [ADD] 스케줄 생성자 userPK 보관
+          companions: newCompanions.length > 0 ? newCompanions : [],
+          checklist: newChecklist, // [MOD] 준비물 데이터 매핑
+          raw: found, // [ADD] 서버 통신용 원본 데이터 보관
+        });
+
       }
-    };
-    fetchTrip();
+    } catch (err) {
+      console.error("일정 상세 조회 실패:", err);
+    }
   }, [tripId]);
+
+  useEffect(() => {
+    fetchTrip();
+  }, [fetchTrip]);
 
   // ==========================================
   // [ADD] 준비물 탭 핸들러 (추가, 토글, 삭제)
@@ -958,6 +1052,19 @@ export default function TripDetailPage() {
 
   const isCollapsed = sheetHeight <= SNAPS.LOW + 20;
 
+  // [ADD] 사진 삭제 핸들러
+  const handleDeletePhoto = async (photoId, iImagePK) => {
+    if (!window.confirm("정말 이 사진을 삭제하시겠습니까?")) return;
+    try {
+      await removeScheduleImage(photoId, iImagePK);
+      alert("사진이 삭제되었습니다.");
+      fetchTrip();
+    } catch (err) {
+      console.error("사진 삭제 실패:", err);
+      alert("사진 삭제에 실패했습니다.");
+    }
+  };
+
   const handleTouchStart = (e) => {
     setIsDragging(true);
     setStartY(e.touches[0].clientY);
@@ -1323,10 +1430,11 @@ export default function TripDetailPage() {
         {
           selectedTab === "사진" && (
             <div className="flex flex-col gap-5">
-              {currentDayRecords.length > 0 && (
+              {(currentDayRecords.length > 0 || trip.extraRecords?.length > 0) && (
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-[#111111]">
-                    108개의 사진
+                    {currentDayRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0) +
+                      (trip.extraRecords?.reduce((sum, r) => sum + (r.photos?.length || 0), 0) || 0)}개의 사진
                   </span>
                   <span
                     className="text-sm font-semibold text-[#7a28fa] cursor-pointer"
@@ -1337,7 +1445,7 @@ export default function TripDetailPage() {
                 </div>
               )}
 
-              {currentDayRecords.length > 0 ? (
+              {currentDayRecords.length > 0 && (
                 currentDayRecords.map((record, idx) => (
                   <div key={idx} className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-5">
@@ -1368,17 +1476,30 @@ export default function TripDetailPage() {
                           key={photoIdx}
                           className="relative w-[110px] h-[110px] flex-shrink-0"
                         >
-                          <Image
-                            src={photo.src}
+                          <img
+                            src={photo.src || "/icons/camera.svg"}
                             alt={`photo-${photoIdx}`}
-                            fill
+                            onError={(e) => {
+                              e.target.src = "/icons/camera.svg";
+                              e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
+                            }}
                             className={clsx(
-                              "object-cover",
+                              "w-full h-full object-cover",
                               photoIdx === 0 && "rounded-l-lg",
                               photoIdx === record.photos.length - 1 &&
                               "rounded-r-lg",
                             )}
                           />
+                          {/* [ADD] 사진 삭제 버튼 */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePhoto(photo.id, photo.iImagePK);
+                            }}
+                            className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
+                          >
+                            <X size={14} className="text-white" />
+                          </button>
                           {photoIdx === 0 && photo.likes && (
                             <div className="absolute bottom-2 left-2 flex items-center gap-1">
                               <Image
@@ -1405,7 +1526,57 @@ export default function TripDetailPage() {
                     </div>
                   </div>
                 ))
-              ) : (
+              )}
+
+              {/* [ADD] 여행 기간 외 사진(기타 기록) 표시 */}
+              {trip.extraRecords?.length > 0 && (
+                <div className="flex flex-col gap-5 mt-4 pt-8 border-t border-dashed border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 rounded-full bg-[#8e8e93] text-white text-sm font-bold flex items-center justify-center">
+                      !
+                    </div>
+                    <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
+                      기타 기록 (기간 외 사진)
+                    </h3>
+                  </div>
+                  {trip.extraRecords.map((record, idx) => (
+                    <div key={`extra-${idx}`} className="flex flex-col gap-3">
+                      <h4 className="text-sm font-medium text-[#8e8e93] px-1">{record.name}</h4>
+                      <div className="flex gap-[2px] overflow-x-auto scrollbar-hide">
+                        {record.photos.map((photo, photoIdx) => (
+                          <div key={photoIdx} className="relative w-[110px] h-[110px] flex-shrink-0">
+                            <img
+                              src={photo.src || "/icons/camera.svg"}
+                              alt={`extra-photo-${photoIdx}`}
+                              onError={(e) => {
+                                e.target.src = "/icons/camera.svg";
+                                e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
+                              }}
+                              className={clsx(
+                                "w-full h-full object-cover",
+                                photoIdx === 0 && "rounded-l-lg",
+                                photoIdx === record.photos.length - 1 && "rounded-r-lg",
+                              )}
+                            />
+                            {/* [ADD] 기타 기록 사진 삭제 버튼 */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePhoto(photo.id, photo.iImagePK);
+                              }}
+                              className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
+                            >
+                              <X size={14} className="text-white" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {currentDayRecords.length === 0 && (!trip.extraRecords || trip.extraRecords.length === 0) && (
                 <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
                   <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
                   <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
@@ -1424,18 +1595,24 @@ export default function TripDetailPage() {
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 ref={photoInputRef}
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
+                  const files = e.target.files;
+                  if (!files || files.length === 0) return;
                   try {
                     setIsUploadingPhoto(true);
-                    // iLocationPK에 해당하는 선택 장소가 있으면 해당 PK, 현재는 전일정 처리(0)
-                    await addScheduleImage(parseInt(tripId), 0, file);
+                    // [MOD] 복수 개의 파일 업로드 처리
+                    for (let i = 0; i < files.length; i++) {
+                      await addScheduleImage(parseInt(tripId), 0, files[i]);
+                    }
                     alert("사진이 성공적으로 업로드되었습니다.");
-                    // TODO: 업로드 완료 후 사진 목록 재호출 로직 필요 (임시로 페이지 새로고침)
-                    window.location.reload();
+                    // [ADD] 입력창 초기화 (연속 업로드 가능하게 함)
+                    e.target.value = "";
+
+                    // [MOD] 새로고침 대신 fetchTrip()으로 데이터만 갱신하여 탭 상태 유지
+                    await fetchTrip();
                   } catch (err) {
                     console.error("사진 업로드 실패:", err);
                     alert("사진 업로드 중 오류가 발생했습니다.");

@@ -4,6 +4,8 @@ import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getScheduleList } from "../../services/schedule";
+import { getSavedPlaces } from "../../services/place"; // [ADD] 장소 조회 API 추가
+import { getPlaceReviews } from "../../services/review"; // [ADD] 리뷰 API 추가
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { ActionSheet } from "../../components/common/ActionSheet";
@@ -19,6 +21,8 @@ export default function HomePage() {
   const [isBrowseMode, setIsBrowseMode] = useState(false);
   const [ongoingTrips, setOngoingTrips] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [popularRoutes, setPopularRoutes] = useState([]); // [ADD] 인기 여행 코게 상태
+  const [popularRestaurants, setPopularRestaurants] = useState([]); // [ADD] 인기 맛집 상태
 
   // [ADD] 컴포넌트 마운트 시 최초 1회 실행되는 useEffect
   // 진행 중인 일정을 백엔드로부터 불러오는 로직을 포함
@@ -87,6 +91,84 @@ export default function HomePage() {
 
         setOngoingTrips(targetTrip);
         setHasTripData(targetTrip.length > 0);
+
+        // [ADD] 인기 장소/맛집 데이터 조회 및 가공
+        const placesRes = await getSavedPlaces().catch(() => ({ data: { location_list: [] } }));
+        const rawPlaces = placesRes.data?.location_list || [];
+
+        // 리뷰 데이터 병렬 조회하여 평점 합산
+        const placesWithReviews = await Promise.all(rawPlaces.map(async (p) => {
+          try {
+            const reviewRes = await getPlaceReviews(p.iPK || p.id).catch(() => null);
+            const rList = reviewRes?.review_list ? (typeof reviewRes.review_list === "string" ? JSON.parse(reviewRes.review_list.replace(/'/g, '"')) : reviewRes.review_list) : [];
+            const count = rList.length;
+            const score = count > 0 ? parseFloat((rList.reduce((s, r) => s + (r.nScore || 0), 0) / count).toFixed(1)) : 0;
+            return { ...p, score, reviewCount: count };
+          } catch { return { ...p, score: 0, reviewCount: 0 }; }
+        }));
+
+        // 인기 여행 코스 (관광지/명소 등 AT4, CT1 카테고리 중심 혹은 필터 없이 평점순)
+        const routes = [...placesWithReviews]
+          .sort((a, b) => (b.score * 10 + b.reviewCount) - (a.score * 10 + a.reviewCount))
+          .slice(0, 10)
+          .map(p => {
+            // [MOD] 다양한 이미지 필드 대응 및 객체 타입 방지
+            let img = p.first_image || p.image_url || p.strFile || p.strImageFile || "/images/jeju-beach.png";
+            if (img && typeof img === "object" && img.strFile) img = img.strFile;
+            else if (img && typeof img === "object" && img.strImageFile) img = img.strImageFile;
+            if (typeof img !== "string") img = "/images/jeju-beach.png";
+
+            // [MOD] next/image 상대 경로 대응 및 /proxy/ 접두사 추가
+            if (img && !img.startsWith("http") && !img.startsWith("/")) {
+              img = "/proxy/" + img;
+            }
+
+            return {
+              img,
+              text: p.strName || p.name || "장소 이름",
+              id: p.iPK || p.id
+            };
+          });
+
+        // 인기 맛집 (음식점 FD6, 카페 CE7 카테고리 중심)
+        const restaurants = [...placesWithReviews]
+          .filter(p => p.strGroupCode === "FD6" || p.strGroupCode === "CE7")
+          .sort((a, b) => (b.score * 10 + b.reviewCount) - (a.score * 10 + a.reviewCount))
+          .slice(0, 10)
+          .map(p => {
+            // [MOD] 다양한 이미지 필드 대응 및 객체 타입 방지
+            let img = p.first_image || p.image_url || p.strFile || p.strImageFile || "/images/restaurant-1.png";
+            if (img && typeof img === "object" && img.strFile) img = img.strFile;
+            else if (img && typeof img === "object" && img.strImageFile) img = img.strImageFile;
+            if (typeof img !== "string") img = "/images/restaurant-1.png";
+
+            // [MOD] next/image 상대 경로 대응 및 /proxy/ 접두사 추가
+            if (img && !img.startsWith("http") && !img.startsWith("/")) {
+              img = "/proxy/" + img;
+            }
+
+            return {
+              img,
+              text: p.strName || p.name || "장소 이름",
+              id: p.iPK || p.id
+            };
+          });
+
+        setPopularRoutes(routes.length > 0 ? routes : [
+          { img: "/images/jeju-beach.png", text: "금릉해변과 카페 맛집 코스" },
+          { img: "/images/jeju-hill.png", text: "제주 오름과 먹방 숙소 추천" },
+          { img: "/images/jeju-forest.png", text: "제주 비밀의 숲 힐링 코스" },
+          { img: "/images/jeju-beach.png", text: "애월 해안도로 드라이브" },
+          { img: "/images/jeju-forest.png", text: "사려니숲길 아침 산책" }
+        ]);
+        setPopularRestaurants(restaurants.length > 0 ? restaurants : [
+          { img: "/images/restaurant-1.png", text: "해운대 오션뷰 감성 숙소 모음" },
+          { img: "/images/restaurant-2.png", text: "광안리 야경과 함께하는 디너" },
+          { img: "/images/restaurant-1.png", text: "부산 로컬 맛집 투어 코스" },
+          { img: "/images/restaurant-2.png", text: "청사포 조개구이 먹방 코스" },
+          { img: "/images/restaurant-1.png", text: "흰여울문화마을 산책로 코스" }
+        ]);
+
       } catch (err) {
         // [FIX] 데이터 가져오기 실패 시 오류 콘솔 출력
         console.error("일정 목록 조회 실패:", err);
@@ -369,28 +451,7 @@ export default function HomePage() {
                   onMouseUp={() => onDragEnd('routes')}
                   onMouseMove={(e) => onDragMove(e, 'routes')}
                 >
-                  {[
-                    {
-                      img: "/images/jeju-beach.png",
-                      text: "금릉해변과 카페 맛집 코스",
-                    },
-                    {
-                      img: "/images/jeju-hill.png",
-                      text: "제주 오름과 먹방 숙소 추천",
-                    },
-                    {
-                      img: "/images/jeju-forest.png",
-                      text: "제주 비밀의 숲 힐링 코스",
-                    },
-                    {
-                      img: "/images/jeju-beach.png",
-                      text: "애월 해안도로 드라이브",
-                    },
-                    {
-                      img: "/images/jeju-forest.png",
-                      text: "사려니숲길 아침 산책",
-                    },
-                  ].map((item, index) => (
+                  {popularRoutes.map((item, index) => (
                     // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
                     <div
                       key={index}
@@ -446,28 +507,7 @@ export default function HomePage() {
                   onMouseUp={() => onDragEnd('restaurants')}
                   onMouseMove={(e) => onDragMove(e, 'restaurants')}
                 >
-                  {[
-                    {
-                      img: "/images/jeju-beach.png",
-                      text: "금릉해변과 카페 맛집 코스",
-                    },
-                    {
-                      img: "/images/jeju-hill.png",
-                      text: "제주 오름과 먹방 숙소 추천",
-                    },
-                    {
-                      img: "/images/jeju-forest.png",
-                      text: "제주 비밀의 숲 힐링 코스",
-                    },
-                    {
-                      img: "/images/jeju-beach.png",
-                      text: "해운대 오션뷰 감성 숙소 모음",
-                    },
-                    {
-                      img: "/images/jeju-hill.png",
-                      text: "황리단길 핫플레이스 투어",
-                    },
-                  ].map((item, index) => (
+                  {popularRestaurants.map((item, index) => (
                     // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
                     <div
                       key={index}

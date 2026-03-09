@@ -78,6 +78,11 @@ export default function MyPage() {
     profileImage: "/icons/profile.svg",
   };
 
+  // [MOD] 유저 프로필 이미지가 백엔드 경로이면 접두사 추가
+  if (user.profileImage && !user.profileImage.startsWith("http") && !user.profileImage.startsWith("/")) {
+    user.profileImage = "/proxy/" + user.profileImage;
+  }
+
   const tabs = [
     { id: "장소", label: "찜한 장소" },
     { id: "사진", label: "찜한 사진" },

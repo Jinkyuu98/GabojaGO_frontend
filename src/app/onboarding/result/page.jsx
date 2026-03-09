@@ -130,7 +130,16 @@ export default function ResultPage() {
         duration: act.strMemo || "방문",
         kakao: act.kakao_location || null // 실제 지도 렌더링에 사용할 카카오 API 데이터
       })) || [],
-      records: []
+      records: dayObj.records?.map(rec => ({
+        ...rec,
+        photos: rec.photos?.map(p => {
+          let src = p.src || "";
+          if (src && !src.startsWith("http") && !src.startsWith("/")) {
+            src = "/proxy/" + src;
+          }
+          return { ...p, src };
+        }) || []
+      })) || []
     })) || []
   } : MOCK_TRIP;
   const currentDayPlaces = trip.days?.[selectedDay - 1]?.places || [];
