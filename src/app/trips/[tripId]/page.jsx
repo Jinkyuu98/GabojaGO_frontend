@@ -137,6 +137,7 @@ export default function TripDetailPage() {
   const fileInputRef = useRef(null); // [ADD] 불러오기 파일 선택기 참조
   const photoInputRef = useRef(null); // [ADD] 사진 탭 파일 선택기 참조
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false); // [ADD] 사진 업로드 로딩 상태
+  const [enlargedImage, setEnlargedImage] = useState(null); // [ADD] 사진 확대 모달 상태
 
   // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -1486,8 +1487,9 @@ export default function TripDetailPage() {
                               e.target.src = "/icons/camera.svg";
                               e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
                             }}
+                            onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
                             className={clsx(
-                              "w-full h-full object-cover",
+                              "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity",
                               photoIdx === 0 && "rounded-l-lg",
                               photoIdx === record.photos.length - 1 &&
                               "rounded-r-lg",
@@ -1555,8 +1557,9 @@ export default function TripDetailPage() {
                                 e.target.src = "/icons/camera.svg";
                                 e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
                               }}
+                              onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
                               className={clsx(
-                                "w-full h-full object-cover",
+                                "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity",
                                 photoIdx === 0 && "rounded-l-lg",
                                 photoIdx === record.photos.length - 1 && "rounded-r-lg",
                               )}
@@ -3022,6 +3025,49 @@ export default function TripDetailPage() {
           </div>
         </div>
       )}
+      {/* [ADD] 사진 확대 모달 */}
+      {enlargedImage && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <div
+            className="relative w-full max-w-[600px] bg-white rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header for Photos */}
+            <div className="p-6 pb-2 flex justify-between items-center">
+              <h3 className="text-[18px] font-bold text-[#111] tracking-tight">사진 크게 보기</h3>
+              <button
+                className="w-10 h-10 flex items-center justify-center text-[#8e8e93] hover:text-[#111] transition-colors rounded-full hover:bg-gray-100"
+                onClick={() => setEnlargedImage(null)}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Image Area */}
+            <div className="p-4 flex flex-col items-center">
+              <img
+                src={enlargedImage}
+                alt="Enlarged"
+                className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 flex justify-center bg-[#fbfbfc]">
+              <button
+                onClick={() => setEnlargedImage(null)}
+                className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* [ADD] 영수증 파싱 풀 스크린 로딩 오버레이 */}
       {isProcessingReceipt && (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/60 text-white">
