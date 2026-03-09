@@ -324,16 +324,25 @@ export default function TripDetailPage() {
                   extraRecords.push(record);
                 }
                 // [DEBUG] 기간 외 사진 매핑 데이터 확인
-                console.log("📸 [Extra Photo Mapping Info]", {
+                const imgLat = parseFloat(imgItem.image?.ptLatitude || imgItem.ptLatitude || 0);
+                const imgLng = parseFloat(imgItem.image?.ptLongitude || imgItem.ptLongitude || 0);
+
+                console.log("📸 [Debug] Extra Photo Mapping Info", {
                   iPK: imgItem.iPK,
-                  iImageFK: imgItem.iImageFK,
-                  imageIPK: imgItem.image?.iPK
+                  src,
+                  lat: imgLat,
+                  lng: imgLng,
+                  rawLat: imgItem.image?.ptLatitude || imgItem.ptLatitude,
+                  rawLng: imgItem.image?.ptLongitude || imgItem.ptLongitude
                 });
+
                 record.photos.push({
                   src,
                   id: imgItem.iPK,
                   iImagePK: imgItem.iImageFK || imgItem.image?.iPK,
                   uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
+                  latitude: imgLat,
+                  longitude: imgLng,
                   isExtra: true
                 });
               } else {
@@ -343,16 +352,25 @@ export default function TripDetailPage() {
                   newDays[targetDayIdx].records.push(record);
                 }
                 // [DEBUG] 매핑 데이터 확인
-                console.log("📸 [Photo Mapping Info]", {
+                const imgLat = parseFloat(imgItem.image?.ptLatitude || imgItem.ptLatitude || 0);
+                const imgLng = parseFloat(imgItem.image?.ptLongitude || imgItem.ptLongitude || 0);
+
+                console.log("📸 [Debug] Photo Mapping Info", {
                   iPK: imgItem.iPK,
-                  iImageFK: imgItem.iImageFK,
-                  imageIPK: imgItem.image?.iPK
+                  src,
+                  lat: imgLat,
+                  lng: imgLng,
+                  rawLat: imgItem.image?.ptLatitude || imgItem.ptLatitude,
+                  rawLng: imgItem.image?.ptLongitude || imgItem.ptLongitude
                 });
+
                 record.photos.push({
                   src,
                   id: imgItem.iPK,
                   iImagePK: imgItem.iImageFK || imgItem.image?.iPK,
-                  uploaderFK: imgItem.image?.iUserFK // [ADD] 삭제 권한 체크용
+                  uploaderFK: imgItem.image?.iUserFK, // [ADD] 삭제 권한 체크용
+                  latitude: imgLat,
+                  longitude: imgLng
                 });
               }
             });
@@ -997,6 +1015,57 @@ export default function TripDetailPage() {
       markersRef.current.push(overlay);
     });
 
+    // [ADD] 사진 탭일 경우 사진 마커 표시
+    if (selectedTab === "사진") {
+      const photosToShow = selectedDay === "기타" 
+        ? trip.extraRecords?.flatMap(r => r.photos) || []
+        : currentDayRecords?.flatMap(r => r.photos) || [];
+
+      console.log("📸 [Debug] Photos to show on map:", photosToShow.length, photosToShow);
+
+      photosToShow.forEach((photo, pIdx) => {
+        // [MOD] 0, 0 이나 NaN 좌표 필터링 강화
+        if (!photo.latitude || !photo.longitude || isNaN(photo.latitude) || isNaN(photo.longitude)) {
+          console.warn("⚠️ [Debug] Photo has invalid coordinates:", photo);
+          return;
+        }
+
+        console.log(`📍 [Debug] Showing photo marker at: ${photo.latitude}, ${photo.longitude}`);
+        const photoPos = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
+        bounds.extend(photoPos);
+
+        // [MOD] 문자열 대신 DOM 엘리먼트를 직접 생성하여 이벤트 바인딩 신뢰성 확보
+        const container = document.createElement('div');
+        container.className = "photo-marker cursor-pointer transition-transform hover:scale-110 active:scale-95";
+        container.style.width = "44px";
+        container.style.height = "44px";
+        container.style.border = "3px solid white";
+        container.style.borderRadius = "8px";
+        container.style.overflow = "hidden";
+        container.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+        container.style.background = "white";
+        container.onclick = (e) => {
+          e.stopPropagation();
+          setEnlargedImage(photo.src);
+        };
+
+        const img = document.createElement('img');
+        img.src = photo.src;
+        img.className = "w-full h-full object-cover";
+        container.appendChild(img);
+
+        const photoOverlay = new window.kakao.maps.CustomOverlay({
+          position: photoPos,
+          content: container,
+          yAnchor: 0.5,
+          zIndex: 50
+        });
+
+        photoOverlay.setMap(map);
+        markersRef.current.push(photoOverlay);
+      });
+    }
+
     // [MOD] 모든 마커가 보이도록 지도 범위 조정
     const isMobile = window.innerWidth < 1024;
 
@@ -1005,20 +1074,24 @@ export default function TripDetailPage() {
     // 초기 렌더링 시 이렇게 위로 몰아주면 바텀시트가 오르내릴 때 자연스럽게 같이 상하로 움직입니다.
     const paddingBottom = isMobile ? 550 : 50;
 
-    if (currentDayPlaces.filter(p => p.latitude && p.longitude).length === 1) {
-      map.setCenter(bounds.getSouthWest());
-      map.setLevel(isMobile ? 3 : 4);
-      if (isMobile) {
-        // 단일 마커일 때 화면 최상단으로 조금 올려줌 (지도 컨테이너 전체 이동과 시너지)
-        setTimeout(() => map.panBy(0, 150), 50);
-      }
-    } else {
-      map.setBounds(bounds, 50, 50, paddingBottom, 50);
-      if (map.getLevel() > 7) {
-        map.setLevel(7);
+    const hasValidMarkers = markersRef.current.length > 0;
+
+    if (hasValidMarkers) {
+      if (markersRef.current.length === 1) {
+        map.setCenter(bounds.getSouthWest());
+        map.setLevel(isMobile ? 3 : 4);
+        if (isMobile) {
+          // 단일 마커일 때 화면 최상단으로 조금 올려줌 (지도 컨테이너 전체 이동과 시너지)
+          setTimeout(() => map.panBy(0, 150), 50);
+        }
+      } else {
+        map.setBounds(bounds, 50, 50, paddingBottom, 50);
+        if (map.getLevel() > 7) {
+          map.setLevel(7);
+        }
       }
     }
-  }, [currentDayPlaces, isMapLoaded]); // [MOD] 선택 인덱스는 의존성에서 제외하여 재렌더링 방지, 클릭 핸들러에서 직접 DOM 조작
+  }, [currentDayPlaces, currentDayRecords, trip.extraRecords, selectedTab, selectedDay, isMapLoaded]); // [MOD] 탭/일차 전환 시 마커 갱신을 위해 의존성 추가
 
   // Define 3-tier snap heights
   const SNAPS = {
