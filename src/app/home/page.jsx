@@ -4,13 +4,15 @@ import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getScheduleList } from "../../services/schedule";
-import { getSavedPlaces } from "../../services/place"; // [ADD] 장소 조회 API 추가
-import { getPlaceReviews } from "../../services/review"; // [ADD] 리뷰 API 추가
+import { getSavedPlaces, getTopLocations } from "../../services/place"; // [MOD] getTopLocations 추가
+import { getPlaceReviews } from "../../services/review";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { ActionSheet } from "../../components/common/ActionSheet";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Filter, TrendingUp, TrendingDown, Minus } from "lucide-react"; // [MOD] 아이콘 추가
 import { useOnboardingStore } from "../../store/useOnboardingStore";
+import { clsx } from "clsx";
+
 
 export default function HomePage() {
   const router = useRouter();
@@ -21,8 +23,9 @@ export default function HomePage() {
   const [isBrowseMode, setIsBrowseMode] = useState(false);
   const [ongoingTrips, setOngoingTrips] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [popularRoutes, setPopularRoutes] = useState([]); // [ADD] 인기 여행 코게 상태
-  const [popularRestaurants, setPopularRestaurants] = useState([]); // [ADD] 인기 맛집 상태
+  const [rankingList, setRankingList] = useState([]); // [ADD] 랭킹 리스트 상태
+  const [selectedCategory, setSelectedCategory] = useState("AT4"); // [ADD] 선택된 카테고리 (기본: 관광명소)
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false); // [ADD] 카테고리 선택 액션시트 
 
   // [ADD] 컴포넌트 마운트 시 최초 1회 실행되는 useEffect
   // 진행 중인 일정을 백엔드로부터 불러오는 로직을 포함
@@ -92,93 +95,40 @@ export default function HomePage() {
         setOngoingTrips(targetTrip);
         setHasTripData(targetTrip.length > 0);
 
-        // [ADD] 인기 장소/맛집 데이터 조회 및 가공
-        const placesRes = await getSavedPlaces().catch(() => ({ data: { location_list: [] } }));
-        const rawPlaces = placesRes.data?.location_list || [];
-
-        // 리뷰 데이터 병렬 조회하여 평점 합산
-        const placesWithReviews = await Promise.all(rawPlaces.map(async (p) => {
-          try {
-            const reviewRes = await getPlaceReviews(p.iPK || p.id).catch(() => null);
-            const rList = reviewRes?.review_list ? (typeof reviewRes.review_list === "string" ? JSON.parse(reviewRes.review_list.replace(/'/g, '"')) : reviewRes.review_list) : [];
-            const count = rList.length;
-            const score = count > 0 ? parseFloat((rList.reduce((s, r) => s + (r.nScore || 0), 0) / count).toFixed(1)) : 0;
-            return { ...p, score, reviewCount: count };
-          } catch { return { ...p, score: 0, reviewCount: 0 }; }
-        }));
-
-        // 인기 여행 코스 (관광지/명소 등 AT4, CT1 카테고리 중심 혹은 필터 없이 평점순)
-        const routes = [...placesWithReviews]
-          .sort((a, b) => (b.score * 10 + b.reviewCount) - (a.score * 10 + a.reviewCount))
-          .slice(0, 10)
-          .map(p => {
-            // [MOD] 다양한 이미지 필드 대응 및 객체 타입 방지
-            let img = p.first_image || p.image_url || p.strFile || p.strImageFile || "/images/jeju-beach.png";
-            if (img && typeof img === "object" && img.strFile) img = img.strFile;
-            else if (img && typeof img === "object" && img.strImageFile) img = img.strImageFile;
-            if (typeof img !== "string") img = "/images/jeju-beach.png";
-
-            // [MOD] next/image 상대 경로 대응 및 /proxy/ 접두사 추가
-            if (img && !img.startsWith("http") && !img.startsWith("/")) {
-              img = "/proxy/" + img;
-            }
-
-            return {
-              img,
-              text: p.strName || p.name || "장소 이름",
-              id: p.iPK || p.id
-            };
-          });
-
-        // 인기 맛집 (음식점 FD6, 카페 CE7 카테고리 중심)
-        const restaurants = [...placesWithReviews]
-          .filter(p => p.strGroupCode === "FD6" || p.strGroupCode === "CE7")
-          .sort((a, b) => (b.score * 10 + b.reviewCount) - (a.score * 10 + a.reviewCount))
-          .slice(0, 10)
-          .map(p => {
-            // [MOD] 다양한 이미지 필드 대응 및 객체 타입 방지
-            let img = p.first_image || p.image_url || p.strFile || p.strImageFile || "/images/restaurant-1.png";
-            if (img && typeof img === "object" && img.strFile) img = img.strFile;
-            else if (img && typeof img === "object" && img.strImageFile) img = img.strImageFile;
-            if (typeof img !== "string") img = "/images/restaurant-1.png";
-
-            // [MOD] next/image 상대 경로 대응 및 /proxy/ 접두사 추가
-            if (img && !img.startsWith("http") && !img.startsWith("/")) {
-              img = "/proxy/" + img;
-            }
-
-            return {
-              img,
-              text: p.strName || p.name || "장소 이름",
-              id: p.iPK || p.id
-            };
-          });
-
-        setPopularRoutes(routes.length > 0 ? routes : [
-          { img: "/images/jeju-beach.png", text: "금릉해변과 카페 맛집 코스" },
-          { img: "/images/jeju-hill.png", text: "제주 오름과 먹방 숙소 추천" },
-          { img: "/images/jeju-forest.png", text: "제주 비밀의 숲 힐링 코스" },
-          { img: "/images/jeju-beach.png", text: "애월 해안도로 드라이브" },
-          { img: "/images/jeju-forest.png", text: "사려니숲길 아침 산책" }
-        ]);
-        setPopularRestaurants(restaurants.length > 0 ? restaurants : [
-          { img: "/images/restaurant-1.png", text: "해운대 오션뷰 감성 숙소 모음" },
-          { img: "/images/restaurant-2.png", text: "광안리 야경과 함께하는 디너" },
-          { img: "/images/restaurant-1.png", text: "부산 로컬 맛집 투어 코스" },
-          { img: "/images/restaurant-2.png", text: "청사포 조개구이 먹방 코스" },
-          { img: "/images/restaurant-1.png", text: "흰여울문화마을 산책로 코스" }
-        ]);
-
       } catch (err) {
-        // [FIX] 데이터 가져오기 실패 시 오류 콘솔 출력
         console.error("일정 목록 조회 실패:", err);
       } finally {
-        // [ADD] 성공, 에러 여부 상관없이 로딩 상태는 false로 변경
         setIsLoading(false);
       }
     };
+
     fetchSchedules();
-  }, []);
+  }, [isBrowseMode]); // [FIX] tripId 제거 (홈페이지에는 tripId가 없음)
+
+  // [ADD] 랭킹 데이터 전용 페칭 로직
+  const fetchRankings = async () => {
+    try {
+      const res = await getTopLocations(10, selectedCategory);
+      if (res.data?.location_list) {
+        setRankingList(res.data.location_list);
+      } else if (res.location_list) {
+        setRankingList(res.location_list);
+      }
+    } catch (err) {
+      console.error("랭킹 조회 실패:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchRankings();
+  }, [selectedCategory]);
+
+  const categoryMap = {
+    "AT4": "관광명소",
+    "AD5": "숙박",
+    "FD6": "음식점",
+    "CE7": "카페"
+  };
 
   // [ADD] 백엔드에서 받아온 Date(ISO형식 등) 문자열을 YYYY.MM.DD 형식으로 변경하는 헬퍼 함수
   const formatDateRange = (start, end) => {
@@ -267,67 +217,68 @@ export default function HomePage() {
             <p className="text-[#898989] text-[15px]">여행 일정을 불러오는 중입니다...</p>
           </div>
         ) : isBrowseMode ? (
-          <div className="flex flex-col gap-16 px-5 mt-1 lg:gap-24">
-            {/* [ADD] 둘러보기 모드: Empty State 카드 없이 인기 코스 리스트만 노출 */}
-            <div className="flex flex-col gap-10 lg:gap-24 pb-8 pt-6">
-              {[
-                { title: "제주도 인기 여행 코스", items: [{ img: "/images/jeju-beach.png", text: "금릉해변과 카페 맛집 코스" }, { img: "/images/jeju-hill.png", text: "제주 오름과 먹방 숙소 추천" }, { img: "/images/jeju-forest.png", text: "제주 비밀의 숲 힐링 코스" }, { img: "/images/jeju-beach.png", text: "애월 해안도로 드라이브" }, { img: "/images/jeju-hill.png", text: "성산일출봉 해돋이 투어" }, { img: "/images/jeju-forest.png", text: "안돌오름 비밀의 숲 산책" }, { img: "/images/jeju-beach.png", text: "우도 당일치기 자전거 코스" }, { img: "/images/jeju-hill.png", text: "한라산 영실코스 등반" }] },
-                { title: "부산 인기 여행 코스", items: [{ img: "/images/restaurant-1.png", text: "해운대 오션뷰 감성 숙소 모음" }, { img: "/images/restaurant-2.png", text: "광안리 야경과 함께하는 디너" }, { img: "/images/restaurant-1.png", text: "부산 로컬 맛집 투어 코스" }, { img: "/images/restaurant-2.png", text: "청사포 조개구이 먹방 코스" }, { img: "/images/restaurant-1.png", text: "흰여울문화마을 산책로 코스" }, { img: "/images/restaurant-2.png", text: "송도 해상케이블카 뷰 맛집" }, { img: "/images/restaurant-1.png", text: "기장 해동용궁사 힐링 코스" }, { img: "/images/restaurant-2.png", text: "서면 전포 카페거리 투어" }] },
-                { title: "경주 인기 여행 코스", items: [{ img: "/images/jeju-hill.png", text: "황리단길 핫플 카페 투어" }, { img: "/images/jeju-forest.png", text: "야경이 예쁜 동궁과 월지 코스" }, { img: "/images/jeju-beach.png", text: "불국사부터 시작하는 역사 탐방" }, { img: "/images/restaurant-1.png", text: "경주월드 어뮤즈먼트 코스" }, { img: "/images/jeju-hill.png", text: "대릉원 사진 명소 탐방 코스" }, { img: "/images/jeju-forest.png", text: "첨성대 핑크뮬리 스냅 코스" }, { img: "/images/jeju-beach.png", text: "보문관광단지 호수 산책" }, { img: "/images/restaurant-1.png", text: "교촌마을 한옥 체험과 맛집" }] },
-              ].map((section, idx) => (
-                <div key={idx} className="flex flex-col gap-6">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[18px] lg:text-[24px] font-bold text-[#111111]">
-                      {section.title}
-                    </h2>
-                    <ChevronRight size={20} className="text-[#abb1b9] cursor-pointer" />
-                  </div>
+          <div className="flex flex-col gap-10 px-5 mt-4 lg:gap-16 pb-20">
+            <div className="w-full max-w-2xl mx-auto">
+              <div className="flex justify-between items-center mb-10 pb-4 border-b">
+                <h2 className="text-[22px] lg:text-[28px] font-black text-[#111111]">
+                  실시간 인기 <span className="text-[#7a28fa]">{categoryMap[selectedCategory]}</span>
+                </h2>
+                <button
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gray-100/80 hover:bg-gray-200 rounded-full text-[15px] font-bold text-[#111] transition-colors"
+                  onClick={() => setIsCategoryOpen(true)}
+                >
+                  <Filter size={18} />
+                  {categoryMap[selectedCategory]}
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-8">
+                {rankingList.map((item, index) => (
                   <div
-                    className="flex gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 lg:pl-0 lg:scroll-pl-0 -mx-5 lg:mx-0 relative cursor-grab active:cursor-grabbing"
-                    onMouseDown={(e) => onDragStart(e, idx)}
-                    onMouseLeave={() => onDragEnd(idx)}
-                    onMouseUp={() => onDragEnd(idx)}
-                    onMouseMove={(e) => onDragMove(e, idx)}
+                    key={item.iPK || index}
+                    className="flex items-center gap-6 group cursor-pointer"
+                    onClick={() => window.open(item.strLink || `https://map.kakao.com/link/place/${item.iPK}`, '_blank')}
                   >
-                    {section.items.map((item, itemIdx) => (
-                      <div
-                        key={itemIdx}
-                        className={`gap-3 w-[140px] lg:w-[220px] flex-shrink-0 cursor-pointer group snap-start flex-col ${itemIdx >= 5 ? 'hidden lg:flex' : 'flex'}`}
-                        onClickCapture={(e) => {
-                          if (dragState.current[idx]?.dragged) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return;
-                          }
-                          router.push(`/trips/popular/${idx}-${itemIdx}`)
-                        }}
-                      >
-                        <div className="w-[140px] h-[140px] lg:w-[220px] lg:h-[220px] rounded-2xl overflow-hidden relative bg-[#f5f5f5]">
-                          <Image
-                            src={item.img}
-                            alt="course thumbnail"
-                            fill
-                            draggable={false}
-                            className="object-cover group-hover:scale-110 transition-transform"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+                    <span className={clsx(
+                      "text-[22px] lg:text-[24px] font-black w-10 text-center italic",
+                      index < 3 ? "text-[#7a28fa]" : "text-[#111111]/15"
+                    )}>
+                      {index + 1}
+                    </span>
+                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-[22px] overflow-hidden relative bg-[#f5f5f5] flex-shrink-0 shadow-sm flex items-center justify-center">
+                      {(item.strFile || item.first_image) ? (
+                        <Image
+                          src={item.strFile || item.first_image}
+                          alt={item.strName}
+                          fill
+                          className="object-cover group-hover:scale-110 transition-transform"
+                        />
+                      ) : (
+                        <Filter className="text-gray-300" size={24} />
+                      )}
+                    </div>
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-2">
+                        {item.strName || item.place_name}
+                      </h3>
+                      <p className="text-[15px] font-semibold text-[#8e8e93] truncate">
+                        {item.strGroupName || item.category_name || "장소"}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-end w-14">
+                      {index % 4 === 0 ? (
+                        <div className="flex items-center gap-1 font-black text-[#ef4444] text-[15px]">
+                          <TrendingUp size={18} strokeWidth={4} />
                         </div>
-                        <p className="text-[16px] lg:text-[20px] font-medium lg:font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors break-keep mt-1 lg:mt-2">
-                          {item.text}
-                        </p>
-                      </div>
-                    ))}
-                    <div className="flex flex-col gap-3 w-[100px] lg:w-[140px] flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4 lg:pt-8">
-                      <div className="w-14 h-14 lg:w-16 lg:h-16 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
-                        <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 text-[#6d818f]" />
-                      </div>
-                      <span className="text-[14px] lg:text-[16px] font-medium text-[#6d818f] mt-1 lg:mt-2">더보기</span>
+                      ) : index % 3 === 0 ? (
+                        <span className="text-[12px] font-black text-[#ef4444] tracking-tighter bg-[#ef4444]/5 px-2 py-0.5 rounded">NEW</span>
+                      ) : (
+                        <Minus size={18} className="text-gray-200" strokeWidth={4} />
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         ) : hasTripData ? (
@@ -369,7 +320,7 @@ export default function HomePage() {
                       <div className="flex flex-wrap gap-2 mb-10">
                         {(trip.strTripStyle
                           ? trip.strTripStyle.split(",").map(t => t.trim()).filter(Boolean)
-                          : trip.tags || ["자연", "맛집", "카페", "쇼핑"]
+                          : []
                         ).map((tag, idx) => (
                           <span
                             key={`${tag}-${idx}`}
@@ -388,9 +339,9 @@ export default function HomePage() {
                           </span>
                           <span className="text-[16px] text-[#556574]">
                             <span className="font-bold text-[#111]">
-                              {(trip.nTotalBudget || 500000).toLocaleString()}원
+                              {(trip.nTotalBudget || 0).toLocaleString()}원
                             </span> /
-                            {(trip.nTotalBudget || 500000).toLocaleString()}원
+                            {(trip.nTotalBudget || 0).toLocaleString()}원
                           </span>
                         </div>
                         {/* Progress Bar */}
@@ -431,117 +382,75 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Side Content Column - Popular Lists */}
-            <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-12 lg:gap-16 mt-12 lg:mt-0 lg:border lg:border-[#e5eef4] lg:p-6 lg:rounded-2xl">
-              {/* Popular Travel Routes */}
+            {/* Side Content Column - Ranking List */}
+            <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-12 lg:gap-16 mt-12 lg:mt-0 lg:border lg:border-[#e5eef4] lg:p-6 lg:rounded-2xl bg-white">
               <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-[18px] lg:text-[20px] font-bold text-[#111111]">
-                    인기 여행 코스 TOP10
+                <div className="flex justify-between items-center mb-8 pb-2 border-b border-gray-50">
+                  <h2 className="text-[18px] lg:text-[20px] font-bold text-[#111111] flex items-center gap-2">
+                    실시간 인기 {categoryMap[selectedCategory]} <span className="text-[14px] text-[#7a28fa] font-black italic">TOP 10</span>
                   </h2>
-                  <button className="text-[14px] font-semibold text-[#999999]">
-                    더보기
-                  </button>
-                </div>
-                {/* [MOD] 모바일 화면에서는 가로 스크롤로, PC 화면(lg)에서는 2x2 배열 grid 유지 */}
-                <div
-                  className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 -mx-5 relative lg:static lg:overflow-x-visible lg:pb-0 lg:snap-none lg:pl-0 lg:scroll-pl-0 lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-x-4 lg:gap-y-6 lg:flex-col lg:flex-wrap"
-                  onMouseDown={(e) => onDragStart(e, 'routes')}
-                  onMouseLeave={() => onDragEnd('routes')}
-                  onMouseUp={() => onDragEnd('routes')}
-                  onMouseMove={(e) => onDragMove(e, 'routes')}
-                >
-                  {popularRoutes.map((item, index) => (
-                    // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
-                    <div
-                      key={index}
-                      className={`flex flex-col w-[140px] lg:w-auto flex-shrink-0 lg:flex-shrink cursor-pointer group snap-start lg:snap-align-none lg:items-start gap-3 ${index === 4 ? 'lg:hidden' : ''}`}
-                      onClickCapture={(e) => {
-                        if (dragState.current['routes']?.dragged) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          return;
-                        }
-                      }}
-                    >
-                      <div className="w-[140px] h-[140px] lg:w-full lg:h-32 rounded-xl overflow-hidden relative bg-[#f5f5f5]">
-                        <Image
-                          src={item.img}
-                          alt="route"
-                          fill
-                          draggable={false}
-                          className="object-cover group-hover:scale-110 transition-transform"
-                        />
-                      </div>
-                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0 break-keep">
-                        {item.text}
-                      </p>
-                    </div>
-                  ))}
-
-                  {/* [ADD] 모바일 가로 스크롤 마지막 "더보기" 요소 추가 (PC에서는 숨김) */}
-                  <div className="flex flex-col gap-3 w-[100px] lg:hidden flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4">
-                    <div className="w-14 h-14 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
-                      <ChevronRight className="w-6 h-6 text-[#6d818f]" />
-                    </div>
-                    <span className="text-[14px] font-medium text-[#6d818f] mt-1">더보기</span>
+                  <div
+                    className="flex items-center gap-1.5 cursor-pointer group px-3 py-1.5 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
+                    onClick={() => setIsCategoryOpen(true)}
+                  >
+                    <span className="text-[13px] font-bold text-[#111111]">
+                      {categoryMap[selectedCategory]}
+                    </span>
+                    <Filter size={14} className="text-[#111111]" />
                   </div>
                 </div>
-              </div>
 
-              {/* Popular Restaurants */}
-              <div>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-[18px] lg:text-[20px] font-bold text-[#111111]">
-                    실시간 인기 맛집
-                  </h2>
-                  <button className="text-[14px] font-semibold text-[#999999]">
-                    더보기
-                  </button>
-                </div>
-                {/* [MOD] 모바일 화면에서는 가로 스크롤로, PC 화면(lg)에서는 2x2 배열 grid-cols-2 적용 */}
-                <div
-                  className="flex gap-3 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 -mx-5 relative lg:static lg:overflow-x-visible lg:pb-0 lg:snap-none lg:pl-0 lg:scroll-pl-0 lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-x-4 lg:gap-y-6 lg:flex-col lg:flex-wrap"
-                  onMouseDown={(e) => onDragStart(e, 'restaurants')}
-                  onMouseLeave={() => onDragEnd('restaurants')}
-                  onMouseUp={() => onDragEnd('restaurants')}
-                  onMouseMove={(e) => onDragMove(e, 'restaurants')}
-                >
-                  {popularRestaurants.map((item, index) => (
-                    // [MOD] 5번째 아이템(index === 4)일 경우 PC 화면(lg)에서는 숨김 처리(lg:hidden)하여 2x2 배열 유지
+                <div className="flex flex-col gap-7">
+                  {rankingList.map((item, index) => (
                     <div
-                      key={index}
-                      className={`flex flex-col w-[140px] lg:w-auto flex-shrink-0 lg:flex-shrink cursor-pointer group snap-start lg:snap-align-none lg:items-start gap-3 ${index === 4 ? 'lg:hidden' : ''}`}
-                      onClickCapture={(e) => {
-                        if (dragState.current['restaurants']?.dragged) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          return;
-                        }
-                      }}
+                      key={item.iPK || index}
+                      className="flex items-center gap-4 group cursor-pointer"
+                      onClick={() => window.open(item.strLink || `https://map.kakao.com/link/place/${item.iPK}`, '_blank')}
                     >
-                      <div className="w-[140px] h-[140px] lg:w-full lg:h-32 rounded-xl overflow-hidden relative bg-[#f5f5f5]">
-                        <Image
-                          src={item.img}
-                          alt="restaurant"
-                          fill
-                          draggable={false}
-                          className="object-cover group-hover:scale-110 transition-transform"
-                        />
+                      <span className={clsx(
+                        "text-[18px] lg:text-[20px] font-black w-7 text-center italic",
+                        index < 3 ? "text-[#7a28fa]" : "text-[#111111]/30"
+                      )}>
+                        {index + 1}
+                      </span>
+                      <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl overflow-hidden relative bg-[#f5f5f5] flex-shrink-0 flex items-center justify-center">
+                        {(item.strFile || item.first_image) ? (
+                          <Image
+                            src={item.strFile || item.first_image}
+                            alt={item.strName}
+                            fill
+                            className="object-cover group-hover:scale-110 transition-transform"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Filter className="text-gray-200" size={20} />
+                        )}
                       </div>
-                      <p className="text-[15px] font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors lg:text-[16px] lg:mt-0 break-keep">
-                        {item.text}
-                      </p>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <h3 className="text-[16px] lg:text-[17px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
+                          {item.strName || item.place_name}
+                        </h3>
+                        <p className="text-[13px] text-[#8e8e93] truncate font-medium">
+                          {item.strGroupName || item.category_name || "장소"}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-end w-10">
+                        {index % 4 === 0 ? (
+                          <div className="flex items-center gap-0.5 animate-pulse">
+                            <TrendingUp size={14} className="text-[#f12d2d]" strokeWidth={3} />
+                          </div>
+                        ) : index % 3 === 0 ? (
+                          <div className="flex items-center">
+                            <span className="text-[11px] font-black text-[#f12d2d] leading-none tracking-tighter">NEW</span>
+                          </div>
+                        ) : (
+                          <Minus size={14} className="text-[#8e8e93]/20" strokeWidth={3} />
+                        )}
+                      </div>
                     </div>
                   ))}
-
-                  {/* [ADD] 모바일 가로 스크롤 마지막 "더보기" 요소 추가 (PC에서는 숨김) */}
-                  <div className="flex flex-col gap-3 w-[100px] lg:hidden flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4">
-                    <div className="w-14 h-14 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
-                      <ChevronRight className="w-6 h-6 text-[#6d818f]" />
-                    </div>
-                    <span className="text-[14px] font-medium text-[#6d818f] mt-1">더보기</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -549,87 +458,95 @@ export default function HomePage() {
         ) : (
           <div className="flex flex-col gap-16 px-5 mt-1 lg:gap-24">
             {/* Empty State Card */}
-            <div className="bg-[#f5f7f9] rounded-2xl py-12 px-6 flex flex-col items-center justify-center text-center">
-              <p className="text-[16px] text-[#556574] leading-relaxed mb-6 font-regular">
+            <div className="w-full max-w-2xl mx-auto bg-[#f9fafb] rounded-[24px] py-14 px-8 flex flex-col items-center justify-center text-center border border-gray-100">
+              <p className="text-[17px] text-[#4b5563] leading-relaxed mb-8 font-medium">
                 아직 여행 일정이 없어요<br />첫 여행 일정을 만들어볼까요?
               </p>
               <button
                 onClick={() => setIsActionSheetOpen(true)}
-                className="bg-[#111] text-white px-6 py-3 rounded-full text-[15px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all outline-none"
+                className="bg-[#111] text-white px-8 py-4 rounded-full text-[16px] font-bold hover:scale-[1.05] active:scale-[0.95] transition-all shadow-lg shadow-black/10"
               >
                 일정 생성하기
               </button>
             </div>
 
-            {/* Popular Courses Sections */}
-            <div className="flex flex-col gap-10 lg:gap-24 pb-8">
-              {[
-                { title: "제주도 여행 인기 코스 TOP10", items: [{ img: "/images/jeju-beach.png", text: "금릉해변과 카페 맛집 코스" }, { img: "/images/jeju-hill.png", text: "제주 오름과 먹방 숙소 추천" }, { img: "/images/jeju-forest.png", text: "제주 비밀의 숲 힐링 코스" }, { img: "/images/jeju-beach.png", text: "애월 해안도로 드라이브" }, { img: "/images/jeju-hill.png", text: "성산일출봉 해돋이 투어" }, { img: "/images/jeju-forest.png", text: "안돌오름 비밀의 숲 산책" }, { img: "/images/jeju-beach.png", text: "우도 당일치기 자전거 코스" }, { img: "/images/jeju-hill.png", text: "한라산 영실코스 등반" }] },
-                { title: "부산 여행 인기 코스 TOP10", items: [{ img: "/images/restaurant-1.png", text: "해운대 오션뷰 감성 숙소 모음" }, { img: "/images/restaurant-2.png", text: "광안리 야경과 함께하는 디너" }, { img: "/images/restaurant-1.png", text: "부산 로컬 맛집 투어 코스" }, { img: "/images/restaurant-2.png", text: "청사포 조개구이 먹방 코스" }, { img: "/images/restaurant-1.png", text: "흰여울문화마을 산책로 코스" }, { img: "/images/restaurant-2.png", text: "송도 해상케이블카 뷰 맛집" }, { img: "/images/restaurant-1.png", text: "기장 해동용궁사 힐링 코스" }, { img: "/images/restaurant-2.png", text: "서면 전포 카페거리 투어" }] },
-                { title: "경주 여행 인기 코스 TOP10", items: [{ img: "/images/jeju-hill.png", text: "황리단길 핫플 카페 투어" }, { img: "/images/jeju-forest.png", text: "야경이 예쁜 동궁과 월지 코스" }, { img: "/images/jeju-beach.png", text: "불국사부터 시작하는 역사 탐방" }, { img: "/images/restaurant-1.png", text: "경주월드 어뮤즈먼트 코스" }, { img: "/images/jeju-hill.png", text: "대릉원 사진 명소 탐방 코스" }, { img: "/images/jeju-forest.png", text: "첨성대 핑크뮬리 스냅 코스" }, { img: "/images/jeju-beach.png", text: "보문관광단지 호수 산책" }, { img: "/images/restaurant-1.png", text: "교촌마을 한옥 체험과 맛집" }] },
-              ].map((section, idx) => (
-                <div key={idx} className="flex flex-col gap-6">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-[18px] lg:text-[24px] font-bold text-[#111111]">
-                      {section.title}
-                    </h2>
-                    <ChevronRight size={20} className="text-[#abb1b9] cursor-pointer" />
-                  </div>
-                  <div
-                    className="flex gap-3 lg:gap-4 overflow-x-auto scrollbar-hide pb-4 snap-x pl-5 scroll-pl-5 lg:pl-0 lg:scroll-pl-0 -mx-5 lg:mx-0 relative cursor-grab active:cursor-grabbing"
-                    onMouseDown={(e) => onDragStart(e, idx)}
-                    onMouseLeave={() => onDragEnd(idx)}
-                    onMouseUp={() => onDragEnd(idx)}
-                    onMouseMove={(e) => onDragMove(e, idx)}
-                  >
-                    {section.items.map((item, itemIdx) => (
-                      <div
-                        key={itemIdx}
-                        className={`gap-3 w-[140px] lg:w-[220px] flex-shrink-0 cursor-pointer group snap-start flex-col ${itemIdx >= 5 ? 'hidden lg:flex' : 'flex'}`}
-                        onClickCapture={(e) => {
-                          // 드래그 중이거나 이미 드래그되었으면 클릭(이동) 방지
-                          if (dragState.current[idx]?.dragged) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            return;
-                          }
-                          router.push(`/trips/popular/${idx}-${itemIdx}`)
-                        }}
-                      >
-                        <div className="w-[140px] h-[140px] lg:w-[220px] lg:h-[220px] rounded-2xl overflow-hidden relative bg-[#f5f5f5]">
-                          {/* // [ADD] add dummy image handler to prevent crash */}
-                          <Image
-                            src={item.img}
-                            alt="course thumbnail"
-                            fill
-                            draggable={false}
-                            className="object-cover group-hover:scale-110 transition-transform"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        </div>
-                        <p className="text-[16px] lg:text-[20px] font-medium lg:font-regular text-[#111] leading-tight group-hover:text-[#7a28fa] transition-colors break-keep mt-1 lg:mt-2">
-                          {item.text}
-                        </p>
-                      </div>
-                    ))}
+            {/* Ranking List for Empty State */}
+            <div className="w-full max-w-2xl mx-auto pb-12">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-[20px] lg:text-[24px] font-bold text-[#111111]">
+                  실시간 인기 <span className="text-[#7a28fa] font-black">{categoryMap[selectedCategory]}</span>
+                </h2>
+                <button
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 rounded-full text-[14px] font-bold text-[#111]"
+                  onClick={() => setIsCategoryOpen(true)}
+                >
+                  <Filter size={16} />
+                  {categoryMap[selectedCategory]}
+                </button>
+              </div>
 
-                    {/* [ADD] 더보기 버튼 추가 */}
-                    <div className="flex flex-col gap-3 w-[100px] lg:w-[140px] flex-shrink-0 cursor-pointer group snap-start items-center justify-center pt-4 lg:pt-8">
-                      <div className="w-14 h-14 lg:w-16 lg:h-16 bg-[#f5f7f9] rounded-full flex items-center justify-center group-hover:bg-[#eceff4] transition-colors mt-2">
-                        <ChevronRight className="w-6 h-6 lg:w-8 lg:h-8 text-[#6d818f]" />
-                      </div>
-                      <span className="text-[14px] lg:text-[16px] font-medium text-[#6d818f] mt-1 lg:mt-2">더보기</span>
+              <div className="flex flex-col gap-7">
+                {rankingList.map((item, index) => (
+                  <div
+                    key={item.iPK || index}
+                    className="flex items-center gap-5 group cursor-pointer"
+                    onClick={() => window.open(item.strLink || `https://map.kakao.com/link/place/${item.iPK}`, '_blank')}
+                  >
+                    <span className={clsx(
+                      "text-[20px] lg:text-[22px] font-black w-8 text-center italic",
+                      index < 3 ? "text-[#7a28fa]" : "text-[#111111]/20"
+                    )}>
+                      {index + 1}
+                    </span>
+                    <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-2xl overflow-hidden relative bg-[#f3f4f6] flex-shrink-0 flex items-center justify-center">
+                      {(item.strFile || item.first_image) ? (
+                        <Image
+                          src={item.strFile || item.first_image}
+                          alt={item.strName}
+                          fill
+                          className="object-cover group-hover:scale-110 transition-transform"
+                        />
+                      ) : (
+                        <Filter className="text-gray-300" size={24} />
+                      )}
+                    </div>
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <h3 className="text-[17px] lg:text-[19px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1.5">
+                        {item.strName || item.place_name}
+                      </h3>
+                      <p className="text-[14px] font-medium text-[#6b7280] truncate">
+                        {item.strGroupName || item.category_name || "장소"}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-end w-12 mr-2">
+                      {index % 4 === 0 ? (
+                        <TrendingUp size={16} className="text-[#ef4444]" strokeWidth={3} />
+                      ) : index % 3 === 0 ? (
+                        <span className="text-[11px] font-black text-[#ef4444] tracking-tighter">NEW</span>
+                      ) : (
+                        <Minus size={16} className="text-gray-300" strokeWidth={3} />
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        )
-        }
-      </div >
+        )}
+      </div>
+
+      <ActionSheet
+        isOpen={isCategoryOpen}
+        onClose={() => setIsCategoryOpen(false)}
+        title="카테고리 선택"
+        options={Object.entries(categoryMap).map(([code, name]) => ({
+          label: name,
+          onClick: () => {
+            setSelectedCategory(code);
+            setIsCategoryOpen(false);
+          }
+        }))}
+      />
 
       <ActionSheet
         isOpen={isActionSheetOpen}
@@ -639,7 +556,7 @@ export default function HomePage() {
           {
             label: "AI 일정 생성",
             onClick: () => {
-              resetTravelData(); // [ADD] 기존 입력 데이터 초기화
+              resetTravelData();
               setTravelData({ creationType: "ai" });
               router.push("/onboarding/location");
             },
@@ -647,7 +564,7 @@ export default function HomePage() {
           {
             label: "직접 일정 생성",
             onClick: () => {
-              resetTravelData(); // [ADD] 기존 입력 데이터 초기화
+              resetTravelData();
               setTravelData({ creationType: "manual" });
               router.push("/onboarding/location");
             },

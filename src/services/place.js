@@ -35,3 +35,14 @@ export const getSavedPlaces = () => api.get("/location/register");
  */
 export const unregisterPlace = (placeData) =>
   api.post("/location/unregister", null, { params: { iLocationPK: placeData.iPK } });
+/**
+ * 인기 장소 목록 조회 API
+ * @param {number} count - 요청할 개수
+ * @param {string} categoryGroupCode - 카테고리 그룹 코드 (선택)
+ * @returns {Promise}
+ */
+export const getTopLocations = (count, categoryGroupCode) => {
+  const params = { count };
+  if (categoryGroupCode) params.category_group_code = categoryGroupCode;
+  return api.get("/location/top", { params });
+};
