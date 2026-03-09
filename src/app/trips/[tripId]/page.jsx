@@ -312,8 +312,11 @@ export default function TripDetailPage() {
               const isOutOfRange = isNaN(targetDayIdx) || targetDayIdx < 0 || targetDayIdx >= dayCount;
 
               // [MOD] 그룹핑 기준을 '장소'에서 '올린 사용자'로 변경
+              const ownerFK = found.iUserFK; // [MOD] iUserFK 사용
+              const ownerName = found.user_model?.strName || "방장"; // [MOD] user_model 이름 사용
+
               const uploader = userRes?.user_list?.find(u => (u.iUserFK || u.iPK) === imgItem.image?.iUserFK);
-              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === found.ownerUserFK ? "방장" : `동행자 ${imgItem.image?.iUserFK}`);
+              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerFK ? ownerName : `동행자 ${imgItem.image?.iUserFK}`);
               const groupName = uploaderName;
 
               if (isOutOfRange) {
@@ -448,26 +451,14 @@ export default function TripDetailPage() {
 
         // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
         if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
-          let ownerName = `유저 ${ownerUserFK}`;
-          let ownerUserId = "";
-          try {
-            const token = localStorage.getItem("token");
-            if (token) {
-              const payload = JSON.parse(atob(token.split(".")[1]));
-              // [MOD] 로그인한 유저 본인이 스케줄 생성자일 경우에만 토큰에서 이름을 가져옵니다.
-              // (단순 동행자가 조회 시 본인 이름 + 왕관이 나오는 버그 수정)
-              if (payload.iPK === ownerUserFK) {
-                ownerName = payload.strName || payload.name || payload.sub || ownerName;
-                ownerUserId = payload.strUserID || payload.sub || "";
-              }
-            }
-          } catch (e) { /* token decode 실패 시 기본값 사용 */ }
+          const ownerActualName = found.user_model?.strName || `유저 ${ownerUserFK}`;
+          const ownerActualUserId = found.user_model?.strUserID || "";
 
           newCompanions.unshift({
             id: `owner-${ownerUserFK}`,
             userFK: ownerUserFK,
-            userId: ownerUserId,
-            name: ownerName,
+            userId: ownerActualUserId,
+            name: ownerActualName,
             isOwner: true
           });
         }
@@ -972,8 +963,8 @@ export default function TripDetailPage() {
   }, [tripId, trip]); // [MOD] trip 데이터가 로드된 시점에 지도를 확실히 초기화하기 위해 의존성 추가
 
   useEffect(() => {
-    // [MOD] mapInstance뿐 아니라 isMapLoaded 상태도 의존성으로 추가하여 로드 즉시 재실행 보장
-    if (!isMapLoaded || !mapInstance.current || !window.kakao) return;
+    // [MOD] mapInstance뿐 아니라 isMapLoaded 상태 및 trip 데이터 존재 여부도 체크하여 에러 방지
+    if (!isMapLoaded || !mapInstance.current || !window.kakao || !trip) return;
 
     const map = mapInstance.current;
 
@@ -1091,7 +1082,7 @@ export default function TripDetailPage() {
         }
       }
     }
-  }, [currentDayPlaces, currentDayRecords, trip.extraRecords, selectedTab, selectedDay, isMapLoaded]); // [MOD] 탭/일차 전환 시 마커 갱신을 위해 의존성 추가
+  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded]); // [MOD] trip 객체 null 체크를 위해 optional chaining 추가
 
   // Define 3-tier snap heights
   const SNAPS = {
