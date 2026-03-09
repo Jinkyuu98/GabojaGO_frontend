@@ -782,6 +782,30 @@ export default function TripDetailPage() {
   const initialTab = searchParams.get("tab") || "일정";
   const [selectedTab, setSelectedTab] = useState(initialTab);
   const [selectedDay, setSelectedDay] = useState(1);
+
+  // [ADD] 홈 화면 등에서 '영수증 등록' 또는 '사진 등록' 버튼을 통해 진입했을 때 자동으로 파일 선택창을 띄워주는 로직
+  useEffect(() => {
+    const action = searchParams.get("action");
+    if (action === "receipt" && selectedTab === "비용") {
+      // 컴포넌트 마운트 및 탭 전환 후 안정적인 시점에 트리거하기 위해 약간의 지연시간 부여
+      const timer = setTimeout(() => {
+        if (fileInputRef.current) {
+          fileInputRef.current.click();
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+
+    if (action === "uploadPhoto" && selectedTab === "사진") {
+      const timer = setTimeout(() => {
+        if (photoInputRef.current) {
+          photoInputRef.current.click();
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, selectedTab]);
+
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false); // [ADD] 모바일 바텀시트 상태

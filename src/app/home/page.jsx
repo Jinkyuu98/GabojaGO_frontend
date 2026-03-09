@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getScheduleList } from "../../services/schedule";
+import { getScheduleList, getScheduleExpenses } from "../../services/schedule";
 import { getSavedPlaces, getTopLocations } from "../../services/place"; // [MOD] getTopLocations 추가
 import { getPlaceReviews } from "../../services/review";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
@@ -84,16 +84,30 @@ export default function HomePage() {
             return new Date(a.dtDate1) - new Date(b.dtDate1);
           });
 
-        let targetTrip = [];
+        let targetTrip = null;
         if (currentTrips.length > 0) {
-          // [ADD] 현재 여행 중인 일정이 2개 이상일 경우 시작일이 가까운 걸 우선
-          targetTrip = [currentTrips.sort((a, b) => new Date(a.dtDate1) - new Date(b.dtDate1))[0]];
+          targetTrip = currentTrips.sort((a, b) => new Date(a.dtDate1) - new Date(b.dtDate1))[0];
         } else if (upcomingTrips.length > 0) {
-          targetTrip = [upcomingTrips[0]];
+          targetTrip = upcomingTrips[0];
         }
 
-        setOngoingTrips(targetTrip);
-        setHasTripData(targetTrip.length > 0);
+        if (targetTrip) {
+          // [ADD] 지출 내역을 가져와서 합산 계산
+          try {
+            const expenseRes = await getScheduleExpenses(targetTrip.iPK);
+            const eList = expenseRes?.expense_list || [];
+            const nTotalSpent = eList.reduce((sum, exp) => sum + (exp.nMoney || 0), 0);
+            targetTrip.nTotalSpent = nTotalSpent;
+          } catch (e) {
+            console.error("지출 내역 조회 실패:", e);
+            targetTrip.nTotalSpent = 0;
+          }
+          setOngoingTrips([targetTrip]);
+          setHasTripData(true);
+        } else {
+          setOngoingTrips([]);
+          setHasTripData(false);
+        }
 
       } catch (err) {
         console.error("일정 목록 조회 실패:", err);
@@ -287,12 +301,12 @@ export default function HomePage() {
                   return (
                     <div
                       key={trip.iPK || "single-trip"}
-                      className="bg-[#eaf1f7] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-"
+                      className="bg-[#f4f1ff] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-"
                       onClick={() => router.push(`/trips/${trip.iPK}`)}
                     >
                       {/* Trip Info */}
                       <div className="flex flex-col gap-2 mb-6">
-                        <div className="flex justify-between border-b border-[#d1dbe2] pb-4">
+                        <div className="flex justify-between border-b border-[#e4e1ff] pb-4">
                           <span className="text-[15px] font-medium text-[#6d818f]">
                             {companionText}
                           </span>
@@ -328,7 +342,7 @@ export default function HomePage() {
                           </span>
                           <span className="text-[16px] text-[#556574]">
                             <span className="font-bold text-[#111]">
-                              {(trip.nTotalBudget || 0).toLocaleString()}원
+                              {((trip.nTotalBudget || 0) - (trip.nTotalSpent || 0)).toLocaleString()}원
                             </span> /
                             {(trip.nTotalBudget || 0).toLocaleString()}원
                           </span>
@@ -336,8 +350,10 @@ export default function HomePage() {
                         {/* Progress Bar */}
                         <div className="relative w-full h-4 bg-white rounded-full overflow-hidden border border-[#111111]/5">
                           <div
-                            className="absolute top-0 left-0 h-full bg-[#111111] rounded-full"
-                            style={{ width: "100%" }}
+                            className="absolute top-0 left-0 h-full bg-[#7a28fa] rounded-full"
+                            style={{ 
+                              width: `${Math.min(100, Math.max(0, (((trip.nTotalBudget || 0) - (trip.nTotalSpent || 0)) / (trip.nTotalBudget || 1)) * 100))}%` 
+                            }}
                           />
                         </div>
                       </div>
@@ -345,13 +361,23 @@ export default function HomePage() {
                       {/* Action Buttons */}
                       <div className="flex gap-3 mt-4">
                         {[
-                          { icon: "/icons/camera.svg", label: "사진 등록" },
-                          { icon: "/icons/receipt.svg", label: "영수증 등록" },
-                          { icon: "/icons/map-pin.svg", label: "지도 보기" },
+                          { icon: "/icons/camera.svg", label: "사진 등록", action: (e) => {
+                            e.stopPropagation();
+                            router.push(`/trips/${trip.iPK}?tab=사진&action=uploadPhoto`);
+                          }},
+                          { icon: "/icons/receipt.svg", label: "영수증 등록", action: (e) => {
+                            e.stopPropagation();
+                            router.push(`/trips/${trip.iPK}?tab=비용&action=receipt`);
+                          }},
+                          { icon: "/icons/map-pin.svg", label: "지도 보기", action: (e) => {
+                            e.stopPropagation();
+                            router.push(`/trips/${trip.iPK}?tab=일정`);
+                          }},
                         ].map((btn, idx) => (
                           <button
                             key={idx}
-                            className="flex-1 flex flex-col items-center gap-2 bg-white rounded-2xl border border-[#e5eef4] py-6 hover:bg-[#fcfdfe] transition-colors"
+                            className="flex-1 flex flex-col items-center gap-2 bg-white rounded-2xl border border-[#eeeaff] py-6 hover:bg-[#fcfdfe] transition-colors"
+                            onClick={btn.action}
                           >
                             <Image
                               src={btn.icon}
