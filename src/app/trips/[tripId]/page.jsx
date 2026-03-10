@@ -158,6 +158,7 @@ export default function TripDetailPage() {
 
   // [ADD] 찜한 사진 관리를 위한 상태
   const [favoriteImages, setFavoriteImages] = useState([]);
+  const [selectedPhoto, setSelectedPhoto] = useState(null); // [ADD] 클릭된 사진 말풍선 표시용 상태
 
   // [ADD] 준비물 관련 상태
   const [isAddingPreparation, setIsAddingPreparation] = useState(false);
@@ -353,14 +354,15 @@ export default function TripDetailPage() {
               const ownerName = found.user_model?.strName || "방장"; // [MOD] user_model 이름 사용
 
               const uploader = userRes?.user_list?.find(u => (u.iUserFK || u.iPK) === imgItem.image?.iUserFK);
+              const uploaderFK = imgItem.image?.iUserFK || 0; // [ADD] ReferenceError 방지
               const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerFK ? ownerName : `동행자 ${imgItem.image?.iUserFK}`);
               const groupName = uploaderName;
 
               if (isOutOfRange) {
                 // [ADD] 기간 외 사진 처리
-                let record = extraRecords.find(r => r.name === groupName);
+                let record = extraRecords.find(r => r.uploaderFK === uploaderFK);
                 if (!record) {
-                  record = { name: groupName, photos: [] };
+                  record = { name: groupName, uploaderFK, photos: [] };
                   extraRecords.push(record);
                 }
                 // [DEBUG] 기간 외 사진 매핑 데이터 확인
@@ -388,9 +390,9 @@ export default function TripDetailPage() {
                   iFavoriteImagePK: favoriteImagesMap.get(imgItem.iImageFK || imgItem.image?.iPK) || null
                 });
               } else {
-                let record = newDays[targetDayIdx].records.find(r => r.name === groupName);
+                let record = newDays[targetDayIdx].records.find(r => r.uploaderFK === uploaderFK);
                 if (!record) {
-                  record = { name: groupName, photos: [] };
+                  record = { name: groupName, uploaderFK, photos: [] };
                   newDays[targetDayIdx].records.push(record);
                 }
                 // [DEBUG] 매핑 데이터 확인
@@ -785,6 +787,11 @@ export default function TripDetailPage() {
   const [selectedTab, setSelectedTab] = useState(initialTab);
   const [selectedDay, setSelectedDay] = useState(1);
 
+  // [ADD] 탭이나 날짜가 변경될 때 선택된 사진 초기화
+  useEffect(() => {
+    setSelectedPhoto(null);
+  }, [selectedDay, selectedTab]);
+
   // [ADD] 홈 화면 등에서 '영수증 등록' 또는 '사진 등록' 버튼을 통해 진입했을 때 자동으로 파일 선택창을 띄워주는 로직
   useEffect(() => {
     const action = searchParams.get("action");
@@ -1030,6 +1037,12 @@ export default function TripDetailPage() {
         center,
         level: 4,
       });
+
+      // [ADD] 지도 클릭 시 선택된 사진 해제
+      window.kakao.maps.event.addListener(mapInstance.current, 'click', () => {
+        setSelectedPhoto(null);
+      });
+
       setIsMapLoaded(true); // [ADD] 로드 완료 시점 상태 갱신
     };
 
@@ -1081,16 +1094,22 @@ export default function TripDetailPage() {
     polylinesRef.current.forEach((p) => p.setMap(null));
     polylinesRef.current = [];
 
-    if (currentDayPlaces.length === 0) return;
+    // [MOD] 장소 또는 사진이 전혀 없는 경우에는 더 이상 진행하지 않음
+    const hasPhotos = (selectedDay === "기타" ? trip.extraRecords?.length > 0 : currentDayRecords?.length > 0);
+    if (currentDayPlaces.length === 0 && !hasPhotos) return;
 
     const bounds = new window.kakao.maps.LatLngBounds();
 
+    // [MOD] 장소 마커 생성 및 표시
     currentDayPlaces.forEach((place, idx) => {
       if (!place.latitude || !place.longitude) return;
 
       const position = new window.kakao.maps.LatLng(place.latitude, place.longitude);
 
-      bounds.extend(position);
+      // 사진 탭이 아니거나 사진이 없는 경우에만 일정 위치를 bounds에 포함하여 포커스 최적화
+      if (selectedTab !== "사진" || !hasPhotos) {
+        bounds.extend(position);
+      }
 
       // [MOD] Vercel 배포 시 CSS Minification이나 DOM 깨짐을 우회하기 위해 
       // 인라인 style을 최소화하고 보장된 Tailwind 유틸리티 클래스 문자열로 복원
@@ -1123,50 +1142,101 @@ export default function TripDetailPage() {
 
       console.log("📸 [Debug] Photos to show on map:", photosToShow.length, photosToShow);
 
-      photosToShow.forEach((photo, pIdx) => {
-        // [MOD] 0, 0 이나 NaN 좌표 필터링 강화
+      photosToShow.forEach((photo) => {
         if (!photo.latitude || !photo.longitude || isNaN(photo.latitude) || isNaN(photo.longitude)) {
-          console.warn("⚠️ [Debug] Photo has invalid coordinates:", photo);
           return;
         }
 
-        console.log(`📍 [Debug] Showing photo marker at: ${photo.latitude}, ${photo.longitude}`);
         const photoPos = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
         bounds.extend(photoPos);
 
-        // [MOD] 미리보기 썸네일 대신 심플한 점(Dot) 마커 사용 (가독성 개선)
-        const container = document.createElement('div');
-        container.className = "photo-dot-marker cursor-pointer transition-transform hover:scale-125 active:scale-90 shadow-lg";
-        container.style.width = "14px";
-        container.style.height = "14px";
-        container.style.backgroundColor = "#7a28fa";
-        container.style.border = "2px solid white";
-        container.style.borderRadius = "50%";
-        container.onclick = (e) => {
+        const isSelected = selectedPhoto && (selectedPhoto.id === photo.id || selectedPhoto.iImagePK === photo.iImagePK);
+
+        // [MOD] 1. 점 마커 (Dot) - 항시 표시되는 마커 위치
+        const dot = document.createElement('div');
+        dot.className = "photo-dot-marker cursor-pointer transition-transform hover:scale-125 shadow-sm active:scale-95";
+        dot.style.width = "12px";
+        dot.style.height = "12px";
+        dot.style.backgroundColor = isSelected ? "#7a28fa" : "rgba(122, 40, 250, 0.6)";
+        dot.style.border = "2px solid white";
+        dot.style.borderRadius = "50%";
+        dot.onclick = (e) => {
           e.stopPropagation();
-          setEnlargedImage(photo.src);
+          handlePhotoClick(photo);
         };
 
-
-        const photoOverlay = new window.kakao.maps.CustomOverlay({
+        const dotOverlay = new window.kakao.maps.CustomOverlay({
           position: photoPos,
-          content: container,
+          content: dot,
           yAnchor: 0.5,
-          zIndex: 60 // [MOD] 동선보다 위로 보이도록 zIndex 조정
+          zIndex: isSelected ? 70 : 60,
+          clickable: true // [ADD] 클릭 이벤트 허용
         });
 
-        photoOverlay.setMap(map);
-        markersRef.current.push(photoOverlay);
+        dotOverlay.setMap(map);
+        markersRef.current.push(dotOverlay);
+
+        // [MOD] 2. 말풍선 썸네일 (Speech Bubble) - 선택된 사진에만 점 위에 띄움
+        if (isSelected) {
+          const bubbleWrap = document.createElement('div');
+          bubbleWrap.style.display = "flex";
+          bubbleWrap.style.flexDirection = "column";
+          bubbleWrap.style.alignItems = "center";
+          bubbleWrap.style.paddingBottom = "10px";
+
+          const bubbleContainer = document.createElement('div');
+          bubbleContainer.className = "photo-bubble shadow-2xl border-[3px] border-white rounded-xl overflow-hidden bg-white animate-in zoom-in fade-in duration-300";
+          bubbleContainer.style.width = "72px";
+          bubbleContainer.style.height = "72px";
+          bubbleContainer.style.position = "relative";
+          bubbleContainer.style.cursor = "pointer";
+
+          const bubbleImg = document.createElement('img');
+          bubbleImg.src = photo.src || "/icons/camera.svg";
+          bubbleImg.style.width = "100%";
+          bubbleImg.style.height = "100%";
+          bubbleImg.style.objectFit = "cover";
+          bubbleImg.onerror = () => { bubbleImg.src = "/icons/camera.svg"; };
+          bubbleContainer.appendChild(bubbleImg);
+
+          // 말풍선 꼬리
+          const tail = document.createElement('div');
+          tail.style.width = "0";
+          tail.style.height = "0";
+          tail.style.borderLeft = "10px solid transparent";
+          tail.style.borderRight = "10px solid transparent";
+          tail.style.borderTop = "10px solid white";
+          tail.style.marginTop = "-2px";
+
+          bubbleWrap.appendChild(bubbleContainer);
+          bubbleWrap.appendChild(tail);
+
+          bubbleWrap.onclick = (e) => {
+            e.stopPropagation();
+            setEnlargedImage(photo.src);
+          };
+
+          const bubbleOverlay = new window.kakao.maps.CustomOverlay({
+            position: photoPos,
+            content: bubbleWrap,
+            yAnchor: 1.15,
+            zIndex: 100,
+            clickable: true // [ADD] 클릭 이벤트 허용
+          });
+          bubbleOverlay.setMap(map);
+          markersRef.current.push(bubbleOverlay);
+        }
+
       });
 
-      // [ADD] 사진 동선(Polyline) 그리기
-      // 각 레코드(업로더)별로 사진들을 선으로 연결합니다.
+      // [MOD] 사용자의 사진 동선(Polyline) 그리기
+      // 현재 로그인한 사용자가 올린 사진들만 선으로 연결하여 표시 (동행자간 혼란 방지)
       const recordsToLink = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
 
-      // 색상 세트 (업로더별로 다른 색상 부여 가능)
-      const pathColors = ["#7a28fa", "#FF5733", "#33FF57", "#3357FF", "#F333FF"];
+      recordsToLink.forEach((record) => {
+        // [MOD] 본인이 올린 사진 레코드만 동선으로 표시
+        if (record.uploaderFK !== currentUserId) return;
 
-      recordsToLink.forEach((record, rIdx) => {
         const pathPoints = record.photos
           .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
           .map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
@@ -1174,9 +1244,9 @@ export default function TripDetailPage() {
         if (pathPoints.length >= 2) {
           const polyline = new window.kakao.maps.Polyline({
             path: pathPoints,
-            strokeWeight: 3,
-            strokeColor: pathColors[rIdx % pathColors.length],
-            strokeOpacity: 0.7,
+            strokeWeight: 4,
+            strokeColor: "#7a28fa", // [MOD] 내 동선은 브랜드 컬러로 명확하게
+            strokeOpacity: 0.8,
             strokeStyle: 'solid'
           });
 
@@ -1211,7 +1281,7 @@ export default function TripDetailPage() {
         }
       }
     }
-  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount]); // [MOD] mapInitCount 의존성 추가
+  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount, selectedPhoto]); // [MOD] selectedPhoto 의존성 추가
 
   // Define 3-tier snap heights
   const SNAPS = {
@@ -1319,12 +1389,12 @@ export default function TripDetailPage() {
           return;
         }
         await removeFavoriteImage(pkToRemove);
-        
+
         // 상태 즉각 반영 (낙관적 업데이트)
         setApiTrip(prev => {
           if (!prev) return prev;
           const updatedTrip = JSON.parse(JSON.stringify(prev));
-          
+
           const updatePhoto = (p) => {
             if ((p.id === photo.id) || (p.iImagePK === photo.iImagePK)) {
               p.isFavorite = false;
@@ -1413,6 +1483,23 @@ export default function TripDetailPage() {
         : prev;
     });
     setSheetHeight(closest);
+  };
+
+  // [ADD] 사진 클릭 시 지도를 해당 촬영 위치로 이동 (일정 장소 클릭과 동일한 동선)
+  const handlePhotoClick = (photo) => {
+    if (!photo.latitude || !photo.longitude || isNaN(photo.latitude) || isNaN(photo.longitude)) {
+      console.warn("⚠️ [Debug] Photo has no valid coordinates for panning:", photo);
+      return;
+    }
+    if (window.kakao && window.kakao.maps && mapInstance.current) {
+      const moveLatLon = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
+      mapInstance.current.panTo(moveLatLon);
+      setSelectedPhoto(photo); // [ADD] 선택된 사진 상태 업데이트 (말풍선 표시용)
+      // 모바일의 경우 바텀시트를 조금 내려줌 (지도 가독성)
+      if (window.innerWidth < 1024) {
+        setSheetHeight(minHeight + 100);
+      }
+    }
   };
 
   const handleAddPlaceClick = () => {
@@ -1793,20 +1880,6 @@ export default function TripDetailPage() {
                           {record.name}
                         </h3>
                       </div>
-                      {/* [MOD] 일정 수정 권한 체크 (수정/삭제 아이콘) */}
-                      {isOwner && (
-                        <div className="flex items-center gap-1">
-                          <Image
-                            src="/icons/edit.svg"
-                            alt="edit"
-                            width={13}
-                            height={13}
-                          />
-                          <span className="text-sm font-medium text-[#c7c8d8] tracking-[-0.35px]">
-                            리뷰
-                          </span>
-                        </div>
-                      )}
                     </div>
 
                     {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
@@ -1823,9 +1896,12 @@ export default function TripDetailPage() {
                               e.target.src = "/icons/camera.svg";
                               e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
                             }}
-                            onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
+                            onClick={() => {
+                              handlePhotoClick(photo);
+                              // [MOD] 목록 클릭 시에는 확대하지 않고 지도를 해당 위치로 이동만 함 (사용자 요청)
+                            }}
                             className={clsx(
-                              "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity rounded-lg",
+                              "w-full h-full object-cover cursor-pointer hover:ring-2 hover:ring-[#7a28fa] transition-all rounded-lg",
                             )}
                           />
                           {/* [MOD] 사진 삭제 버튼 - 권한 체크 추가 (방장 또는 업로더 본인) */}
@@ -1842,13 +1918,15 @@ export default function TripDetailPage() {
                             </button>
                           )}
 
-                          {/* [ADD] 사진 찜하기(하트) 버튼 (좌측 하단) */}
-                          <button
-                            onClick={(e) => handleToggleFavoriteImage(e, photo)}
-                            className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
-                          >
-                            <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
-                          </button>
+                          {/* [ADD] 사진 찜하기(하트) 버튼 (좌측 하단) - 내 사진일 때만 가능하도록 수정 */}
+                          {photo.uploaderFK === currentUserId && (
+                            <button
+                              onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                              className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                            >
+                              <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                            </button>
+                          )}
 
                           {photoIdx === 0 && photo.likes && (
                             <div className="absolute bottom-2 left-6 ml-2 flex items-center gap-1">
@@ -1904,9 +1982,12 @@ export default function TripDetailPage() {
                                 e.target.src = "/icons/camera.svg";
                                 e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
                               }}
-                              onClick={() => setEnlargedImage(photo.src || "/icons/camera.svg")}
+                              onClick={() => {
+                                handlePhotoClick(photo);
+                                // [MOD] 목록 클릭 시에는 확대하지 않고 지도를 해당 위치로 이동만 함 (사용자 요청)
+                              }}
                               className={clsx(
-                                "w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity rounded-lg",
+                                "w-full h-full object-cover cursor-pointer hover:ring-2 hover:ring-[#7a28fa] transition-all rounded-lg",
                               )}
                             />
                             {/* [ADD] 기타 기록 사진 삭제 버튼 */}
@@ -1923,13 +2004,15 @@ export default function TripDetailPage() {
                               </button>
                             )}
 
-                            {/* [ADD] 기타 상세사진 찜하기(하트) 버튼 */}
-                            <button
-                              onClick={(e) => handleToggleFavoriteImage(e, photo)}
-                              className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
-                            >
-                              <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
-                            </button>
+                            {/* [ADD] 기타 상세사진 찜하기(하트) 버튼 - 내 사진일 때만 */}
+                            {photo.uploaderFK === currentUserId && (
+                              <button
+                                onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                                className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                              >
+                                <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
