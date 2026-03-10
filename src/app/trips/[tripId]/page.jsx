@@ -181,7 +181,7 @@ export default function TripDetailPage() {
   const [selectedChecklistUser, setSelectedChecklistUser] = useState(null);
   const [userChecklistStates, setUserChecklistStates] = useState({}); // { [userId]: { [prepId]: boolean } }
   const [isChecklistAccordionOpen, setIsChecklistAccordionOpen] = useState(false);
-  const [isPhotoAccordionOpen, setIsPhotoAccordionOpen] = useState(false); // [ADD] 사진 탭 동행자 사진 아코디언 상태
+  const [openCompanionIds, setOpenCompanionIds] = useState({}); // [MOD] 사진 탭 동행자별 아코디언 상태 관리용 객체
 
   // [ADD] 현재 로그인한 사용자 정보를 selectedChecklistUser 초기값으로 설정
   useEffect(() => {
@@ -1230,29 +1230,26 @@ export default function TripDetailPage() {
 
       });
 
-      // [MOD] 사용자의 사진 동선(Polyline) 그리기
-      // 현재 로그인한 사용자가 올린 사진들만 선으로 연결하여 표시 (동행자간 혼란 방지)
-      const recordsToLink = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
+      // [MOD] 모든 사용자의 사진을 하나의 동선(Polyline)으로 그리기
+      const photosToLink = (selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [])
+        .flatMap(record => record.photos)
+        .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
+        .sort((a, b) => (a.dtImage || "").localeCompare(b.dtImage || ""));
 
-      recordsToLink.forEach((record) => {
-        // [MOD] 모든 사용자의 사진을 동선으로 표시 (다시 원복)
-        const pathPoints = record.photos
-          .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
-          .map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
+      if (photosToLink.length >= 2) {
+        const pathPoints = photosToLink.map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
+        const polyline = new window.kakao.maps.Polyline({
+          path: pathPoints,
+          strokeWeight: 4,
+          strokeColor: "#7a28fa", // 브랜드 컬러 사용
+          strokeOpacity: 0.8,
+          strokeStyle: 'solid'
+        });
 
-        if (pathPoints.length >= 2) {
-          const polyline = new window.kakao.maps.Polyline({
-            path: pathPoints,
-            strokeWeight: 4,
-            strokeColor: "#7a28fa", // [MOD] 내 동선은 브랜드 컬러로 명확하게
-            strokeOpacity: 0.8,
-            strokeStyle: 'solid'
-          });
+        polyline.setMap(map);
+        polylinesRef.current.push(polyline);
+      }
 
-          polyline.setMap(map);
-          polylinesRef.current.push(polyline);
-        }
-      });
     }
 
     // [MOD] 모든 마커가 보이도록 지도 범위 조정
@@ -1958,45 +1955,43 @@ export default function TripDetailPage() {
                       )}
                     </div>
 
-                    {/* 2. 동행자 사진 섹션 (아코디언) */}
+                    {/* 2. 동행자 사진 섹션 (동행자별 개별 아코디언) */}
                     {otherRecords.length > 0 && (
-                      <div className="mt-2 pt-4 border-t border-[#f2f2f7]">
-                        <div className="flex items-center justify-between px-1 mb-4">
-                          <button
-                            onClick={() => setIsPhotoAccordionOpen(!isPhotoAccordionOpen)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-semibold text-[#555] hover:bg-gray-50 transition-all"
-                          >
-                            <span>동행자 사진 보기</span>
-                            <Image
-                              src="/icons/arrow-left.svg"
-                              alt="arrow"
-                              width={10}
-                              height={10}
-                              className={clsx("transition-transform", isPhotoAccordionOpen ? "rotate-90" : "-rotate-90")}
-                            />
-                          </button>
-                          <span className="text-[12px] font-medium text-[#8e8e93]">
-                            총 {otherRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0)}장
-                          </span>
-                        </div>
+                      <div className="mt-2 pt-4 border-t border-[#f2f2f7] flex flex-col gap-6">
+                        {otherRecords.map((record, rIdx) => {
+                          const isOpen = openCompanionIds[record.uploaderFK] || false;
+                          return (
+                            <div key={`other-comp-${rIdx}`} className="flex flex-col gap-3">
+                              <div className="flex items-center justify-between px-1">
+                                <button
+                                  onClick={() => setOpenCompanionIds(prev => ({ ...prev, [record.uploaderFK]: !isOpen }))}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-semibold text-[#555] hover:bg-gray-50 transition-all"
+                                >
+                                  <span>{record.name} 사진 보기</span>
+                                  <Image
+                                    src="/icons/arrow-left.svg"
+                                    alt="arrow"
+                                    width={10}
+                                    height={10}
+                                    className={clsx("transition-transform", isOpen ? "rotate-90" : "-rotate-90")}
+                                  />
+                                </button>
+                                <span className="text-[12px] font-medium text-[#8e8e93]">
+                                  {record.photos?.length || 0}장
+                                </span>
+                              </div>
 
-                        {isPhotoAccordionOpen && (
-                          <div className="flex flex-col gap-8 px-1 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                            {otherRecords.map((record, rIdx) => (
-                              <div key={`other-rec-${rIdx}`} className="flex flex-col gap-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-[#8e8e93]" />
-                                  <h4 className="text-[14px] font-bold text-[#333] tracking-tight">{record.name}</h4>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
+                              {isOpen && (
+                                <div className="flex flex-wrap gap-2 px-1 pt-1 animate-in fade-in slide-in-from-top-2 duration-300">
                                   {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, false))}
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
+
                   </>
                 );
               })()}
