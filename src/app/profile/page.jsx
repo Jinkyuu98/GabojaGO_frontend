@@ -91,6 +91,57 @@ export default function MyPage() {
   const { userName, userId } = useCurrentUser(); // [ADD] 실제 로그인 유저 이름 및 ID 가져오기
   const [isMounted, setIsMounted] = useState(false); // [ADD] Hydration 에러 방지용
 
+  // [ADD] 카테고리 스크롤 관련 Ref 및 상태
+  const categoryScrollRef = useRef(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const checkScroll = () => {
+    if (categoryScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartX(e.pageX - categoryScrollRef.current.offsetLeft);
+    setScrollLeft(categoryScrollRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => setIsDragging(false);
+  const handleMouseUp = () => setIsDragging(false);
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const x = e.pageX - categoryScrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    categoryScrollRef.current.scrollLeft = scrollLeft - walk;
+    checkScroll();
+  };
+
+  const scroll = (direction) => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = 200;
+      categoryScrollRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+      setTimeout(checkScroll, 300);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener("resize", checkScroll);
+    return () => window.removeEventListener("resize", checkScroll);
+  }, [activeTab, savedPlaces]);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -691,33 +742,63 @@ export default function MyPage() {
               {activeTab === "장소" ? (
                 <div className="flex flex-col gap-2">
                   {/* [ADD] 카테고리 필터 버튼 UI (검색 결과 페이지와 동일한 스타일) */}
-                  <div className="flex overflow-x-auto gap-1.5 scrollbar-hide pb-2 -mx-5 px-5 lg:-mx-8 lg:px-8 after:content-[''] after:w-[1px] after:pr-5 lg:after:pr-8">
-                    {[
-                      "전체",
-                      "음식점",
-                      "카페",
-                      "편의점",
-                      "대형마트",
-                      "관광명소",
-                      "숙박",
-                      "문화시설",
-                      "지하철역",
-                      "주차장",
-                      "주유소",
-                    ].map((cat) => (
+                  <div className="relative group/nav mb-2">
+                    {showLeftArrow && (
                       <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={clsx(
-                          "whitespace-nowrap px-3 py-1.5 rounded-full text-[14px] font-medium transition-all border",
-                          selectedCategory === cat
-                            ? "bg-[#111111] text-white border-[#111111] font-semibold"
-                            : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
-                        )}
+                        onClick={() => scroll("left")}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center bg-white/90 border border-[#eceff4] rounded-full shadow-sm text-[#111111] hover:bg-white transition-all shadow-md"
                       >
-                        {cat}
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
                       </button>
-                    ))}
+                    )}
+                    <div
+                      ref={categoryScrollRef}
+                      onScroll={checkScroll}
+                      onMouseDown={handleMouseDown}
+                      onMouseLeave={handleMouseLeave}
+                      onMouseUp={handleMouseUp}
+                      onMouseMove={handleMouseMove}
+                      className="flex overflow-x-auto gap-1.5 scrollbar-hide pb-2 -mx-5 px-5 lg:-mx-8 lg:px-8 after:content-[''] after:w-[1px] after:pr-5 lg:after:pr-8 cursor-grab active:cursor-grabbing select-none"
+                    >
+                      {[
+                        "전체",
+                        "음식점",
+                        "카페",
+                        "편의점",
+                        "관광명소",
+                        "문화시설",
+                        "숙박",
+                        "지하철역",
+                        "주차장",
+                        "주유소",
+                        "대형마트",
+                      ].map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => setSelectedCategory(cat)}
+                          className={clsx(
+                            "whitespace-nowrap px-3 py-1.5 rounded-full text-[14px] font-medium transition-all border shrink-0",
+                            selectedCategory === cat
+                              ? "bg-[#111111] text-white border-[#111111] font-semibold"
+                              : "bg-white text-[#111111] border-[#DBDBDB] hover:bg-gray-50",
+                          )}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                    {showRightArrow && (
+                      <button
+                        onClick={() => scroll("right")}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center bg-white/90 border border-[#eceff4] rounded-full shadow-sm text-[#111111] hover:bg-white transition-all shadow-md"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </button>
+                    )}
                   </div>
 
                   {/* [MOD] 필터 및 정렬 옵션 선택 UI 변경 (그룹 리스트 좌측, 드롭다운 우측 배치) */}

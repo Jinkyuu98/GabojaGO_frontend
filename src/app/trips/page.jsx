@@ -7,7 +7,7 @@ import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { ActionSheet } from "../../components/common/ActionSheet";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
 // [MOD] Trash2 아이콘 추가
-import { Search, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 // [MOD] removeSchedule, modifySchedule 함수 import 추가
 import { getScheduleList, removeSchedule, modifySchedule } from "../../services/schedule";
@@ -292,12 +292,6 @@ export default function TripsListPage() {
             <h1 className="text-[20px] lg:text-[24px] font-semibold text-[#111] tracking-tighter">
               여행 일정
             </h1>
-            <button
-              className="bg-transparent border-none text-[#111] flex items-center justify-center p-2 cursor-pointer rounded-full hover:bg-gray-100 transition-colors"
-              onClick={() => console.log("Search clicked")}
-            >
-              <Search size={24} strokeWidth={2} />
-            </button>
           </div>
         </header>
 

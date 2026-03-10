@@ -4,6 +4,22 @@ import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { searchPlaces, registerPlace } from "../../../services/place";
 import { addScheduleLocation } from "../../../services/schedule";
+import { getFavoriteList, getFavoriteLocationList } from "../../../services/favorite";
+import { clsx } from "clsx";
+
+const CATEGORIES = ["전체", "음식점", "카페", "편의점", "관광명소", "문화시설", "숙박", "지하철역", "주차장", "주유소", "대형마트"];
+const CATEGORY_MAP = {
+    음식점: "FD6",
+    카페: "CE7",
+    편의점: "CS2",
+    대형마트: "MT1",
+    관광명소: "AT4",
+    숙박: "AD5",
+    문화시설: "CT1",
+    지하철역: "SW8",
+    주차장: "PK6",
+    주유소: "OL7",
+};
 
 const HighlightText = ({ text, keyword }) => {
     if (!keyword.trim()) return <span>{text}</span>;
@@ -24,12 +40,76 @@ const HighlightText = ({ text, keyword }) => {
 };
 
 export default function SearchModal({ isOpen, onClose, tripId, day, formattedDate, onAddSuccess }) {
+    const [activeTab, setActiveTab] = useState("search"); // [ADD] "search" | "favorites"
+    
+    // 검색 관련
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+
+    // [ADD] 즐겨찾기 관련 상태
+    const [favoriteGroups, setFavoriteGroups] = useState([]);
+    const [selectedGroupPK, setSelectedGroupPK] = useState(null);
+    const [favoritePlaces, setFavoritePlaces] = useState([]);
+    const [isFavLoading, setIsFavLoading] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState("전체");
+
+    // [ADD] 카테고리 스크롤 관련 Ref 및 상태
+    const categoryScrollRef = useRef(null);
+    const [showLeftArrow, setShowLeftArrow] = useState(false);
+    const [showRightArrow, setShowRightArrow] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [startX, setStartX] = useState(0);
+    const [scrollLeft, setScrollLeft] = useState(0);
+
+    // [ADD] 스크롤 상태 체크 함수
+    const checkScroll = () => {
+        if (categoryScrollRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
+            setShowLeftArrow(scrollLeft > 0);
+            setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 1);
+        }
+    };
+
+    useEffect(() => {
+        checkScroll();
+        window.addEventListener("resize", checkScroll);
+        return () => window.removeEventListener("resize", checkScroll);
+    }, [activeTab]);
+
+    // [ADD] 드래그 이벤트 핸들러
+    const handleMouseDown = (e) => {
+        setIsDragging(true);
+        setStartX(e.pageX - categoryScrollRef.current.offsetLeft);
+        setScrollLeft(categoryScrollRef.current.scrollLeft);
+    };
+
+    const handleMouseLeave = () => setIsDragging(false);
+    const handleMouseUp = () => setIsDragging(false);
+
+    const handleMouseMove = (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const x = e.pageX - categoryScrollRef.current.offsetLeft;
+        const walk = (x - startX) * 2;
+        categoryScrollRef.current.scrollLeft = scrollLeft - walk;
+        checkScroll();
+    };
+
+    const scroll = (direction) => {
+        if (categoryScrollRef.current) {
+            const scrollAmount = 200;
+            categoryScrollRef.current.scrollBy({
+                left: direction === "left" ? -scrollAmount : scrollAmount,
+                behavior: "smooth",
+            });
+            setTimeout(checkScroll, 300);
+        }
+    }; // [ADD] 카테고리 필터 상태
+
+    // 장소 선택 및 상세 입력
     const [selectedPlace, setSelectedPlace] = useState(null);
     const [isAdding, setIsAdding] = useState(false);
-    // [ADD] 일시/메모 입력 state 추가 - 사용자가 직접 일자와 메모를 입력하여 장소 등록 가능
     const [scheduleDate, setScheduleDate] = useState("");
     const [memo, setMemo] = useState("");
 
@@ -61,13 +141,100 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
             setSearchQuery("");
             setSearchResults([]);
             setSelectedPlace(null);
-            // [ADD] 모달 닫힐 때 일시/메모 초기화
             setScheduleDate("");
             setMemo("");
+            setActiveTab("search");
+            setSelectedCategory("전체"); // [ADD] 닫힐 때 카테고리 초기화
             if (markerRef.current) markerRef.current.setMap(null);
             markerRef.current = null;
         }
     }, [isOpen]);
+
+    // [ADD] 모달 열릴 때 즐겨찾기 그룹 목록 가져오기
+    useEffect(() => {
+        if (isOpen && favoriteGroups.length === 0) {
+            const fetchGroups = async () => {
+                try {
+                    const res = await getFavoriteList();
+                    if (res.data?.favorite_list) {
+                        setFavoriteGroups(res.data.favorite_list);
+                        if (res.data.favorite_list.length > 0 && !selectedGroupPK) {
+                            setSelectedGroupPK(res.data.favorite_list[0].iPK);
+                        }
+                    }
+                } catch (e) {
+                    console.error("즐겨찾기 그룹 조회 실패:", e);
+                }
+            };
+            fetchGroups();
+        }
+    }, [isOpen, favoriteGroups.length]);
+
+    // [ADD] 선택된 즐겨찾기 그룹의 장소 목록 조회
+    useEffect(() => {
+        if (isOpen && activeTab === "favorites" && selectedGroupPK) {
+            const fetchFavPlaces = async () => {
+                setIsFavLoading(true);
+                try {
+                    const res = await getFavoriteLocationList(selectedGroupPK);
+                    if (res.data?.location_list) {
+                        // API 응답 구조에 따라 데이터 가공
+                        const rawData = Array.isArray(res.data.location_list) 
+                            ? res.data.location_list 
+                            : [res.data.location_list];
+                        
+                        const mapped = rawData.map(item => {
+                            const loc = item.location;
+                            return {
+                                id: loc.iPK,
+                                name: loc.strName,
+                                address: loc.strAddress,
+                                category: loc.strGroupName || "기타",
+                                groupCode: loc.strGroupCode || "",
+                                latitude: parseFloat(loc.ptLatitude),
+                                longitude: parseFloat(loc.ptLongitude),
+                                phone: loc.strPhone,
+                                link: loc.strLink,
+                            };
+                        });
+                        setFavoritePlaces(mapped);
+                    } else {
+                        setFavoritePlaces([]);
+                    }
+                } catch (e) {
+                    console.error("즐겨찾기 장소 조회 실패:", e);
+                    setFavoritePlaces([]);
+                } finally {
+                    setIsFavLoading(false);
+                }
+            };
+            fetchFavPlaces();
+        }
+    }, [activeTab, selectedGroupPK, isOpen]);
+
+    // [ADD] 검색 결과 카테고리 필터링
+    const filteredSearchResults = React.useMemo(() => {
+        if (selectedCategory === "전체") return searchResults;
+        return searchResults.filter((place) => {
+            const code = place.groupCode;
+            if (selectedCategory === "기타") {
+                return !Object.values(CATEGORY_MAP).includes(code);
+            }
+            return code === CATEGORY_MAP[selectedCategory];
+        });
+    }, [searchResults, selectedCategory]);
+
+    // [ADD] 카테고리 필터링 로직 (마이페이지와 동일)
+    const filteredFavoritePlaces = React.useMemo(() => {
+        if (selectedCategory === "전체") return favoritePlaces;
+        return favoritePlaces.filter((place) => {
+            const code = place.groupCode;
+            if (selectedCategory === "기타") {
+                return !Object.values(CATEGORY_MAP).includes(code);
+            }
+            return code === CATEGORY_MAP[selectedCategory];
+        });
+    }, [favoritePlaces, selectedCategory]);
 
     // Focus input on open
     useEffect(() => {
@@ -142,6 +309,7 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                     name: item.strName,
                     address: item.strAddress,
                     category: item.strGroupName || "기타",
+                    groupCode: item.strGroupCode || "",
                     latitude: parseFloat(item.ptLatitude),
                     longitude: parseFloat(item.ptLongitude),
                     phone: item.strPhone,
@@ -228,29 +396,130 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                 <div className="flex flex-1 overflow-hidden">
                     {/* Left: Search Area */}
                     <div className="w-[420px] border-r border-[#f2f4f6] flex flex-col bg-white shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-[5]">
-                        <div className="p-6">
-                            <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-5 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:ring-4 focus-within:ring-[#7a28fa]/10 focus-within:border-[#7a28fa] transition-all">
-                                <Image src="/icons/search.svg" alt="search" width={20} height={20} className="opacity-40" />
-                                <input
-                                    ref={inputRef}
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="장소명, 주소 검색"
-                                    className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
-                                />
+                        {/* [ADD] 탭 영역 */}
+                        <div className="flex px-6 border-b border-[#f2f4f6]">
+                            <button
+                                onClick={() => setActiveTab("search")}
+                                className={clsx(
+                                    "flex-1 py-4 text-[15px] font-bold transition-all relative",
+                                    activeTab === "search" ? "text-[#7a28fa]" : "text-[#abb1b9]"
+                                )}
+                            >
+                                장소 검색
+                                {activeTab === "search" && (
+                                    <div className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-[#7a28fa]" />
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("favorites")}
+                                className={clsx(
+                                    "flex-1 py-4 text-[15px] font-bold transition-all relative",
+                                    activeTab === "favorites" ? "text-[#7a28fa]" : "text-[#abb1b9]"
+                                )}
+                            >
+                                찜한 장소
+                                {activeTab === "favorites" && (
+                                    <div className="absolute bottom-[-1px] left-0 w-full h-[2px] bg-[#7a28fa]" />
+                                )}
+                            </button>
+                        </div>
+
+                        {/* [MOD] 모든 탭에서 카테고리 필터 노출 */}
+                        <div className="p-6 pb-4">
+                            {activeTab === "search" && (
+                                <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-5 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:ring-4 focus-within:ring-[#7a28fa]/10 focus-within:border-[#7a28fa] transition-all mb-4">
+                                    <Image src="/icons/search.svg" alt="search" width={20} height={20} className="opacity-40" />
+                                    <input
+                                        ref={inputRef}
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="장소명, 주소 검색"
+                                        className="flex-1 bg-transparent text-[16px] font-medium text-[#111111] placeholder:text-[#abb1b9] outline-none"
+                                    />
+                                </div>
+                            )}
+
+                            <div className="flex flex-col gap-3">
+                                {activeTab === "favorites" && (
+                                    <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
+                                        {favoriteGroups.map((group) => (
+                                            <button
+                                                key={group.iPK}
+                                                onClick={() => setSelectedGroupPK(group.iPK)}
+                                                className={clsx(
+                                                    "whitespace-nowrap px-4 py-2 rounded-full text-[13px] font-bold border-2 transition-all",
+                                                    selectedGroupPK === group.iPK
+                                                        ? "bg-[#7a28fa] text-white border-[#7a28fa] shadow-md shadow-[#7a28fa]/20"
+                                                        : "bg-white text-[#555555] border-[#f2f4f6] hover:bg-gray-50"
+                                                )}
+                                            >
+                                                {group.strName}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="relative group/nav">
+                                    {showLeftArrow && (
+                                        <button
+                                            onClick={() => scroll("left")}
+                                            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center bg-white/90 border border-[#f2f4f6] rounded-full shadow-sm text-[#7a28fa] hover:bg-white transition-all shadow-lg"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="15 18 9 12 15 6"></polyline>
+                                            </svg>
+                                        </button>
+                                    )}
+                                    <div
+                                        ref={categoryScrollRef}
+                                        onScroll={checkScroll}
+                                        onMouseDown={handleMouseDown}
+                                        onMouseLeave={handleMouseLeave}
+                                        onMouseUp={handleMouseUp}
+                                        onMouseMove={handleMouseMove}
+                                        className={clsx(
+                                            "flex gap-1.5 overflow-x-auto scrollbar-hide py-1 cursor-grab active:cursor-grabbing select-none",
+                                            activeTab === "favorites" && "border-t border-[#f2f4f6] pt-3 mt-1"
+                                        )}
+                                    >
+                                        {CATEGORIES.map((cat) => (
+                                            <button
+                                                key={cat}
+                                                onClick={() => setSelectedCategory(cat)}
+                                                className={clsx(
+                                                    "whitespace-nowrap px-3 py-1.5 rounded-full text-[12px] font-semibold border transition-all shrink-0",
+                                                    selectedCategory === cat
+                                                        ? "bg-[#7a28fa] text-white border-[#7a28fa]"
+                                                        : "bg-white text-[#898989] border-[#f2f4f6] hover:border-[#7a28fa] hover:text-[#7a28fa]"
+                                                )}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {showRightArrow && (
+                                        <button
+                                            onClick={() => scroll("right")}
+                                            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center bg-white/90 border border-[#f2f4f6] rounded-full shadow-sm text-[#7a28fa] hover:bg-white transition-all shadow-lg"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="9 18 15 12 9 6"></polyline>
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto px-6 pb-6 scrollbar-hide">
-                            {isLoading ? (
+                            {(activeTab === "search" ? isLoading : isFavLoading) ? (
                                 <div className="flex flex-col items-center justify-center pt-20 gap-4">
                                     <div className="w-8 h-8 border-4 border-[#7a28fa]/20 border-t-[#7a28fa] rounded-full animate-spin" />
-                                    <p className="text-[#abb1b9] text-sm font-medium">장소를 찾는 중입니다...</p>
+                                    <p className="text-[#abb1b9] text-sm font-medium">데이터를 불러오는 중입니다...</p>
                                 </div>
-                            ) : searchQuery.trim() && searchResults.length > 0 ? (
+                            ) : (activeTab === "search" ? filteredSearchResults : filteredFavoritePlaces).length > 0 ? (
                                 <div className="flex flex-col gap-3">
-                                    {searchResults.map((place) => (
+                                    {(activeTab === "search" ? filteredSearchResults : filteredFavoritePlaces).map((place) => (
                                         <div
                                             key={place.id}
                                             onClick={() => setSelectedPlace(place)}
@@ -261,7 +530,11 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                                         >
                                             <div className="flex items-start justify-between gap-2">
                                                 <h4 className="text-[16px] font-bold text-[#111111] leading-snug">
-                                                    <HighlightText text={place.name} keyword={searchQuery} />
+                                                    {activeTab === "search" ? (
+                                                        <HighlightText text={place.name} keyword={searchQuery} />
+                                                    ) : (
+                                                        place.name
+                                                    )}
                                                 </h4>
                                                 <span className="shrink-0 text-[11px] font-bold text-[#7a28fa] bg-[#7a28fa]/10 px-2 py-1 rounded-lg">
                                                     {place.category}
@@ -271,13 +544,15 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
                                         </div>
                                     ))}
                                 </div>
-                            ) : searchQuery.trim() ? (
+                            ) : (activeTab === "search" && searchQuery.trim()) || (activeTab === "favorites" && selectedGroupPK) ? (
                                 <div className="flex flex-col items-center justify-center pt-20 text-[#abb1b9] text-sm font-medium opacity-60">
-                                    <p>검색 결과가 없습니다.</p>
+                                    <p>{activeTab === "search" ? "검색 결과가 없습니다." : "이 그룹에 찜한 장소가 없습니다."}</p>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full opacity-20">
-                                    <p className="text-md font-medium">찾고 싶으신 장소를 검색해 보세요!</p>
+                                    <p className="text-md font-medium">
+                                        {activeTab === "search" ? "찾고 싶으신 장소를 검색해 보세요!" : "찜한 장소를 선택해 보세요!"}
+                                    </p>
                                 </div>
                             )}
                         </div>

@@ -1637,8 +1637,19 @@ export default function TripDetailPage() {
       <>
         {selectedTab === "일정" && (
           <div className="flex flex-col gap-6">
+            {isOwner && (
+              <div className="flex justify-center mb-4">
+                <button
+                  onClick={handleAddPlaceClick}
+                  className="w-full py-3 bg-white border border-[#d1d5db] text-[#111111] text-[15px] font-semibold rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Plus size={18} />
+                  장소 추가
+                </button>
+              </div>
+            )}
             {currentDayPlaces.length > 0 ? (
-              <div className="flex flex-col">
+              <div className="flex flex-col mt-2">
                 {currentDayPlaces.map((place, idx) => (
                   <div key={`place-${idx}-${place.id}`} className="relative">
                     <div
@@ -1695,17 +1706,6 @@ export default function TripDetailPage() {
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-center mt-2 mb-4">
-                  {/* [MOD] 일정 수정 권한 체크 */}
-                  {isOwner && (
-                    <button
-                      onClick={handleAddPlaceClick}
-                      className="px-4 py-2 bg-white border border-[#d1d5db] text-[#555] text-[13px] font-medium rounded-md hover:bg-gray-50 transition-colors shadow-sm tracking-[-0.06px]"
-                    >
-                      장소 추가
-                    </button>
-                  )}
-                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
