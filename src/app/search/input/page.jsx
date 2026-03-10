@@ -52,19 +52,19 @@ function SearchInputContent() {
     sessionStorage.setItem("searchCategory", selectedCategory);
   }, [searchQuery, selectedCategory]);
 
-  // [ADD] 카테고리 목록 정의
+  // [MOD] 카테고리 목록 순서 조정 (다른 화면과 동기화)
   const categories = [
     "전체",
     "음식점",
     "카페",
     "편의점",
-    "대형마트",
     "관광명소",
-    "숙박",
     "문화시설",
+    "숙박",
     "지하철역",
     "주차장",
     "주유소",
+    "대형마트",
   ];
 
   const CATEGORY_MAP = {
@@ -174,6 +174,60 @@ function SearchInputContent() {
     }
   }, []);
 
+  // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
+  const categoryRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // [ADD] 스크롤 위치 감지하여 화살표 노출 여부 결정
+  const checkScroll = () => {
+    if (categoryRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoryRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener("resize", checkScroll);
+    return () => window.removeEventListener("resize", checkScroll);
+  }, []);
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setStartX(e.pageX - categoryRef.current.offsetLeft);
+    setScrollLeft(categoryRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const x = e.pageX - categoryRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    categoryRef.current.scrollLeft = scrollLeft - walk;
+    checkScroll();
+  };
+
+  const scroll = (direction) => {
+    if (categoryRef.current) {
+      const scrollAmount = direction === "left" ? -200 : 200;
+      categoryRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+      setTimeout(checkScroll, 300);
+    }
+  };
+
   return (
     <MobileContainer>
       <div className="w-full h-screen bg-white flex flex-col">
@@ -196,39 +250,57 @@ function SearchInputContent() {
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto flex flex-col w-full pt-[60px]">
+        <div className="flex-1 overflow-y-auto flex flex-col w-full pt-[72px]">
           {/* Search Input Section */}
           <div className="px-5 py-4 flex flex-col gap-3 shrink-0">
-            {/* [ADD] Category Dropdown Filter */}
-            <div className="relative w-full">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full h-12 bg-white border border-[#f2f4f6] text-[#111111] text-[15px] font-medium rounded-xl px-4 appearance-none outline-none focus:border-[#7a28fa] focus:ring-1 focus:ring-[#7a28fa]/20 transition-all cursor-pointer shadow-sm"
+            {/* [MOD] Category Chips Filter (Dropdown 대체) */}
+            <div className="relative group/category">
+              {showLeftArrow && (
+                <button
+                  onClick={() => scroll("left")}
+                  className="absolute left-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                  </svg>
+                </button>
+              )}
+              
+              <div
+                ref={categoryRef}
+                onMouseDown={handleMouseDown}
+                onMouseLeave={handleMouseLeave}
+                onMouseUp={handleMouseUp}
+                onMouseMove={handleMouseMove}
+                onScroll={checkScroll}
+                className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth cursor-grab active:cursor-grabbing px-1 py-1"
+                style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
               >
                 {categories.map((category) => (
-                  <option key={category} value={category}>
+                  <button
+                    key={category}
+                    onClick={() => setSelectedCategory(category)}
+                    className={`shrink-0 px-4 py-2 rounded-full text-[13.5px] font-semibold border transition-all ${
+                      selectedCategory === category
+                        ? "bg-[#7a28fa] border-[#7a28fa] text-white shadow-sm"
+                        : "bg-white border-[#f0f0f0] text-[#757575] hover:border-[#7a28fa]/30 hover:bg-[#f9f5ff]"
+                    }`}
+                  >
                     {category}
-                  </option>
+                  </button>
                 ))}
-              </select>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 12 12"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M2.5 4.5L6 8L9.5 4.5"
-                    stroke="#7e7e7e"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
               </div>
+
+              {showRightArrow && (
+                <button
+                  onClick={() => scroll("right")}
+                  className="absolute right-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* Search Input */}

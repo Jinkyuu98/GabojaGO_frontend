@@ -12,6 +12,33 @@ import { searchPlaces } from "../../services/place";
 import { getPlaceReviews } from "../../services/review"; // [ADD] 리뷰 API import (평점 계산용)
 import PlaceDetailPanel from "../trips/[tripId]/PlaceDetailPanel";
 
+const CATEGORIES = [
+  "전체",
+  "음식점",
+  "카페",
+  "편의점",
+  "관광명소",
+  "문화시설",
+  "숙박",
+  "지하철역",
+  "주차장",
+  "주유소",
+  "대형마트",
+];
+
+const CATEGORY_MAP = {
+  음식점: "FD6",
+  카페: "CE7",
+  편의점: "CS2",
+  대형마트: "MT1",
+  관광명소: "AT4",
+  숙박: "AD5",
+  문화시설: "CT1",
+  지하철역: "SW8",
+  주차장: "PK6",
+  주유소: "OL7",
+};
+
 const HighlightText = ({ text = "", keyword = "" }) => {
   if (!text) return null;
   if (!keyword.trim()) return <span>{text}</span>;
@@ -44,6 +71,55 @@ export default function SearchClient() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("전체");
+
+  // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
+  const categoryScrollRef = useRef(null);
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // [ADD] 스크롤 위치 감지하여 화살표 노출 여부 결정
+  const checkScroll = () => {
+    if (categoryScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = categoryScrollRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(scrollLeft < scrollWidth - clientWidth - 1);
+    }
+  };
+
+  const handleMouseDown = (e) => {
+    setIsMouseDragging(true);
+    setStartX(e.pageX - categoryScrollRef.current.offsetLeft);
+    setScrollLeft(categoryScrollRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsMouseDragging(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsMouseDragging(false);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isMouseDragging) return;
+    e.preventDefault();
+    const x = e.pageX - categoryScrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    categoryScrollRef.current.scrollLeft = scrollLeft - walk;
+    checkScroll();
+  };
+
+  const scroll = (direction) => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = direction === "left" ? -200 : 200;
+      categoryScrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+      setTimeout(checkScroll, 300);
+    }
+  };
 
   // [ADD] 모바일 바텀시트 상태
   const [isMobile, setIsMobile] = useState(false);
@@ -125,25 +201,32 @@ export default function SearchClient() {
       items = Object.values(items);
     }
 
-    return items.map((item) => ({
-      id: item.iPK || item.id,
-      name: item.strName || item.name || "",
-      address: item.strAddress || item.address || "",
-      category: item.strGroupName || item.category || "기타",
-      groupCode: item.strGroupCode || item.group_code || "기타",
-      rating: item.nScore || item.rating || 0, // [FIX] nScore를 rating으로 매핑 (기존에는 item.rating만 참조해 항상 0이었음)
-      reviewCount: item.reviewCount || 0,
-      longitude: parseFloat(item.ptLongitude || item.longitude || 0),
-      latitude: parseFloat(item.ptLatitude || item.latitude || 0),
-      link: item.strLink || item.link || "",
-      phone: item.strPhone || item.phone || "",
-      image:
-        item.first_image ||
-        item.image_url ||
-        item.image ||
-        item.thumbnail_url ||
-        "",
-    }));
+    return items
+      .filter((item) => {
+        // [ADD] 카테고리 필터 적용
+        if (selectedCategory === "전체") return true;
+        const code = item.strGroupCode || item.group_code;
+        return code === CATEGORY_MAP[selectedCategory];
+      })
+      .map((item) => ({
+        id: item.iPK || item.id,
+        name: item.strName || item.name || "",
+        address: item.strAddress || item.address || "",
+        category: item.strGroupName || item.category || "기타",
+        groupCode: item.strGroupCode || item.group_code || "기타",
+        rating: item.nScore || item.rating || 0, // [FIX] nScore를 rating으로 매핑 (기존에는 item.rating만 참조해 항상 0이었음)
+        reviewCount: item.reviewCount || 0,
+        longitude: parseFloat(item.ptLongitude || item.longitude || 0),
+        latitude: parseFloat(item.ptLatitude || item.latitude || 0),
+        link: item.strLink || item.link || "",
+        phone: item.strPhone || item.phone || "",
+        image:
+          item.first_image ||
+          item.image_url ||
+          item.image ||
+          item.thumbnail_url ||
+          "",
+      }));
   };
 
   const initMap = () => {
@@ -164,6 +247,11 @@ export default function SearchClient() {
     if (window.kakao) {
       initMap();
     }
+    
+    // [ADD] 초기 스크롤 및 리사이즈 이벤트 리스너 추가
+    checkScroll();
+    window.addEventListener("resize", checkScroll);
+    return () => window.removeEventListener("resize", checkScroll);
   }, []);
 
   useEffect(() => {
@@ -264,7 +352,7 @@ export default function SearchClient() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, selectedCategory]); // [MOD] 카테고리 변경 시에도 재검색
 
   const renderSearchContent = () => (
     <>
@@ -279,6 +367,53 @@ export default function SearchClient() {
           <h2 className="text-[22px] font-bold text-[#111111] mb-6 tracking-[-0.5px] hidden lg:block">
             장소 검색
           </h2>
+
+          <div className="relative group/category mb-4 shrink-0">
+            {showLeftArrow && (
+              <button
+                onClick={() => scroll("left")}
+                className="absolute left-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+              </button>
+            )}
+            <div
+              ref={categoryScrollRef}
+              onMouseDown={handleMouseDown}
+              onMouseLeave={handleMouseLeave}
+              onMouseUp={handleMouseUp}
+              onMouseMove={handleMouseMove}
+              onScroll={checkScroll}
+              className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth cursor-grab active:cursor-grabbing px-0.5 py-1"
+              style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
+            >
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-semibold border transition-all ${
+                    selectedCategory === cat
+                      ? "bg-[#7a28fa] border-[#7a28fa] text-white shadow-sm"
+                      : "bg-white border-[#f0f0f0] text-[#757575] hover:border-[#7a28fa]/30 hover:bg-[#f9f5ff]"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {showRightArrow && (
+              <button
+                onClick={() => scroll("right")}
+                className="absolute right-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-3 bg-[#f5f7f9] h-14 px-4 rounded-xl border border-[#f2f4f6] transition-colors focus-within:bg-white focus-within:ring-2 focus-within:ring-[#7a28fa]/20 focus-within:border-[#7a28fa] shrink-0">
             <Image
