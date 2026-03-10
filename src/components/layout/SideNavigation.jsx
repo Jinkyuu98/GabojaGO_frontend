@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { clsx } from "clsx";
-import { Home, Calendar, MapPin, User } from "lucide-react";
+import { Home, Calendar, MapPin, User, LogOut } from "lucide-react";
 import { AlertDialog } from "../common/AlertDialog";
 
 export const SideNavigation = () => {
@@ -92,6 +92,31 @@ export const SideNavigation = () => {
           );
         })}
       </nav>
+
+      <div className="flex-1" />
+
+      {/* [ADD] 사이드바 최하단 로그아웃 버튼 */}
+      <button
+        className="flex flex-col items-center justify-center gap-2 px-1 py-4 rounded-2xl transition-all w-full bg-transparent text-[#ff3b3b] hover:bg-[#fff5f5]"
+        onClick={() => {
+          if (window.confirm("로그아웃 하시겠습니까?")) {
+            localStorage.removeItem("token");
+            localStorage.removeItem("saved_places");
+            router.push("/login");
+          }
+        }}
+      >
+        <LogOut
+          size={24}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="transition-colors"
+        />
+        <span className="text-[12px] font-bold tracking-[-0.4px] text-center whitespace-nowrap">
+          로그아웃
+        </span>
+      </button>
 
       {/* [ADD] 둘러보기 모드 전용 로그인 모달 (PC 사이드바용) */}
       <AlertDialog

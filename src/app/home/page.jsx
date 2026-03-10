@@ -85,14 +85,18 @@ export default function HomePage() {
           });
 
         let targetTrip = null;
+        let otherUpcoming = [];
         if (currentTrips.length > 0) {
-          targetTrip = currentTrips.sort((a, b) => new Date(a.dtDate1) - new Date(b.dtDate1))[0];
+          const sortedCurrent = currentTrips.sort((a, b) => new Date(a.dtDate1) - new Date(b.dtDate1));
+          targetTrip = sortedCurrent[0];
+          otherUpcoming = [...sortedCurrent.slice(1), ...upcomingTrips];
         } else if (upcomingTrips.length > 0) {
           targetTrip = upcomingTrips[0];
+          otherUpcoming = upcomingTrips.slice(1);
         }
 
         if (targetTrip) {
-          // [ADD] 지출 내역을 가져와서 합산 계산
+          // [ADD] 지출 내역을 가져와서 합산 계산 (대표 일정만)
           try {
             const expenseRes = await getScheduleExpenses(targetTrip.iPK);
             const eList = expenseRes?.expense_list || [];
@@ -102,7 +106,8 @@ export default function HomePage() {
             console.error("지출 내역 조회 실패:", e);
             targetTrip.nTotalSpent = 0;
           }
-          setOngoingTrips([targetTrip]);
+          // [MOD] 대표 일정과 예정 일정 1개만 포함 (대표 1 + 예정 1)
+          setOngoingTrips([targetTrip, ...otherUpcoming.slice(0, 1)]); 
           setHasTripData(true);
         } else {
           setOngoingTrips([]);
@@ -119,10 +124,10 @@ export default function HomePage() {
     fetchSchedules();
   }, [isBrowseMode]); // [FIX] tripId 제거 (홈페이지에는 tripId가 없음)
 
-  // [ADD] 랭킹 데이터 전용 페칭 로직
   const fetchRankings = async () => {
     try {
-      const res = await getTopLocations(10, selectedCategory);
+      // [MOD] "ALL"인 경우 카테고리 필터 없이 조회
+      const res = await getTopLocations(10, selectedCategory === "ALL" ? null : selectedCategory);
       if (res.data?.location_list) {
         setRankingList(res.data.location_list);
       } else if (res.location_list) {
@@ -138,6 +143,7 @@ export default function HomePage() {
   }, [selectedCategory]);
 
   const categoryMap = {
+    "ALL": "전체", // [ADD] 전체 필터 추가
     "AT4": "관광명소",
     "AD5": "숙박",
     "FD6": "음식점",
@@ -207,21 +213,29 @@ export default function HomePage() {
             <h1 className="text-[20px] lg:text-[24px] font-bold tracking-[-0.5px] text-[#111111]">
               가보자<span className="text-[#7a28fa]">GO</span>
             </h1>
-            <button
-              // [MOD] 둘러보기 모드일 때 "AI 일정 생성"으로 노출, 둘 다 아니면(일정 데이터 없는 로그인 유저) 숨김
-              className={`bg-[#111111] text-white px-5 py-2.5 lg:px-6 lg:py-3 rounded-full text-[14px] lg:text-[16px] font-semibold hover:scale-[1.02] active:scale-[0.98] transition-all ${!hasTripData && !isBrowseMode ? "hidden" : ""}`}
-              onClick={() => {
-                if (isBrowseMode) {
-                  // [MOD] 둘러보기 모드(AI 일정 생성 버튼)에서는 바텀시트를 건너뛰고 바로 진입
+            <div className={`flex gap-2 ${!hasTripData && !isBrowseMode ? "hidden" : ""}`}>
+              {/* [MOD] 일정 생성하기 버튼을 AI/직접 두 개로 분리 및 액션시트 제거 */}
+              <button
+                className="bg-[#7a28fa] text-white px-4 py-2.5 lg:px-5 lg:py-3 rounded-full text-[13px] lg:text-[15px] font-bold hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm"
+                onClick={() => {
+                  resetTravelData();
+                  setTravelData({ creationType: "ai" });
                   router.push("/onboarding/location");
-                } else {
-                  // [MOD] 일정 생성하기 버튼일 때는 ActionSheet를 띄움
-                  setIsActionSheetOpen(true);
-                }
-              }}
-            >
-              {isBrowseMode ? "AI 일정 생성" : "일정 생성하기"}
-            </button>
+                }}
+              >
+                AI 일정 생성
+              </button>
+              <button
+                className="bg-[#111111] text-white px-4 py-2.5 lg:px-5 lg:py-3 rounded-full text-[13px] lg:text-[15px] font-bold hover:scale-[1.02] active:scale-[0.98] transition-all shadow-sm"
+                onClick={() => {
+                  resetTravelData();
+                  setTravelData({ creationType: "manual" });
+                  router.push("/onboarding/location");
+                }}
+              >
+                직접 일정 생성
+              </button>
+            </div>
           </div>
         </header>
 
@@ -260,14 +274,16 @@ export default function HomePage() {
                       {index + 1}
                     </span>
                     {/* [DEL] 이미지 영역 삭제 */}
-                    <div className="flex flex-col flex-1 min-w-0">
-                      <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-2">
-                        {item.strName || item.place_name}
-                      </h3>
-                      <p className="text-[15px] font-semibold text-[#8e8e93] truncate">
-                        {item.strGroupName || item.category_name || "장소"}
-                      </p>
-                    </div>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
+                          {item.strName || item.place_name}
+                        </h3>
+                        {selectedCategory === "ALL" && (
+                          <p className="text-[15px] font-semibold text-[#8e8e93] truncate">
+                            {item.strGroupName || item.category_name || "장소"}
+                          </p>
+                        )}
+                      </div>
                     <div className="flex items-center justify-end w-14">
                       {index % 4 === 0 ? (
                         <div className="flex items-center gap-1 font-black text-[#ef4444] text-[15px]">
@@ -289,7 +305,7 @@ export default function HomePage() {
             {/* Main Travel Card Column */}
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
               <div className="flex flex-col gap-4">
-                {ongoingTrips.map((trip) => {
+                {ongoingTrips.map((trip, idx) => {
                   // [ADD] 동행자 데이터에 '가족과, 연인과' 등의 서술어가 없는 경우
                   // 자연스럽게 '와/과 함께'를 붙여주는 텍스트 전처리
                   const companionText = trip.strWithWho
@@ -301,12 +317,28 @@ export default function HomePage() {
                   return (
                     <div
                       key={trip.iPK || "single-trip"}
-                      className="bg-[#f4f1ff] rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-"
+                      className={clsx(
+                        "rounded-2xl p-6 lg:p-8 cursor-pointer hover:shadow-xl transition-shadow lg:shadow-",
+                        idx === 0 ? "bg-[#f4f1ff]" : "bg-[#f8f9fa] border border-[#e9ecef]"
+                      )}
                       onClick={() => router.push(`/trips/${trip.iPK}`)}
                     >
+                      {/* Trip Status Label */}
+                      <div className="mb-4">
+                        <span className={clsx(
+                          "px-3 py-1 rounded-full text-[12px] font-bold",
+                          idx === 0 ? "bg-[#7a28fa] text-white" : "bg-gray-200 text-gray-600"
+                        )}>
+                          {idx === 0 ? "진행 중" : "예정된 일정"}
+                        </span>
+                      </div>
+
                       {/* Trip Info */}
                       <div className="flex flex-col gap-2 mb-6">
-                        <div className="flex justify-between border-b border-[#e4e1ff] pb-4">
+                        <div className={clsx(
+                          "flex justify-between border-b pb-4",
+                          idx === 0 ? "border-[#e4e1ff]" : "border-gray-200"
+                        )}>
                           <span className="text-[15px] font-medium text-[#6d818f]">
                             {companionText}
                           </span>
@@ -350,7 +382,10 @@ export default function HomePage() {
                         {/* Progress Bar */}
                         <div className="relative w-full h-4 bg-white rounded-full overflow-hidden border border-[#111111]/5">
                           <div
-                            className="absolute top-0 left-0 h-full bg-[#7a28fa] rounded-full"
+                            className={clsx(
+                              "absolute top-0 left-0 h-full rounded-full transition-all",
+                              idx === 0 ? "bg-[#7a28fa]" : "bg-gray-400"
+                            )}
                             style={{ 
                               width: `${Math.min(100, Math.max(0, (((trip.nTotalBudget || 0) - (trip.nTotalSpent || 0)) / (trip.nTotalBudget || 1)) * 100))}%` 
                             }}
@@ -358,39 +393,7 @@ export default function HomePage() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-3 mt-4">
-                        {[
-                          { icon: "/icons/camera.svg", label: "사진 등록", action: (e) => {
-                            e.stopPropagation();
-                            router.push(`/trips/${trip.iPK}?tab=사진&action=uploadPhoto`);
-                          }},
-                          { icon: "/icons/receipt.svg", label: "영수증 등록", action: (e) => {
-                            e.stopPropagation();
-                            router.push(`/trips/${trip.iPK}?tab=비용&action=receipt`);
-                          }},
-                          { icon: "/icons/map-pin.svg", label: "지도 보기", action: (e) => {
-                            e.stopPropagation();
-                            router.push(`/trips/${trip.iPK}?tab=일정`);
-                          }},
-                        ].map((btn, idx) => (
-                          <button
-                            key={idx}
-                            className="flex-1 flex flex-col items-center gap-2 bg-white rounded-2xl border border-[#eeeaff] py-6 hover:bg-[#fcfdfe] transition-colors"
-                            onClick={btn.action}
-                          >
-                            <Image
-                              src={btn.icon}
-                              alt={btn.label}
-                              width={28}
-                              height={28}
-                            />
-                            <span className="text-[14px] font-bold text-[#556574]">
-                              {btn.label}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
+                      {/* [DEL] 사진/영수증/지도 버튼 제거 (예정일정 높이 축소를 위함) */}
                     </div>
                   );
                 })}
@@ -430,12 +433,14 @@ export default function HomePage() {
                       </span>
                       {/* [DEL] 이미지 영역 삭제 */}
                       <div className="flex flex-col flex-1 min-w-0">
-                        <h3 className="text-[16px] lg:text-[17px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
+                        <h3 className="text-[16px] lg:text-[17px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight">
                           {item.strName || item.place_name}
                         </h3>
-                        <p className="text-[13px] text-[#8e8e93] truncate font-medium">
-                          {item.strGroupName || item.category_name || "장소"}
-                        </p>
+                        {selectedCategory === "ALL" && (
+                          <p className="text-[13px] text-[#8e8e93] truncate font-medium mt-1">
+                            {item.strGroupName || item.category_name || "장소"}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center justify-end w-10">
                         {index % 4 === 0 ? (
@@ -463,12 +468,29 @@ export default function HomePage() {
               <p className="text-[17px] text-[#4b5563] leading-relaxed mb-8 font-medium">
                 아직 여행 일정이 없어요<br />첫 여행 일정을 만들어볼까요?
               </p>
-              <button
-                onClick={() => setIsActionSheetOpen(true)}
-                className="bg-[#111] text-white px-8 py-4 rounded-full text-[16px] font-bold hover:scale-[1.05] active:scale-[0.95] transition-all shadow-lg shadow-black/10"
-              >
-                일정 생성하기
-              </button>
+              <div className="flex gap-3">
+                {/* [MOD] 일정 생성하기 버튼을 AI/직접 두 개로 분리 */}
+                <button
+                  onClick={() => {
+                    resetTravelData();
+                    setTravelData({ creationType: "ai" });
+                    router.push("/onboarding/location");
+                  }}
+                  className="bg-[#7a28fa] text-white px-8 py-4 rounded-full text-[16px] font-bold hover:scale-[1.05] active:scale-[0.95] transition-all shadow-lg shadow-[#7a28fa]/20"
+                >
+                  AI 일정 생성
+                </button>
+                <button
+                  onClick={() => {
+                    resetTravelData();
+                    setTravelData({ creationType: "manual" });
+                    router.push("/onboarding/location");
+                  }}
+                  className="bg-[#111] text-white px-8 py-4 rounded-full text-[16px] font-bold hover:scale-[1.05] active:scale-[0.95] transition-all shadow-lg shadow-black/10"
+                >
+                  직접 일정 생성
+                </button>
+              </div>
             </div>
 
             {/* Ranking List for Empty State */}
@@ -499,25 +521,16 @@ export default function HomePage() {
                     )}>
                       {index + 1}
                     </span>
-                    <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-2xl overflow-hidden relative bg-[#f3f4f6] flex-shrink-0 flex items-center justify-center">
-                      {(item.strFile || item.first_image) ? (
-                        <Image
-                          src={item.strFile || item.first_image}
-                          alt={item.strName}
-                          fill
-                          className="object-cover group-hover:scale-110 transition-transform"
-                        />
-                      ) : (
-                        <Filter className="text-gray-300" size={24} />
-                      )}
-                    </div>
+                    {/* [DEL] 이미지 영역 삭제 (일정 있을 때와 통일성 유지) */}
                     <div className="flex flex-col flex-1 min-w-0">
-                      <h3 className="text-[17px] lg:text-[19px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1.5">
+                      <h3 className="text-[17px] lg:text-[19px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight">
                         {item.strName || item.place_name}
                       </h3>
-                      <p className="text-[14px] font-medium text-[#6b7280] truncate">
-                        {item.strGroupName || item.category_name || "장소"}
-                      </p>
+                      {selectedCategory === "ALL" && (
+                        <p className="text-[14px] font-medium text-[#6b7280] truncate mt-1.5">
+                          {item.strGroupName || item.category_name || "장소"}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center justify-end w-12 mr-2">
                       {index % 4 === 0 ? (
