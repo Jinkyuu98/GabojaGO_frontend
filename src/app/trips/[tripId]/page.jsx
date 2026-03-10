@@ -2445,7 +2445,7 @@ export default function TripDetailPage() {
                       <div key={item.id} className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-3">
                           <div
-                            className="w-[18px] h-[18px] rounded cursor-pointer"
+                            className="w-[18px] h-[18px] rounded cursor-pointer flex-shrink-0"
                             onClick={() => onTogglePreparation(item)}
                           >
                             <Image
@@ -2463,7 +2463,7 @@ export default function TripDetailPage() {
                           </span>
                         </div>
                         <button
-                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
+                          className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1 flex-shrink-0"
                           onClick={() => onRemovePreparation(item.id)}
                         >
                           <Trash2 size={16} />
@@ -2552,7 +2552,7 @@ export default function TripDetailPage() {
                         }
                         return companionItems.map((item) => (
                           <div key={item.id} className="flex items-center gap-3">
-                            <div className="w-[18px] h-[18px] rounded opacity-60">
+                            <div className="w-[18px] h-[18px] rounded opacity-60 flex-shrink-0">
                               <Image
                                 src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
                                 alt="checkbox"
