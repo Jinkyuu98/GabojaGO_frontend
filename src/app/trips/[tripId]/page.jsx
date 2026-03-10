@@ -181,6 +181,7 @@ export default function TripDetailPage() {
   const [selectedChecklistUser, setSelectedChecklistUser] = useState(null);
   const [userChecklistStates, setUserChecklistStates] = useState({}); // { [userId]: { [prepId]: boolean } }
   const [isChecklistAccordionOpen, setIsChecklistAccordionOpen] = useState(false);
+  const [isPhotoAccordionOpen, setIsPhotoAccordionOpen] = useState(false); // [ADD] 사진 탭 동행자 사진 아코디언 상태
 
   // [ADD] 현재 로그인한 사용자 정보를 selectedChecklistUser 초기값으로 설정
   useEffect(() => {
@@ -1234,9 +1235,7 @@ export default function TripDetailPage() {
       const recordsToLink = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
 
       recordsToLink.forEach((record) => {
-        // [MOD] 본인이 올린 사진 레코드만 동선으로 표시
-        if (record.uploaderFK !== currentUserId) return;
-
+        // [MOD] 모든 사용자의 사진을 동선으로 표시 (다시 원복)
         const pathPoints = record.photos
           .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
           .map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
@@ -1849,197 +1848,158 @@ export default function TripDetailPage() {
         {/* --- 사진(기록) 탭 --- */}
         {
           selectedTab === "사진" && (
-            <div className="flex flex-col gap-5">
-              {/* [MOD] 선택된 탭이 '기타'인지 일반 일차인지에 따라 렌더링 조건 분기 */}
-              {((selectedDay !== "기타" && currentDayRecords.length > 0) || (selectedDay === "기타" && trip.extraRecords?.length > 0)) && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-[#111111]">
-                    {selectedDay === "기타"
-                      ? (trip.extraRecords?.reduce((sum, r) => sum + (r.photos?.length || 0), 0) || 0) + "개의 사진"
-                      : currentDayRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0) + "개의 사진"
-                    }
-                  </span>
-                  <span
-                    className="text-sm font-semibold text-[#7a28fa] cursor-pointer"
-                    onClick={() => photoInputRef.current?.click()}
-                  >
-                    {isUploadingPhoto ? "업로드 중..." : "사진 등록"}
-                  </span>
-                </div>
-              )}
+            <div className="flex flex-col gap-6">
+              {(() => {
+                const dayRecs = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
+                const totalPhotos = dayRecs.reduce((sum, r) => sum + (r.photos?.length || 0), 0);
 
-              {selectedDay !== "기타" && currentDayRecords.length > 0 && (
-                currentDayRecords.map((record, idx) => (
-                  <div key={idx} className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between gap-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
-                          {idx + 1}
-                        </div>
-                        <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
-                          {record.name}
-                        </h3>
-                      </div>
+                const myRecords = dayRecs.filter(r => r.uploaderFK === currentUserId);
+                const otherRecords = dayRecs.filter(r => r.uploaderFK !== currentUserId);
+
+                if (totalPhotos === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-10 px-6 bg-white border border-[#f2f2f7] rounded-xl mt-2">
+                      <p className="text-[15px] font-semibold text-[#111111] mb-1">
+                        {selectedDay === "기타" ? "기타 기록" : `${selectedDay}일차 사진`}
+                      </p>
+                      <p className="text-[13px] text-[#8e8e93] text-center mb-6">
+                        등록된 사진이 없습니다.
+                      </p>
+                      <button
+                        className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={isUploadingPhoto}
+                      >
+                        {isUploadingPhoto ? "업로드 중..." : "사진 추가"}
+                      </button>
+                    </div>
+                  );
+                }
+
+                // 사진 아이템 렌더링 함수 (내부 중복 방지용)
+                const renderPhotoItem = (photo, recordIndex, photoIndex, isMyPhoto) => (
+                  <div
+                    key={`${recordIndex}-${photoIndex}`}
+                    className="relative w-[106px] h-[106px] flex-shrink-0"
+                  >
+                    <img
+                      src={photo.src || "/icons/camera.svg"}
+                      alt={`trip-photo-${photoIndex}`}
+                      onError={(e) => {
+                        e.target.src = "/icons/camera.svg";
+                        e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
+                      }}
+                      onClick={() => handlePhotoClick(photo)}
+                      className={clsx(
+                        "w-full h-full object-cover cursor-pointer hover:ring-2 hover:ring-[#7a28fa] transition-all rounded-lg",
+                      )}
+                    />
+
+                    {/* 삭제 버튼 (방장 또는 업로더 본인) */}
+                    {(isOwner || photo.uploaderFK === currentUserId) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePhoto(photo.id, photo.iImagePK);
+                        }}
+                        className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    )}
+
+                    {/* 찜하기 버튼 (내 사진일 때만) */}
+                    {isMyPhoto && (
+                      <button
+                        onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                        className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                      >
+                        <Heart size={14} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                      </button>
+                    )}
+                  </div>
+                );
+
+                return (
+                  <>
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-sm font-semibold text-[#111111]">
+                        {totalPhotos}개의 사진
+                      </span>
+                      <span
+                        className="text-sm font-semibold text-[#7a28fa] cursor-pointer"
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        {isUploadingPhoto ? "업로드 중..." : "사진 등록"}
+                      </span>
                     </div>
 
-                    {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
-                    <div className="flex flex-wrap gap-2">
-                      {record.photos.map((photo, photoIdx) => (
-                        <div
-                          key={photoIdx}
-                          className="relative w-[110px] h-[110px] flex-shrink-0"
-                        >
-                          <img
-                            src={photo.src || "/icons/camera.svg"}
-                            alt={`photo-${photoIdx}`}
-                            onError={(e) => {
-                              e.target.src = "/icons/camera.svg";
-                              e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
-                            }}
-                            onClick={() => {
-                              handlePhotoClick(photo);
-                              // [MOD] 목록 클릭 시에는 확대하지 않고 지도를 해당 위치로 이동만 함 (사용자 요청)
-                            }}
-                            className={clsx(
-                              "w-full h-full object-cover cursor-pointer hover:ring-2 hover:ring-[#7a28fa] transition-all rounded-lg",
-                            )}
-                          />
-                          {/* [MOD] 사진 삭제 버튼 - 권한 체크 추가 (방장 또는 업로더 본인) */}
-                          {(isOwner || photo.uploaderFK === currentUserId) && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!window.confirm("사진을 삭제 하시겠습니까?")) return;
-                                handleDeletePhoto(photo.id, photo.iImagePK);
-                              }}
-                              className="absolute top-1 right-1 w-6 h-6 bg-black/40 hover:bg-black/60 rounded-full flex items-center justify-center transition-colors z-10"
-                            >
-                              <X size={14} className="text-white" />
-                            </button>
-                          )}
+                    {/* 1. 내 사진 섹션 (기본 노출) */}
+                    <div className="flex flex-col gap-5">
+                      <div className="flex items-center gap-2.5 px-1">
+                        <div className="w-5 h-5 rounded-md bg-[#7a28fa] flex items-center justify-center">
+                          <ImageIcon size={12} className="text-white" />
+                        </div>
+                        <h3 className="text-[15px] font-bold text-[#111111]">내 사진</h3>
+                      </div>
 
-                          {/* [ADD] 사진 찜하기(하트) 버튼 (좌측 하단) - 내 사진일 때만 가능하도록 수정 */}
-                          {photo.uploaderFK === currentUserId && (
-                            <button
-                              onClick={(e) => handleToggleFavoriteImage(e, photo)}
-                              className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
-                            >
-                              <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
-                            </button>
-                          )}
-
-                          {photoIdx === 0 && photo.likes && (
-                            <div className="absolute bottom-2 left-6 ml-2 flex items-center gap-1">
-                              <Image
-                                src="/icons/heart-fill.svg"
-                                alt="likes"
-                                width={17}
-                                height={15}
-                              />
-
-                              <span className="text-[15px] font-medium text-white">
-                                {photo.likes}
-                              </span>
+                      {myRecords.length > 0 ? (
+                        <div className="flex flex-col gap-6 px-1">
+                          {myRecords.map((record, rIdx) => (
+                            <div key={`my-rec-${rIdx}`} className="flex flex-wrap gap-2">
+                              {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, true))}
                             </div>
-                          )}
-                          {photoIdx === record.photos.length - 1 &&
-                            photo.moreCount && (
-                              <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                                <span className="text-base font-semibold text-white tracking-[-0.1px]">
-                                  +{photo.moreCount}
-                                </span>
-                              </div>
-                            )}
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="py-8 text-center bg-[#fbfbfb] border border-dashed border-[#e5e5e5] rounded-xl mx-1">
+                          <p className="text-[13px] text-[#8e8e93]">아직 올린 사진이 없습니다.</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
-              )}
 
-              {/* [MOD] 여행 기간 외 사진(기타 기록) 표시 - '기타' 탭 선택 시에만 표시되도록 수정 */}
-              {selectedDay === "기타" && trip.extraRecords?.length > 0 && (
-                <div className="flex flex-col gap-5 mt-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-[#8e8e93] text-white text-sm font-bold flex items-center justify-center">
-                      !
-                    </div>
-                    <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
-                      기타 기록 (기간 외 사진)
-                    </h3>
-                  </div>
-                  {trip.extraRecords.map((record, idx) => (
-                    <div key={`extra-${idx}`} className="flex flex-col gap-3">
-                      <h4 className="text-sm font-medium text-[#8e8e93] px-1">{record.name}</h4>
-                      {/* [MOD] 가로 스크롤 대신 flex-wrap 적용 (PC 환경 고려) */}
-                      <div className="flex flex-wrap gap-2">
-                        {record.photos.map((photo, photoIdx) => (
-                          <div key={photoIdx} className="relative w-[110px] h-[110px] flex-shrink-0">
-                            <img
-                              src={photo.src || "/icons/camera.svg"}
-                              alt={`extra-photo-${photoIdx}`}
-                              onError={(e) => {
-                                e.target.src = "/icons/camera.svg";
-                                e.target.className = clsx(e.target.className, "opacity-40 p-4 object-contain");
-                              }}
-                              onClick={() => {
-                                handlePhotoClick(photo);
-                                // [MOD] 목록 클릭 시에는 확대하지 않고 지도를 해당 위치로 이동만 함 (사용자 요청)
-                              }}
-                              className={clsx(
-                                "w-full h-full object-cover cursor-pointer hover:ring-2 hover:ring-[#7a28fa] transition-all rounded-lg",
-                              )}
+                    {/* 2. 동행자 사진 섹션 (아코디언) */}
+                    {otherRecords.length > 0 && (
+                      <div className="mt-2 pt-4 border-t border-[#f2f2f7]">
+                        <div className="flex items-center justify-between px-1 mb-4">
+                          <button
+                            onClick={() => setIsPhotoAccordionOpen(!isPhotoAccordionOpen)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-semibold text-[#555] hover:bg-gray-50 transition-all"
+                          >
+                            <span>동행자 사진 보기</span>
+                            <Image
+                              src="/icons/arrow-left.svg"
+                              alt="arrow"
+                              width={10}
+                              height={10}
+                              className={clsx("transition-transform", isPhotoAccordionOpen ? "rotate-90" : "-rotate-90")}
                             />
-                            {/* [ADD] 기타 기록 사진 삭제 버튼 */}
-                            {(isOwner || photo.uploaderFK === currentUserId) && (
-                              <button
-                                className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full transition-all group-hover:opacity-100 opacity-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!window.confirm("사진을 삭제 하시겠습니까?")) return;
-                                  handleRemoveImage(idx, photo.id, photo.iImagePK);
-                                }}
-                              >
-                                <Trash2 size={16} className="text-white" />
-                              </button>
-                            )}
+                          </button>
+                          <span className="text-[12px] font-medium text-[#8e8e93]">
+                            총 {otherRecords.reduce((sum, r) => sum + (r.photos?.length || 0), 0)}장
+                          </span>
+                        </div>
 
-                            {/* [ADD] 기타 상세사진 찜하기(하트) 버튼 - 내 사진일 때만 */}
-                            {photo.uploaderFK === currentUserId && (
-                              <button
-                                onClick={(e) => handleToggleFavoriteImage(e, photo)}
-                                className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
-                              >
-                                <Heart size={16} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
-                              </button>
-                            )}
+                        {isPhotoAccordionOpen && (
+                          <div className="flex flex-col gap-8 px-1 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                            {otherRecords.map((record, rIdx) => (
+                              <div key={`other-rec-${rIdx}`} className="flex flex-col gap-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-[#8e8e93]" />
+                                  <h4 className="text-[14px] font-bold text-[#333] tracking-tight">{record.name}</h4>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, false))}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
-
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* [MOD] 빈 화면 메시지 처리 분기 */}
-              {((selectedDay !== "기타" && currentDayRecords.length === 0) || (selectedDay === "기타" && (!trip.extraRecords || trip.extraRecords.length === 0))) && (
-                <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
-                  <p className="text-[16px] font-semibold text-[#111111] mb-2">
-                    {selectedDay === "기타" ? "기타 기록" : getActualDateText(selectedDay)}
-                  </p>
-                  <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                    {"사진으로 여행 이야기를 채워보세요"}
-                  </p>
-                  <button
-                    className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                    onClick={() => photoInputRef.current?.click()}
-                    disabled={isUploadingPhoto}
-                  >
-                    {isUploadingPhoto ? "업로드 중..." : "사진 추가"}
-                  </button>
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
               {/* [ADD] 숨겨진 파일 선택기 (사진 탭 전용) */}
               <input
                 type="file"
@@ -2052,15 +2012,11 @@ export default function TripDetailPage() {
                   if (!files || files.length === 0) return;
                   try {
                     setIsUploadingPhoto(true);
-                    // [MOD] 복수 개의 파일 업로드 처리
                     for (let i = 0; i < files.length; i++) {
                       await addScheduleImage(parseInt(tripId), 0, files[i]);
                     }
                     alert("사진이 성공적으로 업로드되었습니다.");
-                    // [ADD] 입력창 초기화 (연속 업로드 가능하게 함)
                     e.target.value = "";
-
-                    // [MOD] 새로고침 대신 fetchTrip()으로 데이터만 갱신하여 탭 상태 유지
                     await fetchTrip();
                   } catch (err) {
                     console.error("사진 업로드 실패:", err);
