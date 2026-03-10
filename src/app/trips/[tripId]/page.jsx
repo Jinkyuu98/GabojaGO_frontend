@@ -529,6 +529,7 @@ export default function TripDetailPage() {
             newChecklist = pList.map(prep => ({
               id: prep.iPK,
               scheduleFK: prep.iScheduleFK, // [ADD] modify API 필수 필드
+              userFK: prep.iUserFK, // [ADD] 사용자별 구분을 위해 저장
               name: prep.strName,
               checked: prep.bCheck || false
             }));
@@ -584,74 +585,79 @@ export default function TripDetailPage() {
       setIsAddingPreparation(false);
       return;
     }
+    const safeUserId = parseInt(currentUserId);
+    if (isNaN(safeUserId)) {
+      alert("사용자 정보를 확인할 수 없습니다. 다시 로그인해 주세요.");
+      return;
+    }
+
     try {
+      // [MOD] SchedulePreparationModel: iPK는 append 시 필요 없으므로 제외 (또는 null)
+      // iUserFK, iScheduleFK는 반드시 정수여야 함
       const payload = {
-        iPK: 0,
         iScheduleFK: parseInt(tripId, 10),
+        iUserFK: safeUserId,
         strName: newPreparationName.trim(),
         bCheck: false
       };
 
-      // API call
+      console.log("📝 준비물 추가 요청 페이로드:", payload);
       await addSchedulePreparation(payload);
 
-      // 로컬 상태 즉시 업데이트
-      const fetchCall = await getSchedulePreparations(tripId).catch(() => null);
+      await fetchTrip();
+      setNewPreparationName("");
+      setIsAddingPreparation(false);
+    } catch (err) {
+      // [MOD] 422 에러 상세 내용 확인을 위해 detail 로깅 추가
+      console.error("준비물 추가 중 오류 세부정보:", err.response?.data || err);
+      alert("준비물 추가에 실패했습니다. (상세 내용은 콘솔 확인)");
+    }
+  };
 
-      let newChecklist = [];
-      if (fetchCall?.preparation_list) {
-        try {
-          const pList = typeof fetchCall.preparation_list === "string"
-            ? JSON.parse(fetchCall.preparation_list.replace(/'/g, '"'))
-            : (Array.isArray(fetchCall.preparation_list) ? fetchCall.preparation_list : []);
 
-          newChecklist = pList.map(prep => ({
-            id: prep.iPK,
-            name: prep.strName,
-            checked: prep.bCheck || false
-          }));
-        } catch (e) { console.error("Preparation parse error", e); }
-      }
 
+  const onTogglePreparation = async (prep) => {
+    const safeUserId = parseInt(currentUserId);
+    if (isNaN(safeUserId) || prep.userFK !== safeUserId) return;
+
+    try {
+      const newCheckStatus = !prep.checked;
+      
+      const payload = {
+        iPK: prep.id,
+        iScheduleFK: prep.scheduleFK || parseInt(tripId, 10),
+        iUserFK: safeUserId,
+        strName: prep.name,
+        bCheck: newCheckStatus
+      };
+
+      console.log("📝 준비물 수정 요청 페이로드:", payload);
+      await modifySchedulePreparation(payload);
+
+      // 로컬 상태 업데이트
       setApiTrip(prev => {
         if (!prev) return prev;
         return {
           ...prev,
-          checklist: newChecklist.length > 0 ? newChecklist : [...prev.checklist, { id: Date.now(), name: payload.strName, checked: false }]
+          checklist: prev.checklist.map(item => 
+            item.id === prep.id ? { ...item, checked: newCheckStatus } : item
+          )
         };
       });
-      setNewPreparationName("");
-      setIsAddingPreparation(false);
     } catch (err) {
-      console.error("준비물 추가 중 오류 세부정보:", err.response?.data || err);
-      alert("준비물 추가에 실패했습니다. (500 Error)");
+      console.error("준비물 상태 변경 실패 세부정보:", err.response?.data || err);
     }
   };
 
-  const onTogglePreparation = async (prep) => {
-    if (!currentUserId) return;
-
-    // [MOD] 서버 API(modifySchedulePreparation)는 공통 상태이므로 호출하지 않거나, 
-    // 필요하다면 호출하되 로컬에서는 사용자별 상태를 우선시함.
-    // 사용자 요청사항(A와 B 독립적 체크)을 위해 로컬 상태만 업데이트합니다.
-
-    setUserChecklistStates(prev => {
-      const userState = prev[currentUserId] || {};
-      const newState = {
-        ...prev,
-        [currentUserId]: {
-          ...userState,
-          [prep.id]: !userState[prep.id]
-        }
-      };
-      return newState;
-    });
-  };
 
   const onRemovePreparation = async (prepId) => {
+    const safeUserId = parseInt(currentUserId);
+    if (isNaN(safeUserId)) return;
+
     if (!window.confirm("이 준비물을 삭제하시겠습니까?")) return;
     try {
-      await removeSchedulePreparation(prepId);
+      // [MOD] remove API 시 iUserPK (정수) 필수 전달
+      await removeSchedulePreparation(prepId, safeUserId);
 
       // 클라이언트 상태 즉시 반영
       setApiTrip(prev => {
@@ -666,6 +672,7 @@ export default function TripDetailPage() {
       alert("삭제에 실패했습니다.");
     }
   };
+
 
   // [MOD] 동행자 자동 검색 (입력 시 1000ms 디바운스)
   useEffect(() => {
@@ -2410,159 +2417,166 @@ export default function TripDetailPage() {
 
         {
           selectedTab === "준비물" && (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between gap-5 relative">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-[#111111]">
-                    준비물 {trip.checklist ? trip.checklist.length : 0}개
-                  </span>
-                  {/* [ADD] 사용자 필터링 아코디언 버튼 */}
-                  <div className="relative">
-                    <button
-                      onClick={() => setIsChecklistAccordionOpen(!isChecklistAccordionOpen)}
-                      className="flex items-center gap-1.5 px-2 py-1 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
-                    >
-                      <span>
-                        {trip.companions?.find(c => c.userFK === selectedChecklistUser)?.name || "사용자 선택"}
-                      </span>
-                      <Image
-                        src="/icons/arrow-left.svg"
-                        alt="arrow"
-                        width={10}
-                        height={10}
-                        className={clsx("transition-transform", isChecklistAccordionOpen ? "rotate-90" : "-rotate-90")}
-                      />
-                    </button>
-                    {isChecklistAccordionOpen && (
-                      <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[50] py-1">
-                        {trip.companions?.map((companion) => (
-                          <div
-                            key={companion.userFK}
-                            onClick={() => {
-                              setSelectedChecklistUser(companion.userFK);
-                              setIsChecklistAccordionOpen(false);
-                            }}
-                            className={clsx(
-                              "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
-                              selectedChecklistUser === companion.userFK ? "text-[#7a28fa] font-bold" : "text-[#111]"
-                            )}
-                          >
-                            {companion.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+            <div className="flex flex-col gap-6">
+              {/* 1. 내 준비물 섹션 (고정 노출, 편집 가능) */}
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-[#7a28fa] flex items-center justify-center">
+                      <CheckSquare size={12} className="text-white" />
+                    </div>
+                    <h3 className="text-[15px] font-bold text-[#111111]">내 준비물</h3>
                   </div>
-                </div>
-                {/* [MOD] 준비물 추가 권한 체크 */}
-                {isOwner && (
                   <button
                     className="text-sm font-semibold text-[#7a28fa] bg-transparent border-none p-0 cursor-pointer"
                     onClick={() => setIsAddingPreparation(true)}
                   >
                     준비물 추가
                   </button>
-                )}
-              </div>
+                </div>
 
-              <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
-                {trip.checklist && trip.checklist.map((item) => {
-                  // [MOD] 사용자별 체크 상태 연동
-                  const isItemChecked = userChecklistStates[selectedChecklistUser]?.[item.id] || false;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={clsx(
-                            "w-[18px] h-[18px] rounded",
-                            selectedChecklistUser === currentUserId ? "cursor-pointer" : "cursor-default opacity-60"
-                          )}
-                          onClick={() => selectedChecklistUser === currentUserId && onTogglePreparation(item)}
-                        >
-                          <Image
-                            src={isItemChecked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
-                            alt="checkbox"
-                            width={18}
-                            height={18}
-                          />
+                <div className="flex flex-col gap-3 bg-[#f9fafb] rounded-xl p-4">
+                  {(() => {
+                    const myItems = trip.checklist?.filter(item => item.userFK === currentUserId) || [];
+                    if (myItems.length === 0 && !isAddingPreparation) {
+                      return <p className="text-[13px] text-[#8e8e93] text-center py-2">아직 등록된 준비물이 없습니다.</p>;
+                    }
+                    return myItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-[18px] h-[18px] rounded cursor-pointer"
+                            onClick={() => onTogglePreparation(item)}
+                          >
+                            <Image
+                              src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
+                              alt="checkbox"
+                              width={18}
+                              height={18}
+                            />
+                          </div>
+                          <span className={clsx(
+                            "text-base tracking-[-0.4px]",
+                            item.checked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
+                          )}>
+                            {item.name}
+                          </span>
                         </div>
-                        <span className={clsx(
-                          "text-base tracking-[-0.4px]",
-                          isItemChecked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
-                        )}>
-                          {item.name}
-                        </span>
-                      </div>
-                      {/* [MOD] 준비물 삭제 권한 체크 */}
-                      {isOwner && (
                         <button
                           className="text-[#969696] hover:text-[#ff4d4f] transition-colors p-1"
                           onClick={() => onRemovePreparation(item.id)}
                         >
                           <Trash2 size={16} />
                         </button>
-                      )}
-                    </div>
-                  );
-                })}
+                      </div>
+                    ));
+                  })()}
 
-                {/* [ADD] 준비물 추가 인풋 폼 */}
-                {isAddingPreparation && (
-                  <div className="flex items-center gap-3 mt-1">
-                    <input
-                      type="text"
-                      value={newPreparationName}
-                      onChange={(e) => setNewPreparationName(e.target.value)}
-                      placeholder="준비물을 입력하세요"
-                      className="flex-1 bg-white border border-[#e5ebf2] rounded-lg px-3 py-2 text-[14px] text-[#111] focus:outline-none focus:border-[#7a28fa]"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') onAddPreparation();
-                        if (e.key === 'Escape') setIsAddingPreparation(false);
-                      }}
-                    />
-                    <button
-                      className="px-3 py-2 bg-[#111] text-white text-[13px] font-semibold rounded-lg"
-                      onClick={onAddPreparation}
-                    >
-                      저장
-                    </button>
-                    <button
-                      className="px-3 py-2 bg-white border border-[#d1d5db] text-[#111] text-[13px] font-semibold rounded-lg"
-                      onClick={() => {
-                        setIsAddingPreparation(false);
-                        setNewPreparationName("");
-                      }}
-                    >
-                      취소
-                    </button>
-                  </div>
-                )}
-
-                {/* 준비물이 없을 때 보여줄 디자인 (추가 중이 아닐 때만) */}
-                {(!trip.checklist || trip.checklist.length === 0) && !isAddingPreparation && (
-                  <div className="flex flex-col items-center justify-center py-6 px-6 mt-4">
-                    <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
-                      {isOwner ? "아직 준비물이 없어요\n여행 전에 필요한 물품을 추가해 보세요" : "등록된 준비물이 없습니다"}
-                    </p>
-                    {isOwner && (
+                  {/* 준비물 추가 인풋 폼 */}
+                  {isAddingPreparation && (
+                    <div className="flex items-center gap-3 mt-1">
+                      <input
+                        type="text"
+                        value={newPreparationName}
+                        onChange={(e) => setNewPreparationName(e.target.value)}
+                        placeholder="준비물을 입력하세요"
+                        className="flex-1 bg-white border border-[#e5ebf2] rounded-lg px-3 py-2 text-[14px] text-[#111] focus:outline-none focus:border-[#7a28fa]"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') onAddPreparation();
+                          if (e.key === 'Escape') setIsAddingPreparation(false);
+                        }}
+                      />
                       <button
-                        className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                        onClick={() => setIsAddingPreparation(true)}
+                        className="px-3 py-2 bg-[#111] text-white text-[13px] font-semibold rounded-lg"
+                        onClick={onAddPreparation}
                       >
-                        준비물 추가
+                        저장
                       </button>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* 2. 동행자 준비물 섹션 (기존 아코디언/드롭다운 UI 활용, 조회 전용) */}
+              {trip.companions?.filter(c => c.userFK !== currentUserId).length > 0 && (
+                <div className="flex flex-col gap-4 mt-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-[14px] font-bold text-[#666]">동행자 준비물 확인</h3>
+                      <div className="relative">
+                        <button
+                          onClick={() => setIsChecklistAccordionOpen(!isChecklistAccordionOpen)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
+                        >
+                          <span>
+                            {trip.companions?.find(c => c.userFK === selectedChecklistUser && c.userFK !== currentUserId)?.name || "동행자 선택"}
+                          </span>
+                          <Image
+                            src="/icons/arrow-left.svg"
+                            alt="arrow"
+                            width={10}
+                            height={10}
+                            className={clsx("transition-transform", isChecklistAccordionOpen ? "rotate-90" : "-rotate-90")}
+                          />
+                        </button>
+                        {isChecklistAccordionOpen && (
+                          <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[50] py-1">
+                            {trip.companions?.filter(c => c.userFK !== currentUserId).map((companion) => (
+                              <div
+                                key={companion.userFK}
+                                onClick={() => {
+                                  setSelectedChecklistUser(companion.userFK);
+                                  setIsChecklistAccordionOpen(false);
+                                }}
+                                className={clsx(
+                                  "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
+                                  selectedChecklistUser === companion.userFK ? "text-[#7a28fa] font-bold" : "text-[#111]"
+                                )}
+                              >
+                                {companion.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedChecklistUser && selectedChecklistUser !== currentUserId && (
+                    <div className="flex flex-col gap-3 bg-[#f2f4f6]/50 rounded-xl p-4 border border-[#e5ebf2] border-dashed">
+                      {(() => {
+                        const companionItems = trip.checklist?.filter(item => item.userFK === selectedChecklistUser) || [];
+                        if (companionItems.length === 0) {
+                          return <p className="text-[13px] text-[#8e8e93] text-center py-2">등록된 준비물이 없습니다.</p>;
+                        }
+                        return companionItems.map((item) => (
+                          <div key={item.id} className="flex items-center gap-3">
+                            <div className="w-[18px] h-[18px] rounded opacity-60">
+                              <Image
+                                src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
+                                alt="checkbox"
+                                width={18}
+                                height={18}
+                              />
+                            </div>
+                            <span className={clsx(
+                              "text-base tracking-[-0.4px]",
+                              item.checked ? "line-through text-[#c7c8d8]" : "text-[#555]"
+                            )}>
+                              {item.name}
+                            </span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )
         }
+
 
         {
           selectedTab === "동행자" && (

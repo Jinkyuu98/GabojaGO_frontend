@@ -175,8 +175,8 @@ export const modifyScheduleExpense = async (data) => {
  * @param {number} iSchedulePK 
  * @returns {Promise}
  */
-export const getSchedulePreparations = async (iSchedulePK) => {
-    const res = await api.get(`/schedule/preparation/list?iSchedulePK=${iSchedulePK}`);
+export const getSchedulePreparations = async (iSchedulePK, iUserPK = 0) => {
+    const res = await api.get(`/schedule/preparation/list?iSchedulePK=${iSchedulePK}&iUserPK=${iUserPK}`);
     return res.data;
 };
 
@@ -205,9 +205,9 @@ export const modifySchedulePreparation = async (data) => {
  * @param {number} iSchedulePreparationPK 
  * @returns {Promise}
  */
-export const removeSchedulePreparation = async (iSchedulePreparationPK) => {
+export const removeSchedulePreparation = async (iSchedulePreparationPK, iUserPK) => {
     const res = await api.post(`/schedule/preparation/remove`, null, {
-        params: { iSchedulePreparationPK }
+        params: { iSchedulePreparationPK, iUserPK }
     });
     return res.data;
 };
