@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { MoreVertical, ChevronDown, Heart, ChevronUp, Trash2 } from "lucide-react"; // [MOD] Trash2 추가
+import { MoreVertical, ChevronDown, Heart, ChevronUp, Trash2, X } from "lucide-react"; // [MOD] Trash2, X 추가
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { Toast } from "../../components/common/Toast"; // [ADD] Toast 임포트
@@ -58,8 +58,7 @@ export default function MyPage() {
   const [sortBy, setSortBy] = useState("latest"); // [ADD] 정렬 상태 (latest, reviews, oldest)
   const [selectedCategory, setSelectedCategory] = useState("전체"); // [ADD] 카테고리 필터 상태
   const [isSortOpen, setIsSortOpen] = useState(false); // [ADD] 정렬 옵션 드롭다운 상태
-  const [locationFilter, setLocationFilter] = useState("map_center"); // [ADD] 위치 기준 필터 (map_center, my_location)
-  const [isLocationOpen, setIsLocationOpen] = useState(false); // [ADD] 위치 기준 드롭다운 상태
+  const [selectedZoomImage, setSelectedZoomImage] = useState(null); // [ADD] 찜한 사진 확대 상태
 
   // [ADD] 즐겨찾기 그룹 관리를 위한 상태
   const [favoriteGroups, setFavoriteGroups] = useState([]);
@@ -338,6 +337,7 @@ export default function MyPage() {
                   longitude: parseFloat(loc.ptLongitude),
                   rating: 0,
                   reviewCount: 0,
+                  dtFavorite: item.dtFavorite, // [ADD] 정렬용 찜한 시간 추가
                 };
               });
 
@@ -378,13 +378,14 @@ export default function MyPage() {
           // [ADD] 정렬 로직 적용
           const sorted = [...merged].sort((a, b) => {
             if (sortBy === "reviews") {
-              return (b.reviewCount || 0) - (a.reviewCount || 0);
+              // 평균평점순
+              return (b.rating || 0) - (a.rating || 0);
             } else if (sortBy === "oldest") {
-              // ID가 커지는 순서 (등록순 가정)
-              return parseInt(a.id) - parseInt(b.id);
+              // 과거순 (dtFavorite 기준)
+              return new Date(a.dtFavorite || 0) - new Date(b.dtFavorite || 0);
             } else {
-              // latest: ID가 작아지는 순서 (최신등록 가정)
-              return parseInt(b.id) - parseInt(a.id);
+              // 최신순 (dtFavorite 기준)
+              return new Date(b.dtFavorite || 0) - new Date(a.dtFavorite || 0);
             }
           });
 
@@ -801,9 +802,7 @@ export default function MyPage() {
                     )}
                   </div>
 
-                  {/* [MOD] 필터 및 정렬 옵션 선택 UI 변경 (그룹 리스트 좌측, 드롭다운 우측 배치) */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-y-2 pt-2 pb-1 relative z-30 w-full">
-
                     {/* [ADD] 즐겨찾기 폴더 그룹 리스트 영역 */}
                     <div className="flex gap-2 items-center overflow-x-auto scrollbar-hide flex-1 sm:pr-4 w-full">
                       {favoriteGroups.map((group) => (
@@ -845,62 +844,8 @@ export default function MyPage() {
                       )}
                     </div>
 
-                    {/* 기존 필터 및 정렬 드롭다운 (우측 고정) */}
+                    {/* [MOD] 기존 정렬 드롭다운 (우측 고정, 위치 필터 삭제됨) */}
                     <div className="flex justify-start sm:justify-end gap-2 shrink-0 w-full sm:w-auto mt-1 sm:mt-0">
-                      {/* 1. 위치 기준 드롭다운 */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setIsLocationOpen(!isLocationOpen)}
-                          className="flex items-center gap-1 py-1 pl-2 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <span className="text-[14px] font-medium text-[#898989]">
-                            {{
-                              map_center: "현재 지도 중심",
-                              my_location: "내 위치 중심",
-                            }[locationFilter] || "현재 지도 중심"}
-                          </span>
-                          <ChevronDown
-                            size={16}
-                            className={clsx(
-                              "text-[#898989] transition-transform",
-                              isLocationOpen && "rotate-180",
-                            )}
-                          />
-                        </button>
-
-                        {isLocationOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setIsLocationOpen(false)}
-                            />
-                            <div className="absolute top-full right-0 mt-1 w-32 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                              {[
-                                { id: "map_center", label: "현재 지도 중심" },
-                                { id: "my_location", label: "내 위치 중심" },
-                              ].map((option) => (
-                                <button
-                                  key={option.id}
-                                  onClick={() => {
-                                    setLocationFilter(option.id);
-                                    setIsLocationOpen(false);
-                                  }}
-                                  className={clsx(
-                                    "px-4 py-3 text-[14px] text-left transition-colors whitespace-nowrap",
-                                    locationFilter === option.id
-                                      ? "font-bold text-[#111111] bg-gray-50 text-opacity-100"
-                                      : "font-medium text-[#6e6e6e] hover:bg-gray-50",
-                                  )}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* 2. 정렬 순서 드롭다운 */}
                       <div className="relative">
                         <button
                           onClick={() => setIsSortOpen(!isSortOpen)}
@@ -909,7 +854,7 @@ export default function MyPage() {
                           <span className="text-[14px] font-medium text-[#898989]">
                             {{
                               latest: "최신순",
-                              reviews: "리뷰순",
+                              reviews: "평균평점",
                               oldest: "과거순",
                             }[sortBy] || "최신순"}
                           </span>
@@ -931,7 +876,7 @@ export default function MyPage() {
                             <div className="absolute top-full right-0 mt-1 w-28 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-[#eceff4] z-20 overflow-hidden flex flex-col py-1 animate-in fade-in slide-in-from-top-2 duration-200">
                               {[
                                 { id: "latest", label: "최신순" },
-                                { id: "reviews", label: "리뷰순" },
+                                { id: "reviews", label: "평균평점" },
                                 { id: "oldest", label: "과거순" },
                               ].map((option) => (
                                 <button
@@ -1153,7 +1098,8 @@ export default function MyPage() {
                             fill
                             sizes="(max-width: 768px) 33vw, (max-width: 1024px) 25vw, 200px"
                             quality={75}
-                            className="object-cover group-hover:scale-110 transition-transform"
+                            className="object-cover group-hover:scale-110 transition-transform cursor-pointer"
+                            onClick={() => setSelectedZoomImage(photo.src)} // [ADD] 클릭 시 확대
                           />
                           {/* [ADD] 찜 해제 하트 버튼 (상태 유지: 빨간색 채워짐) */}
                           <button
@@ -1249,6 +1195,50 @@ export default function MyPage() {
                 className="flex-1 py-3.5 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
               >
                 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* [MOD] 찜한 사진 확대 모달 (기존 trips/[tripId]와 동일한 UI 구성) */}
+      {selectedZoomImage && (
+        <div 
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4 py-10 animate-in fade-in duration-200"
+          onClick={() => setSelectedZoomImage(null)}
+        >
+          <div 
+            className="relative w-full max-w-[600px] bg-white rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 pb-2 flex justify-between items-center">
+              <h3 className="text-[18px] font-bold text-[#111] tracking-tight">사진 크게 보기</h3>
+              <button
+                className="w-10 h-10 flex items-center justify-center text-[#8e8e93] hover:text-[#111] transition-colors rounded-full hover:bg-gray-100"
+                onClick={() => setSelectedZoomImage(null)}
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Image Area */}
+            <div className="p-4 flex flex-col items-center">
+              <img
+                src={selectedZoomImage}
+                alt="Enlarged"
+                className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 flex justify-center bg-[#fbfbfc]">
+              <button
+                onClick={() => setSelectedZoomImage(null)}
+                className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
+              >
+                닫기
               </button>
             </div>
           </div>
