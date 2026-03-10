@@ -114,6 +114,12 @@ body {
   }
 }
 
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .animate-fly {
   animation: fly 2s ease-in-out infinite;
 }

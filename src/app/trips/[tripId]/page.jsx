@@ -37,10 +37,11 @@ import { searchUserByName } from "../../../services/auth";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import {
+  getFavoriteList,
   getFavoriteImageList,
   appendFavoriteImage,
   removeFavoriteImage
-} from "../../../services/favorite"; // [ADD] 즐겨찾기 사진 관련 서비스 함수 임포트
+} from "../../../services/favorite"; // [ADD] 즐겨찾기 관련 서비스 함수 임포트
 
 const DetailTabs = ({ activeTab, onTabChange }) => {
   const tabs = [
@@ -1285,54 +1286,52 @@ export default function TripDetailPage() {
     try {
       if (photo.isFavorite) {
         // 이미 찜한 상태라면 해제
-        if (!photo.iFavoriteImagePK) {
-          console.warn("PK가 없어 삭제 불가능");
+        const pkToRemove = photo.iFavoriteImagePK;
+        if (!pkToRemove) {
+          console.warn("iFavoriteImagePK가 없어 삭제 불가능");
           return;
         }
-        await removeFavoriteImage(photo.iFavoriteImagePK);
-        // 상태 즉각 반영을 위한 fallback 업데이트
+        await removeFavoriteImage(pkToRemove);
+        
+        // 상태 즉각 반영 (낙관적 업데이트)
         setApiTrip(prev => {
           if (!prev) return prev;
-          const updatedTrip = JSON.parse(JSON.stringify(prev)); // Deep copy
+          const updatedTrip = JSON.parse(JSON.stringify(prev));
+          
+          const updatePhoto = (p) => {
+            if ((p.id === photo.id) || (p.iImagePK === photo.iImagePK)) {
+              p.isFavorite = false;
+              p.iFavoriteImagePK = null;
+            }
+          };
 
-          updatedTrip.days.forEach(day => {
-            day.records.forEach(record => {
-              record.photos.forEach(p => {
-                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
-                  p.isFavorite = false;
-                  p.iFavoriteImagePK = null;
-                }
-              });
-            });
-          });
+          updatedTrip.days.forEach(day => day.records.forEach(record => record.photos.forEach(updatePhoto)));
           if (updatedTrip.extraRecords) {
-            updatedTrip.extraRecords.forEach(record => {
-              record.photos.forEach(p => {
-                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
-                  p.isFavorite = false;
-                  p.iFavoriteImagePK = null;
-                }
-              });
-            });
+            updatedTrip.extraRecords.forEach(record => record.photos.forEach(updatePhoto));
           }
           return updatedTrip;
         });
       } else {
         // 찜하지 않은 상태라면 추가
-        // [MOD] 사용자의 실제 즐겨찾기 목록을 조회하여 첫 번째 그룹에 추가
+        // [MOD] 사용자의 실제 즐겨찾기 목록을 조회하여 첫 번째 그룹에 추가 (fetchTrip의 로직과 통일)
         let favoriteId = 1;
         try {
           const favListRes = await getFavoriteList();
-          if (favListRes.data?.favorite_list?.length > 0) {
+          if (favListRes.data && favListRes.data.favorite_list && favListRes.data.favorite_list.length > 0) {
             favoriteId = favListRes.data.favorite_list[0].iPK;
           }
-        } catch (e) { /* fallback 1 */ }
+        } catch (e) {
+          console.error("즐겨찾기 그룹 조회 실패, 기본값 1 사용", e);
+        }
 
+        const imageFK = photo.iImagePK || photo.id; // [MOD] 명시적으로 이미지 PK 우선 사용
         const payload = {
           iPK: 0,
-          iFavoriteFK: favoriteId, // [MOD] 하드코딩된 1 대신 동적 PK 사용
-          iImageFK: photo.iImagePK || photo.id
+          iFavoriteFK: favoriteId,
+          iImageFK: imageFK
         };
+
+        console.log("💖 [DEBUG] appendFavoriteImage payload:", JSON.stringify(payload));
         const response = await appendFavoriteImage(payload);
         const newFavoritePK = response?.data?.iPK;
 
@@ -1340,25 +1339,16 @@ export default function TripDetailPage() {
           if (!prev) return prev;
           const updatedTrip = JSON.parse(JSON.stringify(prev));
 
-          updatedTrip.days.forEach(day => {
-            day.records.forEach(record => {
-              record.photos.forEach(p => {
-                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
-                  p.isFavorite = true;
-                  if (newFavoritePK) p.iFavoriteImagePK = newFavoritePK;
-                }
-              });
-            });
-          });
+          const updatePhoto = (p) => {
+            if ((p.id === photo.id) || (p.iImagePK === photo.iImagePK)) {
+              p.isFavorite = true;
+              if (newFavoritePK) p.iFavoriteImagePK = newFavoritePK;
+            }
+          };
+
+          updatedTrip.days.forEach(day => day.records.forEach(record => record.photos.forEach(updatePhoto)));
           if (updatedTrip.extraRecords) {
-            updatedTrip.extraRecords.forEach(record => {
-              record.photos.forEach(p => {
-                if (p.id === photo.id && p.iImagePK === photo.iImagePK) {
-                  p.isFavorite = true;
-                  if (newFavoritePK) p.iFavoriteImagePK = newFavoritePK;
-                }
-              });
-            });
+            updatedTrip.extraRecords.forEach(record => record.photos.forEach(updatePhoto));
           }
           return updatedTrip;
         });

@@ -42,6 +42,13 @@ const CATEGORY_MAP = {
   주유소: "OL7",
 };
 
+// [ADD] 사진 찜하기 스케 skeleton 컴포넌트
+const PhotoSkeleton = () => (
+  <div className="relative aspect-square rounded-xl overflow-hidden bg-[#f2f4f6] animate-pulse">
+    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+  </div>
+);
+
 export default function MyPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("장소"); // "장소" 또는 "사진"
@@ -1047,8 +1054,10 @@ export default function MyPage() {
                 <div className="flex flex-col gap-2">
 
                   {isLoading ? (
-                    <div className="flex justify-center py-20">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7a28fa]" />
+                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2 lg:gap-3">
+                      {Array.from({ length: 12 }).map((_, idx) => (
+                        <PhotoSkeleton key={`skeleton-${idx}`} />
+                      ))}
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 md:grid-cols-4 gap-2 lg:gap-3">
@@ -1061,6 +1070,8 @@ export default function MyPage() {
                             src={photo.src}
                             alt="saved-photo"
                             fill
+                            sizes="(max-width: 768px) 33vw, (max-width: 1024px) 25vw, 200px"
+                            quality={75}
                             className="object-cover group-hover:scale-110 transition-transform"
                           />
                           {/* [ADD] 찜 해제 하트 버튼 (상태 유지: 빨간색 채워짐) */}
