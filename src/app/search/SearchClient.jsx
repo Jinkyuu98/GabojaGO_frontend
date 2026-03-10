@@ -11,6 +11,7 @@ import { Toast } from "../../components/common/Toast";
 import { searchPlaces } from "../../services/place";
 import { getPlaceReviews } from "../../services/review"; // [ADD] 리뷰 API import (평점 계산용)
 import PlaceDetailPanel from "../trips/[tripId]/PlaceDetailPanel";
+import { motion, AnimatePresence } from "framer-motion"; // [ADD] 아코디언 애니메이션용
 
 const CATEGORIES = [
   "전체",
@@ -72,6 +73,7 @@ export default function SearchClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("전체");
+  const [isCategoryExpanded, setIsCategoryExpanded] = useState(false); // [ADD] 아코디언 확장 상태
 
   // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
   const categoryScrollRef = useRef(null);
@@ -369,49 +371,122 @@ export default function SearchClient() {
           </h2>
 
           <div className="relative group/category mb-4 shrink-0">
-            {showLeftArrow && (
-              <button
-                onClick={() => scroll("left")}
-                className="absolute left-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-              </button>
-            )}
-            <div
-              ref={categoryScrollRef}
-              onMouseDown={handleMouseDown}
-              onMouseLeave={handleMouseLeave}
-              onMouseUp={handleMouseUp}
-              onMouseMove={handleMouseMove}
-              onScroll={checkScroll}
-              className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth cursor-grab active:cursor-grabbing px-0.5 py-1"
-              style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-            >
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-semibold border transition-all ${
-                    selectedCategory === cat
-                      ? "bg-[#7a28fa] border-[#7a28fa] text-white shadow-sm"
-                      : "bg-white border-[#f0f0f0] text-[#757575] hover:border-[#7a28fa]/30 hover:bg-[#f9f5ff]"
-                  }`}
+            {isMobile ? (
+              /* [MOD] Mobile Swipe UI */
+              <>
+                {showLeftArrow && (
+                  <button
+                    onClick={() => scroll("left")}
+                    className="absolute left-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                )}
+                <div
+                  ref={categoryScrollRef}
+                  onMouseDown={handleMouseDown}
+                  onMouseLeave={handleMouseLeave}
+                  onMouseUp={handleMouseUp}
+                  onMouseMove={handleMouseMove}
+                  onScroll={checkScroll}
+                  className="flex gap-2 overflow-x-auto scrollbar-hide scroll-smooth cursor-grab active:cursor-grabbing px-0.5 py-1"
+                  style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
                 >
-                  {cat}
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`shrink-0 px-4 py-2 rounded-full text-[13px] font-semibold border transition-all ${
+                        selectedCategory === cat
+                          ? "bg-[#7a28fa] border-[#7a28fa] text-white shadow-sm"
+                          : "bg-white border-[#f0f0f0] text-[#757575] hover:border-[#7a28fa]/30 hover:bg-[#f9f5ff]"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                {showRightArrow && (
+                  <button
+                    onClick={() => scroll("right")}
+                    className="absolute right-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                )}
+              </>
+            ) : (
+              /* [MOD] Web Accordion UI */
+              <div className="relative mb-2 z-30">
+                <button
+                  onClick={() => setIsCategoryExpanded(!isCategoryExpanded)}
+                  className="w-full flex items-center justify-between bg-white border border-[#f2f4f6] h-14 px-5 rounded-xl hover:border-[#7a28fa] transition-all group/accordion"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-[15px] font-bold text-[#111111]">
+                      {selectedCategory === "전체" ? "카테고리 전체" : selectedCategory}
+                    </span>
+                    {selectedCategory !== "전체" && (
+                      <span className="text-[12px] font-medium text-[#7a28fa] bg-[#f9f5ff] px-2 py-0.5 rounded">
+                        선택됨
+                      </span>
+                    )}
+                  </div>
+                  <motion.div
+                    animate={{ rotate: isCategoryExpanded ? 180 : 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-[#abb1b9] group-hover/accordion:text-[#7a28fa]"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </motion.div>
                 </button>
-              ))}
-            </div>
-            {showRightArrow && (
-              <button
-                onClick={() => scroll("right")}
-                className="absolute right-[-8px] top-1/2 -translate-y-1/2 z-10 w-8 h-8 bg-white border border-[#f2f4f6] rounded-full flex items-center justify-center shadow-md text-[#7e7e7e] hover:text-[#7a28fa] transition-all"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
+
+                <AnimatePresence>
+                  {isCategoryExpanded && (
+                    <>
+                      {/* Backdrop to close accordion when clicking outside */}
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsCategoryExpanded(false)}
+                        className="fixed inset-0 z-[-1]"
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute top-[60px] left-0 right-0 bg-white border border-[#f2f4f6] rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] overflow-hidden"
+                      >
+                        <div className="max-h-[300px] overflow-y-auto p-2 grid grid-cols-2 gap-1 custom-scrollbar">
+                          {CATEGORIES.map((cat) => (
+                            <button
+                              key={cat}
+                              onClick={() => {
+                                setSelectedCategory(cat);
+                                setIsCategoryExpanded(false);
+                              }}
+                              className={`flex items-center px-4 py-3 rounded-lg text-[14px] font-semibold transition-all ${
+                                selectedCategory === cat
+                                  ? "bg-[#f9f5ff] text-[#7a28fa]"
+                                  : "text-[#757575] hover:bg-[#f5f7f9] hover:text-[#111111]"
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </div>
 
