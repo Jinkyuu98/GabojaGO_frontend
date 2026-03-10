@@ -112,13 +112,18 @@ export default function BudgetInputPage() {
   const [alertThreshold, setAlertThreshold] = useState(25);
 
   const total = parseInt(totalBudget) || 0;
+  const totalRatio = accommodationRatio + foodRatio + transportRatio;
+  const isOverBudget = totalRatio > 100;
+
   const accommodationAmount = Math.round((total * accommodationRatio) / 100);
   const foodAmount = Math.round((total * foodRatio) / 100);
   const transportAmount = Math.round((total * transportRatio) / 100);
   const etcAmount = Math.max(0, total - accommodationAmount - foodAmount - transportAmount);
-  const etcRatio = total > 0 ? Math.min(100, Math.round((etcAmount / total) * 100)) : 0;
+  const etcRatio = isOverBudget ? 0 : (total > 0 ? Math.min(100, Math.round((etcAmount / total) * 100)) : 0);
 
   const handleNext = () => {
+    if (isOverBudget || total <= 0) return; // [ADD] 유효성 검사 추가
+
     const budgetData = {
       accommodation: { amount: accommodationAmount, ratio: accommodationRatio },
       food: { amount: foodAmount, ratio: foodRatio },
@@ -152,7 +157,8 @@ export default function BudgetInputPage() {
       footer={
         <button
           onClick={handleNext}
-          className={`w-full py-[14px] rounded-xl text-base font-semibold text-white tracking-[-0.06px] transition-colors ${total > 0 ? "bg-[#7a28fa]" : "bg-[#d9d9d9]"
+          disabled={total <= 0 || isOverBudget} // [MOD] 비율 초과 시 버튼 비활성화
+          className={`w-full py-[14px] rounded-xl text-base font-semibold text-white tracking-[-0.06px] transition-colors ${total > 0 && !isOverBudget ? "bg-[#7a28fa]" : "bg-[#d9d9d9]"
             }`}
         >
           완료
@@ -187,6 +193,14 @@ export default function BudgetInputPage() {
 
         {/* Category Budget Cards */}
         <div className="flex flex-col gap-5">
+          {/* [ADD] 비율 초과 경고 문구 */}
+          {isOverBudget && (
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="text-[13px] font-medium text-[#FF3B30]">
+                ⚠️ 비율의 합계가 100%를 초과할 수 없습니다 (현재: {totalRatio}%)
+              </span>
+            </div>
+          )}
           <CategoryCard
             label="숙소"
             ratio={accommodationRatio}

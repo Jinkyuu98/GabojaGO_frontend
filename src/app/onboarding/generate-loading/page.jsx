@@ -79,7 +79,7 @@ export default function GenerateLoadingPage() {
           strTripStyle: tripStyleLabel, // [ADD] 여행 테마 추가
           nTotalPeople: travelData.peopleCount || 1,
           nTotalBudget: calculateTotalBudget(travelData.budget),
-          nAlarmRatio: 25,
+          nAlarmRatio: travelData.budget?.alarm?.ratio || 25,
           nTransportRatio: travelData.budget?.transport?.ratio || 25,
           nLodgingRatio: travelData.budget?.accommodation?.ratio || 25,
           nFoodRatio: travelData.budget?.food?.ratio || 25,
