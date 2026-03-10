@@ -107,7 +107,7 @@ export default function HomePage() {
             targetTrip.nTotalSpent = 0;
           }
           // [MOD] 대표 일정과 예정 일정 1개만 포함 (대표 1 + 예정 1)
-          setOngoingTrips([targetTrip, ...otherUpcoming.slice(0, 1)]); 
+          setOngoingTrips([targetTrip, ...otherUpcoming.slice(0, 1)]);
           setHasTripData(true);
         } else {
           setOngoingTrips([]);
@@ -274,16 +274,16 @@ export default function HomePage() {
                       {index + 1}
                     </span>
                     {/* [DEL] 이미지 영역 삭제 */}
-                      <div className="flex flex-col flex-1 min-w-0">
-                        <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
-                          {item.strName || item.place_name}
-                        </h3>
-                        {selectedCategory === "ALL" && (
-                          <p className="text-[15px] font-semibold text-[#8e8e93] truncate">
-                            {item.strGroupName || item.category_name || "장소"}
-                          </p>
-                        )}
-                      </div>
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <h3 className="text-[18px] lg:text-[21px] font-bold text-[#111] truncate group-hover:text-[#7a28fa] transition-colors leading-tight mb-1">
+                        {item.strName || item.place_name}
+                      </h3>
+                      {selectedCategory === "ALL" && (
+                        <p className="text-[15px] font-semibold text-[#8e8e93] truncate">
+                          {item.strGroupName || item.category_name || "장소"}
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center justify-end w-14">
                       {index % 4 === 0 ? (
                         <div className="flex items-center gap-1 font-black text-[#ef4444] text-[15px]">
@@ -329,7 +329,7 @@ export default function HomePage() {
                           "px-3 py-1 rounded-full text-[12px] font-bold",
                           idx === 0 ? "bg-[#7a28fa] text-white" : "bg-gray-200 text-gray-600"
                         )}>
-                          {idx === 0 ? "진행 중" : "예정된 일정"}
+                          {idx === 0 ? "다가오는 일정" : "예정된 일정"}
                         </span>
                       </div>
 
@@ -386,8 +386,8 @@ export default function HomePage() {
                               "absolute top-0 left-0 h-full rounded-full transition-all",
                               idx === 0 ? "bg-[#7a28fa]" : "bg-gray-400"
                             )}
-                            style={{ 
-                              width: `${Math.min(100, Math.max(0, (((trip.nTotalBudget || 0) - (trip.nTotalSpent || 0)) / (trip.nTotalBudget || 1)) * 100))}%` 
+                            style={{
+                              width: `${Math.min(100, Math.max(0, (((trip.nTotalBudget || 0) - (trip.nTotalSpent || 0)) / (trip.nTotalBudget || 1)) * 100))}%`
                             }}
                           />
                         </div>
