@@ -151,6 +151,7 @@ export default function TripDetailPage() {
 
   // [ADD] 카카오맵 로드 상태 관리 (새로고침 시 마커 누락 방지용)
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [mapInitCount, setMapInitCount] = useState(0); // [ADD] 지도 초기화 횟수 추적 (마커 렌더링 보장용)
   // [ADD] 현재 선택(클릭)된 장소 인덱스 추적 (동일 좌표 마커 겹침 해결용)
   const [selectedMarkerIndex, setSelectedMarkerIndex] = useState(null);
   const [selectedPlaceDetail, setSelectedPlaceDetail] = useState(null); // [ADD] 좌측 장소 상세(리뷰) 패널 상태
@@ -986,6 +987,11 @@ export default function TripDetailPage() {
       return;
     }
 
+    // [ADD] 지도가 재생성될 때 로드 상태를 명시적으로 false로 초기화하여 
+    // 마커/폴라인을 그리는 useEffect가 새 인스턴스에 즉시 반응하도록 함
+    setIsMapLoaded(false);
+    setMapInitCount(prev => prev + 1); // [ADD] 초기화 카운트 증가
+
     // [MOD] 기존 맵이 있으면 마커 정리
     if (mapInstance.current) {
       try {
@@ -998,7 +1004,28 @@ export default function TripDetailPage() {
     // [MOD] SDK가 완전히 로드된 경우 (Map 생성자가 존재) → 직접 생성
     const createMap = () => {
       if (!mapRef.current) return;
-      const center = new window.kakao.maps.LatLng(37.5665, 126.978);
+
+      // [ADD] 초기 중심점 설정: 1일차 첫 번째 장소 우선, 없으면 전체 일정 중 첫 번째 장소
+      let initialLat = 37.5665;
+      let initialLng = 126.978;
+
+      if (trip?.days) {
+        // 1. 1일차 첫 번째 장소 확인
+        const day1Place = trip.days[0]?.places?.[0];
+        if (day1Place?.latitude && day1Place?.longitude) {
+          initialLat = day1Place.latitude;
+          initialLng = day1Place.longitude;
+        } else {
+          // 2. 전체 일정 중 첫 번째 장소 찾기 (폴백)
+          const firstPlace = trip.days.flatMap(d => d.places || []).find(p => p.latitude && p.longitude);
+          if (firstPlace) {
+            initialLat = firstPlace.latitude;
+            initialLng = firstPlace.longitude;
+          }
+        }
+      }
+
+      const center = new window.kakao.maps.LatLng(initialLat, initialLng);
       mapInstance.current = new window.kakao.maps.Map(mapRef.current, {
         center,
         level: 4,
@@ -1184,7 +1211,7 @@ export default function TripDetailPage() {
         }
       }
     }
-  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded]); // [MOD] trip 객체 null 체크를 위해 optional chaining 추가
+  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount]); // [MOD] mapInitCount 의존성 추가
 
   // Define 3-tier snap heights
   const SNAPS = {
