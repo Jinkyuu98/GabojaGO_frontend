@@ -2092,7 +2092,8 @@ export default function TripDetailPage() {
                         }}
                       />
                       <button
-                        className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center title='직접 입력'"
+                        className="text-[#969696] hover:text-[#7a28fa] transition-colors bg-transparent border-none p-0 cursor-pointer flex items-center justify-center"
+                        title="직접 입력"
                         onClick={() => {
                           const now = new Date();
                           const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -2100,7 +2101,20 @@ export default function TripDetailPage() {
                           setIsAddingExpense(true);
                         }}
                       >
-                        <CheckSquare size={23} />
+                        {/* [MOD] 지출 추가 아이콘 스타일 적용 (호버 시 보라색) */}
+                        <div
+                          className="w-[23px] h-[23px] bg-current"
+                          style={{
+                            WebkitMaskImage: "url('/icons/add-expense.svg')",
+                            maskImage: "url('/icons/add-expense.svg')",
+                            WebkitMaskSize: "contain",
+                            maskSize: "contain",
+                            WebkitMaskRepeat: "no-repeat",
+                            maskRepeat: "no-repeat",
+                            WebkitMaskPosition: "center",
+                            maskPosition: "center",
+                          }}
+                        />
                       </button>
                     </div>
                   )}
@@ -2348,22 +2362,6 @@ export default function TripDetailPage() {
                     <p className="text-[14px] text-[#8e8e93] text-center py-4">등록된 지출 내역이 없습니다.</p>
                   )}
 
-                  {/* [MOD] 지출 추가 버튼 - 권한 체크 */}
-                  {isOwner && (
-                    <div className="pt-2">
-                      <button
-                        className="w-full py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[13px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                        onClick={() => {
-                          const now = new Date();
-                          const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                          setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
-                          setIsAddingExpense(true);
-                        }}
-                      >
-                        + 지출 추가
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             ) : (
@@ -2371,17 +2369,6 @@ export default function TripDetailPage() {
                 <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
                   {isOwner ? "비용을 설정하고\n사용 내역을 기록해 보세요" : "등록된 비용 내역이 없습니다"}
                 </p>
-                {isOwner && (
-                  <button
-                    className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                    onClick={() => {
-                      const now = new Date();
-                      const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                      setNewExpense({ chCategory: "F", nMoney: "", dtExpense: defaultDateTime, strMemo: "" });
-                      setIsAddingExpense(true);
-                    }}
-                  >지출 추가</button>
-                )}
               </div>
             )
           )
@@ -3310,11 +3297,20 @@ export default function TripDetailPage() {
                     alert("✅ 지출 내역이 등록되었습니다.");
                     setIsAddingExpense(false);
 
-                    const tempId = res?.data?.iPK || Date.now();
+                    // [FIX] 백엔드 응답값에서 PK 및 UserFK를 정확히 추출하여 로컬 상태에 반영 (res.iPK 형식이거나 res.data.iPK 형식일 수 있음)
+                    const resData = res?.data || res;
+                    const expensePK = resData?.iPK || Date.now();
+                    const expenseUserFK = resData?.iUserFK || safeUserId;
+
                     const categoryLabelMap = { "F": "식비", "T": "교통비", "L": "숙박비", "E": "기타" };
                     const categoryColors = { "식비": "#3b82f6", "교통비": "#ffa918", "숙박비": "#14b8a6", "기타": "#b115fa" };
 
-                    const newExpObj = { ...payload, iPK: tempId, categoryLabel: categoryLabelMap[payload.chCategory] };
+                    const newExpObj = {
+                      ...payload,
+                      iPK: expensePK,
+                      iUserFK: expenseUserFK,
+                      categoryLabel: categoryLabelMap[payload.chCategory]
+                    };
 
                     setExpenseRawList(prev => [...prev, newExpObj]);
 
