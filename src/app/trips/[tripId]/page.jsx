@@ -8,6 +8,7 @@ import { clsx } from "clsx";
 import SearchModal from "./SearchModal";
 import MobilePlaceSearchSheet from "./MobilePlaceSearchSheet"; // [ADD] 모바일 장소 검색 바텀시트
 import PlaceDetailPanel from "./PlaceDetailPanel"; // [ADD] 장소 상세(리뷰) 패널 추가
+import { Toast } from "../../../components/common/Toast"; // [ADD] 토스트 컴포넌트 추가
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
 import {
@@ -169,6 +170,9 @@ export default function TripDetailPage() {
   const [companionSearchQuery, setCompanionSearchQuery] = useState("");
   const [companionSearchResults, setCompanionSearchResults] = useState([]);
   const [isSearchingCompanion, setIsSearchingCompanion] = useState(false);
+  // [ADD] 토스트 알림 상태
+  const [toast, setToast] = useState({ isVisible: false, message: "" });
+  const [processingReceiptCount, setProcessingReceiptCount] = useState({ current: 0, total: 0 }); // [ADD] 처리 중인 영수증 개수 추적
 
   // [ADD] 현재 로그인한 사용자 및 권한 정보
   const { userId: currentUserId } = useCurrentUser();
@@ -2123,47 +2127,64 @@ export default function TripDetailPage() {
                         ref={fileInputRef}
                         className="hidden"
                         accept="image/*"
+                        multiple // [MOD] 다중 선택 가능하도록 속성 추가
                         onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
+                          const files = e.target.files;
+                          if (!files || files.length === 0) return;
 
-                          // [MOD] 사용자가 확인 모달을 누르지 않더라도 딥러닝 파싱 즉시 시작
+                          setProcessingReceiptCount({ current: 0, total: files.length });
                           setIsProcessingReceipt(true);
 
                           try {
-                            const formData = new FormData();
-                            formData.append("file", file, "receipt-upload.jpg");
+                            for (let i = 0; i < files.length; i++) {
+                              setProcessingReceiptCount(prev => ({ ...prev, current: i + 1 }));
+                              const file = files[i];
+                              const formData = new FormData();
+                              formData.append("file", file, `receipt-upload-${i}.jpg`);
 
-                            const response = await fetch('/api/vision/parse', {
-                              method: 'POST',
-                              body: formData,
-                            });
+                              const response = await fetch('/api/vision/parse', {
+                                method: 'POST',
+                                body: formData,
+                              });
 
-                            if (!response.ok) {
-                              throw new Error(`API 오류: ${response.status}`);
+                              if (!response.ok) {
+                                console.error(`파일 ${i + 1} API 오류: ${response.status}`);
+                                continue; // 하나 실패해도 계속 진행
+                              }
+
+                              const expenseData = await response.json();
+                              const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
+                              const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
+
+                              // [ADD] add schedule expense
+                              await addScheduleExpense({
+                                iScheduleFK: parseInt(tripId, 10),
+                                iUserFK: safeUserId,
+                                dtExpense: expenseData.date || new Date().toISOString().replace("T", " ").substring(0, 19),
+                                chCategory: expenseData.category ? expenseData.category.charAt(0).toUpperCase() : "F",
+                                nMoney: parseInt(expenseData.total || 0, 10),
+                                iLocation: 0,
+                                strMemo: expenseData.strMemo || "불러온 영수증 지출",
+                              });
                             }
 
-                            const expenseData = await response.json();
-                            const parsedUserId = parseInt(localStorage.getItem("userId") || "1", 10);
-                            const safeUserId = isNaN(parsedUserId) ? 1 : parsedUserId;
-
-                            await addScheduleExpense({
-                              iScheduleFK: parseInt(tripId, 10),
-                              iUserFK: safeUserId,
-                              dtExpense: expenseData.date || new Date().toISOString().replace("T", " ").substring(0, 19),
-                              chCategory: expenseData.category ? expenseData.category.charAt(0).toUpperCase() : "F",
-                              nMoney: parseInt(expenseData.total || 0, 10),
-                              iLocation: 0,
-                              strMemo: expenseData.strMemo || "불러온 영수증 지출",
+                            // [MOD] alert 비순차 제거 및 토스트로 변경
+                            setToast({
+                              isVisible: true,
+                              message: `${files.length}개의 영수증 처리가 완료되었습니다.`
                             });
 
-                            // 성공 시 현재 탭(비용)으로 유지되도록 새로고침
-                            window.location.href = `/trips/${tripId}?tab=비용`;
+                            // [MOD] 페이지 전체 리로드 대신 fetchTrip() 호출로 화면 갱신
+                            await fetchTrip();
                           } catch (err) {
                             console.error("불러오기 실패:", err);
-                            alert("불러운 이미지 분석에 실패했습니다.");
+                            setToast({
+                              isVisible: true,
+                              message: "이미지 분석 중 오류가 발생했습니다."
+                            });
                           } finally {
                             setIsProcessingReceipt(false);
+                            setProcessingReceiptCount({ current: 0, total: 0 });
                             e.target.value = '';
                           }
                         }}
@@ -2417,7 +2438,8 @@ export default function TripDetailPage() {
                                         try {
                                           await removeScheduleExpense(exp.iPK);
                                           setExpenseRawList(prev => prev.filter(e => e.iPK !== exp.iPK));
-                                          // ... setApiTrip logic ...
+                                          // [MOD] 삭제 시에도 fetchTrip() 호출하여 차트/통계 즉시 갱신
+                                          await fetchTrip();
                                           alert("삭제되었습니다.");
                                         } catch (err) {
                                           console.error("지출 삭제 실패:", err);
@@ -3271,15 +3293,11 @@ export default function TripDetailPage() {
                         grouped[label] += (e.nMoney || 0);
                       });
 
-                      const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
-                      const newSpent = Object.entries(grouped).map(([label, amount]) => ({
-                        category: label, amount,
-                        color: categoryColors[label] || "#b115fa",
-                        percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
-                      })).sort((a, b) => b.amount - a.amount);
-
                       return { ...prev, budget: { ...prev.budget, spent: newSpent } };
                     });
+
+                    // [ADD] 수정 후 fetchTrip() 호출하여 차트/통계 즉시 갱신
+                    await fetchTrip();
 
                     setEditingExpense(null);
                     alert("✅ 지출 내역이 수정되었습니다.");
@@ -3438,6 +3456,9 @@ export default function TripDetailPage() {
 
                       return { ...prev, budget: { ...prev.budget, spent: newSpent } };
                     });
+
+                    // [ADD] 추가 후 fetchTrip() 호출하여 차트/통계 즉시 갱신
+                    await fetchTrip();
                   } catch (err) {
                     console.error("지출 등록 실패:", err);
                     alert("지출 등록 중 오류가 발생했습니다.");
@@ -3448,7 +3469,8 @@ export default function TripDetailPage() {
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* PC Search Modal */}
       <SearchModal
@@ -3475,117 +3497,133 @@ export default function TripDetailPage() {
       />
 
       {/* [ADD] 동행자 초대 모달 */}
-      {isCompanionModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setIsCompanionModalOpen(false)}>
-          <div className="bg-white w-full max-w-[400px] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-[#f2f4f6]">
-              <h3 className="text-[18px] font-bold text-[#111]">동행자 초대</h3>
-              <p className="text-[13px] text-[#8e8e93] mt-1">함께 여행할 사용자를 검색하세요</p>
-            </div>
-            <div className="p-5">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={companionSearchQuery}
-                  onChange={e => setCompanionSearchQuery(e.target.value)}
-                  placeholder="사용자 이름 입력"
-                  className="w-full px-3 py-2.5 border border-[#d1d5db] rounded-lg text-[14px] focus:outline-none focus:border-[#7a28fa]"
-                  autoFocus
-                />
-                {isSearchingCompanion && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8e8e93] animate-pulse">검색중...</span>
-                )}
+      {
+        isCompanionModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setIsCompanionModalOpen(false)}>
+            <div className="bg-white w-full max-w-[400px] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-5 border-b border-[#f2f4f6]">
+                <h3 className="text-[18px] font-bold text-[#111]">동행자 초대</h3>
+                <p className="text-[13px] text-[#8e8e93] mt-1">함께 여행할 사용자를 검색하세요</p>
               </div>
+              <div className="p-5">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={companionSearchQuery}
+                    onChange={e => setCompanionSearchQuery(e.target.value)}
+                    placeholder="사용자 이름 입력"
+                    className="w-full px-3 py-2.5 border border-[#d1d5db] rounded-lg text-[14px] focus:outline-none focus:border-[#7a28fa]"
+                    autoFocus
+                  />
+                  {isSearchingCompanion && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-[#8e8e93] animate-pulse">검색중...</span>
+                  )}
+                </div>
 
-              {/* 검색 결과 */}
-              <div className="mt-3 max-h-[240px] overflow-y-auto">
-                {companionSearchResults.length > 0 ? (
-                  companionSearchResults.map(user => (
-                    <div key={user.iPK} className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#f2f4f6] rounded-full flex items-center justify-center">
-                          <Image src="/icons/profile.svg" alt="profile" width={16} height={16} />
+                {/* 검색 결과 */}
+                <div className="mt-3 max-h-[240px] overflow-y-auto">
+                  {companionSearchResults.length > 0 ? (
+                    companionSearchResults.map(user => (
+                      <div key={user.iPK} className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-[#f2f4f6] rounded-full flex items-center justify-center">
+                            <Image src="/icons/profile.svg" alt="profile" width={16} height={16} />
+                          </div>
+                          <div>
+                            <p className="text-[14px] font-medium text-[#111]">{user.strName}</p>
+                            <p className="text-[12px] text-[#8e8e93]">{user.strEmail || user.strUserID}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[14px] font-medium text-[#111]">{user.strName}</p>
-                          <p className="text-[12px] text-[#8e8e93]">{user.strEmail || user.strUserID}</p>
-                        </div>
+                        <button
+                          onClick={() => onAddCompanion(user)}
+                          className="px-3 py-1.5 bg-[#7a28fa] text-white text-[13px] font-semibold rounded-lg hover:bg-[#6922d5] transition-colors"
+                        >
+                          추가
+                        </button>
                       </div>
-                      <button
-                        onClick={() => onAddCompanion(user)}
-                        className="px-3 py-1.5 bg-[#7a28fa] text-white text-[13px] font-semibold rounded-lg hover:bg-[#6922d5] transition-colors"
-                      >
-                        추가
-                      </button>
-                    </div>
-                  ))
-                ) : companionSearchQuery && !isSearchingCompanion ? (
-                  <p className="text-[14px] text-[#8e8e93] text-center py-6">검색 결과가 없습니다</p>
-                ) : null}
+                    ))
+                  ) : companionSearchQuery && !isSearchingCompanion ? (
+                    <p className="text-[14px] text-[#8e8e93] text-center py-6">검색 결과가 없습니다</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="p-4 border-t border-[#f2f4f6]">
+                <button
+                  onClick={() => { setIsCompanionModalOpen(false); setCompanionSearchQuery(""); setCompanionSearchResults([]); }}
+                  className="w-full py-2.5 text-[14px] font-semibold text-[#8e8e93] hover:text-[#111] transition-colors"
+                >
+                  닫기
+                </button>
               </div>
             </div>
-            <div className="p-4 border-t border-[#f2f4f6]">
-              <button
-                onClick={() => { setIsCompanionModalOpen(false); setCompanionSearchQuery(""); setCompanionSearchResults([]); }}
-                className="w-full py-2.5 text-[14px] font-semibold text-[#8e8e93] hover:text-[#111] transition-colors"
-              >
-                닫기
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )
+      }
       {/* [ADD] 사진 확대 모달 */}
-      {enlargedImage && (
-        <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={() => setEnlargedImage(null)}
-        >
+      {
+        enlargedImage && (
           <div
-            className="relative w-full max-w-[600px] bg-white rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={() => setEnlargedImage(null)}
           >
-            {/* Modal Header for Photos */}
-            <div className="p-6 pb-2 flex justify-between items-center">
-              <h3 className="text-[18px] font-bold text-[#111] tracking-tight">사진 크게 보기</h3>
-              <button
-                className="w-10 h-10 flex items-center justify-center text-[#8e8e93] hover:text-[#111] transition-colors rounded-full hover:bg-gray-100"
-                onClick={() => setEnlargedImage(null)}
-              >
-                <X size={24} />
-              </button>
-            </div>
+            <div
+              className="relative w-full max-w-[600px] bg-white rounded-[32px] overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header for Photos */}
+              <div className="p-6 pb-2 flex justify-between items-center">
+                <h3 className="text-[18px] font-bold text-[#111] tracking-tight">사진 크게 보기</h3>
+                <button
+                  className="w-10 h-10 flex items-center justify-center text-[#8e8e93] hover:text-[#111] transition-colors rounded-full hover:bg-gray-100"
+                  onClick={() => setEnlargedImage(null)}
+                >
+                  <X size={24} />
+                </button>
+              </div>
 
-            {/* Image Area */}
-            <div className="p-4 flex flex-col items-center">
-              <img
-                src={enlargedImage}
-                alt="Enlarged"
-                className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
-              />
-            </div>
+              {/* Image Area */}
+              <div className="p-4 flex flex-col items-center">
+                <img
+                  src={enlargedImage}
+                  alt="Enlarged"
+                  className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
+                />
+              </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 flex justify-center bg-[#fbfbfc]">
-              <button
-                onClick={() => setEnlargedImage(null)}
-                className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
-              >
-                닫기
-              </button>
+              {/* Modal Footer */}
+              <div className="p-6 flex justify-center bg-[#fbfbfc]">
+                <button
+                  onClick={() => setEnlargedImage(null)}
+                  className="w-full h-[56px] bg-[#7a28fa] text-white rounded-2xl text-[16px] font-bold hover:bg-[#6922d5] transition-colors shadow-lg shadow-[#7a28fa]/20 active:scale-95 transition-all"
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {/* [ADD] 영수증 파싱 풀 스크린 로딩 오버레이 */}
-      {isProcessingReceipt && (
-        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/60 text-white">
-          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-[16px] font-semibold tracking-[-0.5px]">영수증 처리 중입니다</p>
-        </div>
-      )}
+      {/* [MOD] 영수증 파싱 백그라운드 진행 상태 바 (비차단형) - 위치 조정(겹침 방지) */}
+      {
+        isProcessingReceipt && (
+          <div className="fixed bottom-[110px] left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-4 bg-[#7a28fa] text-white px-5 py-3 rounded-2xl shadow-xl animate-in fade-in slide-in-from-bottom-5">
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <p className="text-[14px] font-bold whitespace-nowrap">
+              영수증 분석 중... ({processingReceiptCount.current}/{processingReceiptCount.total})
+            </p>
+          </div>
+        )
+      }
 
-    </MobileContainer>
+      {/* [ADD] 토스트 메시지 컴포넌트 */}
+      <Toast
+        isVisible={toast.isVisible}
+        message={toast.message}
+        onClose={() => setToast({ ...toast, isVisible: false })}
+        position="bottom"
+      />
+
+    </MobileContainer >
   );
 }
