@@ -45,7 +45,8 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
       >
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4 w-full">
           <div className="flex justify-between items-center gap-5 lg:w-auto shrink-0">
-            <span className="text-[13px] font-medium text-[#7a28fa] bg-[#f8f6ff] px-2 py-1 rounded-[6px] tracking-[-0.5px] whitespace-nowrap transition-colors">
+            {/* [MOD] max-w 및 truncate 추가하여 너무 길어질 경우 말줄임 처리 */}
+            <span className="text-[13px] font-medium text-[#7a28fa] bg-[#f8f6ff] px-2 py-1 rounded-[6px] tracking-[-0.5px] whitespace-nowrap transition-colors max-w-[100px] lg:max-w-[120px] truncate">
               {companionText}
             </span>
             {/* [MOD] 모바일용 삭제 버튼 추가를 위해 flex 컨테이너로 묶음 */}
@@ -83,8 +84,9 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
             {trip.strWhere}
           </h2>
 
-          <div className="flex flex-wrap gap-1.5 mt-1 lg:mt-0 lg:ml-2 shrink-0">
-            {tags.map((tag, i) => {
+          {/* [MOD] 태그 개수 제한 및 +N 표시 추가 */}
+          <div className="flex flex-wrap items-center gap-1.5 mt-1 lg:mt-0 lg:ml-2 shrink-0">
+            {tags.slice(0, 3).map((tag, i) => {
               // 정규식을 이용하여 태그 안의 이모지 제거 (ex: "🚗 쇼핑" -> "쇼핑")
               const cleanTag = tag
                 .replace(
@@ -101,6 +103,11 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
                 </span>
               );
             })}
+            {tags.length > 3 && (
+              <span className="text-[11px] font-bold text-[#abb1b9] ml-0.5">
+                +{tags.length - 3}
+              </span>
+            )}
           </div>
 
           {/* [MOD] 데스크톱용 삭제 버튼 추가를 위해 flex 컨테이너로 묶음 */}
