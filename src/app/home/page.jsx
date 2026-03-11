@@ -403,7 +403,8 @@ export default function HomePage() {
                             className="flex-1 bg-white hover:bg-gray-50 text-[#111] py-3 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95"
                             onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/trips/${trip.iPK}?tab=비용&action=receipt`);
+                              // [MOD] 비용 탭까지만 redirect (영수증 불러오기 자동 실행 제거)
+                              router.push(`/trips/${trip.iPK}?tab=비용`);
                             }}
                           >
                             <Camera size={20} className="text-[#3b82f6]" />
