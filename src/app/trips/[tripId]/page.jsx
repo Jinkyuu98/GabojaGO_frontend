@@ -568,10 +568,10 @@ export default function TripDetailPage() {
             spent: newSpent, // [MOD] 실제 지출 내역만 표시 (없으면 빈 배열)
             planned: [], // [MOD] MOCK 제거
             // [ADD] 카테고리별 예산 비율 매핑
-            foodRatio: found.nFoodRatio || 25,
-            transportRatio: found.nTransportRatio || 25,
-            lodgingRatio: found.nLodgingRatio || 25,
-            // [MOD] nAlarmRatio를 별도 alarmRatio로 분리 (0이면 알림 끔)
+            foodRatio: found.nFoodRatio || 0,
+            transportRatio: found.nTransportRatio || 0,
+            lodgingRatio: found.nLodgingRatio || 0,
+            etcRatio: Math.max(0, 100 - (found.nFoodRatio || 0) - (found.nTransportRatio || 0) - (found.nLodgingRatio || 0)),
             alarmRatio: found.nAlarmRatio ?? 0,
           },
           ownerUserFK, // [ADD] 스케줄 생성자 userPK 보관
@@ -2259,17 +2259,31 @@ export default function TripDetailPage() {
                         })()}
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-[11px] text-[#8e8e93]">사용 금액</span>
-                        <span className="text-[14px] font-bold text-[#111]">
+                        <span className="text-[10px] text-[#8e8e93] leading-tight">사용 금액</span>
+                        <span className="text-[13px] font-bold text-[#111] mb-0.5">
                           {(trip.budget.spent || []).reduce((s, i) => s + i.amount, 0).toLocaleString()}원
                         </span>
+                        {trip.budget.total > 0 && (
+                          <>
+                            <div className="w-8 h-[1px] bg-[#f2f4f6] my-0.5" />
+                            <span className="text-[10px] text-[#8e8e93] leading-tight mt-0.5">남은 금액</span>
+                            <span className={clsx(
+                              "text-[12px] font-bold",
+                              (trip.budget.total - (trip.budget.spent || []).reduce((s, i) => s + i.amount, 0)) < 0 ? "text-[#ff0909]" : "text-[#7a28fa]"
+                            )}>
+                              {(trip.budget.total - (trip.budget.spent || []).reduce((s, i) => s + i.amount, 0)).toLocaleString()}원
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex-1 flex flex-col gap-2">
                       <div className="flex items-center justify-between gap-4 mb-1">
                         <span className="text-xs text-[#abb1b9]">카테고리</span>
-                        <span className="text-xs text-[#abb1b9]">사용 금액</span>
+                        <span className="text-xs text-[#abb1b9]">
+                          사용 금액{trip.budget.total > 0 && "(남은 금액)"}
+                        </span>
                       </div>
                       <div className="h-[1px] bg-[#f2f4f6]" />
                       {trip.budget.spent.map((item, idx) => (
@@ -2293,31 +2307,48 @@ export default function TripDetailPage() {
                               {item.category}
                             </span>
                           </div>
-                          <span
-                            className={clsx(
-                              "text-sm font-semibold transition-colors",
-                              (() => {
-                                if (selectedExpenseCategory === item.category) {
-                                  return "text-[#7a28fa]";
-                                }
-                                const ratioMap = { "식비": trip.budget.foodRatio, "교통비": trip.budget.transportRatio, "숙박비": trip.budget.lodgingRatio, "기타": trip.budget.etcRatio };
-                                const ratio = ratioMap[item.category];
-                                const budgetForCategory = ratio ? (trip.budget.total * ratio / 100) : null;
-                                return budgetForCategory !== null && item.amount > budgetForCategory
-                                  ? "text-[#ff0909]"
-                                  : "text-[#111111]";
-                              })(),
-                            )}
-                          >
-                            {item.amount.toLocaleString()}
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span
+                              className={clsx(
+                                "text-sm font-semibold transition-colors",
+                                (() => {
+                                  if (selectedExpenseCategory === item.category) {
+                                    return "text-[#7a28fa]";
+                                  }
+                                  const ratioMap = { "식비": trip.budget.foodRatio || 0, "교통비": trip.budget.transportRatio || 0, "숙박비": trip.budget.lodgingRatio || 0, "기타": trip.budget.etcRatio || 0 };
+                                  const ratio = ratioMap[item.category] || 0;
+                                  const budgetForCategory = trip.budget.total > 0 ? (trip.budget.total * ratio / 100) : 0;
+                                  return (trip.budget.total > 0 && item.amount > budgetForCategory)
+                                    ? "text-[#ff0909]"
+                                    : "text-[#111111]";
+                                })(),
+                              )}
+                            >
+                              {item.amount.toLocaleString()}
+                            </span>
+                            {trip.budget.total > 0 && (() => {
+                              const ratioMap = { "식비": trip.budget.foodRatio || 0, "교통비": trip.budget.transportRatio || 0, "숙박비": trip.budget.lodgingRatio || 0, "기타": trip.budget.etcRatio || 0 };
+                              const ratio = ratioMap[item.category] || 0;
+                              const budgetForCategory = (trip.budget.total * ratio / 100);
+                              const remaining = budgetForCategory - item.amount;
+
+                              return (
+                                <span className={clsx(
+                                  "text-[10px] font-medium transition-colors",
+                                  remaining < 0 ? "text-[#ff7b7b]" : "text-[#8b95a1]"
+                                )}>
+                                  {remaining.toLocaleString()}원 {remaining < 0 ? "초과" : "남음"}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* [MOD] 예산 초과 경고 표시를 상세 경고 메시지 배너로 대체 */}
-                  {trip.budget.alarmRatio > 0 && trip.budget.total > 0 && trip.budget.spent?.length > 0 && (() => {
+                  {/* [MOD] 예산이 설정된 경우에만 경고 활성화 */}
+                  {trip.budget.total > 0 && trip.budget.alarmRatio > 0 && trip.budget.spent?.length > 0 && (() => {
                     const total = trip.budget.total;
                     const alarmPct = trip.budget.alarmRatio;
                     const ratioMap = {
@@ -3291,8 +3322,8 @@ export default function TripDetailPage() {
                   }
                 }}
                 className={`flex-[2] py-4 text-white font-bold rounded-xl active:scale-[0.98] transition-all ${(editingBudget.lodgingRatio + editingBudget.foodRatio + editingBudget.transportRatio) > 100
-                    ? "bg-[#d9d9d9] cursor-not-allowed"
-                    : "bg-[#7a28fa] hover:bg-[#6b22de]"
+                  ? "bg-[#d9d9d9] cursor-not-allowed"
+                  : "bg-[#7a28fa] hover:bg-[#6b22de]"
                   }`}
               >
                 설정 저장
