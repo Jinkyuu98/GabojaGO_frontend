@@ -3083,8 +3083,13 @@ export default function TripDetailPage() {
                 <input
                   type="number"
                   inputMode="numeric"
-                  value={editingBudget.total}
-                  onChange={(e) => setEditingBudget({ ...editingBudget, total: e.target.value })}
+                  value={editingBudget.total === 0 ? "" : editingBudget.total} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const numVal = val === "" ? 0 : parseInt(val, 10);
+                    setEditingBudget({ ...editingBudget, total: numVal });
+                  }}
+                  placeholder="0"
                   className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
                 />
               </div>
@@ -3180,8 +3185,12 @@ export default function TripDetailPage() {
                 <input
                   type="number"
                   inputMode="numeric"
-                  value={editingExpense.nMoney}
-                  onChange={(e) => setEditingExpense({ ...editingExpense, nMoney: parseInt(e.target.value) || 0 })}
+                  value={editingExpense.nMoney === 0 ? "" : editingExpense.nMoney} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const numVal = val === "" ? 0 : parseInt(val, 10);
+                    setEditingExpense({ ...editingExpense, nMoney: numVal });
+                  }}
                   className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
                 />
               </div>
@@ -3319,8 +3328,12 @@ export default function TripDetailPage() {
                   <input
                     type="number"
                     inputMode="numeric"
-                    value={newExpense.nMoney}
-                    onChange={(e) => setNewExpense({ ...newExpense, nMoney: parseInt(e.target.value) || "" })}
+                    value={newExpense.nMoney === 0 ? "" : newExpense.nMoney} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const numVal = val === "" ? 0 : parseInt(val, 10);
+                      setNewExpense({ ...newExpense, nMoney: numVal });
+                    }}
                     className="w-full border border-gray-300 rounded-lg p-2.5 pr-8 text-[15px]"
                     placeholder="0"
                   />

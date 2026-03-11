@@ -12,6 +12,15 @@ import { clsx } from "clsx";
 // [MOD] removeSchedule, modifySchedule 함수 import 추가
 import { getScheduleList, removeSchedule, modifySchedule } from "../../services/schedule";
 
+// [ADD] 온보딩 옵션 데이터
+const COMPANION_OPTIONS = ["혼자", "연인과", "친구와", "가족과", "부모님과", "기타"];
+const TRANSPORT_OPTIONS = ["자동차", "대중교통", "자전거", "도보", "기타"];
+const STYLE_OPTIONS = [
+  "체험/액티비티", "핫플레이스", "문화/역사", "유명 관광지",
+  "자연경관", "휴양/힐링", "등산", "맛집", "카페", "시장",
+  "야시장/노점", "쇼핑", "효도 관광", "기타"
+];
+
 // [MOD] onDelete, onEdit props 추가
 const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
   // [MOD] strWithWho 값을 그대로 표시 (불필요한 '함께' 접미사 제거)
@@ -426,8 +435,8 @@ export default function TripsListPage() {
                   <input
                     type="text"
                     value={editingTrip.strWhere}
-                    onChange={(e) => setEditingTrip({ ...editingTrip, strWhere: e.target.value })}
-                    className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    disabled // [MOD] 여행지는 수정 불가 처리
+                    className="h-12 px-4 bg-gray-100 rounded-xl border-2 border-transparent outline-none text-[15px] text-[#888] font-medium transition-all"
                   />
                 </div>
 
@@ -456,58 +465,161 @@ export default function TripsListPage() {
                 {/* 동행자 */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[13px] font-semibold text-[#6e6e6e]">👥 누구와</label>
-                  <input
-                    type="text"
-                    value={editingTrip.strWithWho}
-                    onChange={(e) => setEditingTrip({ ...editingTrip, strWithWho: e.target.value })}
-                    className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
-                  />
+                  <div className="flex flex-wrap gap-2 p-3 bg-[#f5f7f9] rounded-xl border-2 border-transparent">
+                    {COMPANION_OPTIONS.map(opt => {
+                      const currentCompanions = editingTrip.strWithWho ? editingTrip.strWithWho.split("-").map(s => s.trim()).filter(Boolean) : [];
+                      // [MOD] '기타' 버튼 활성화 로직: 목록 외 값이 있거나 '기타'인 경우
+                      const isSelected = opt === "기타"
+                        ? currentCompanions.some(s => !COMPANION_OPTIONS.includes(s) || s === "기타")
+                        : currentCompanions.includes(opt);
+
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => {
+                            let newCompanions = [...currentCompanions];
+                            if (opt === "혼자") {
+                              // [MOD] '혼자' 선택 시 다른 모든 동행자 제거
+                              newCompanions = ["혼자"];
+                            } else if (opt === "기타") {
+                              // [MOD] '기타' 클릭 시: 커스텀 값이나 '기타'가 있으면 제거, 없으면 '기타' 추가
+                              const hasOther = currentCompanions.some(s => !COMPANION_OPTIONS.includes(s) || s === "기타");
+                              if (hasOther) {
+                                newCompanions = currentCompanions.filter(s => COMPANION_OPTIONS.includes(s) && s !== "기타");
+                              } else {
+                                newCompanions = currentCompanions.filter(s => s !== "혼자");
+                                newCompanions.push("기타");
+                              }
+                            } else {
+                              // [MOD] 다른 옵션 선택 시 '혼자' 제거
+                              newCompanions = newCompanions.filter(s => s !== "혼자");
+                              if (newCompanions.includes(opt)) {
+                                newCompanions = newCompanions.filter(s => s !== opt);
+                              } else {
+                                newCompanions.push(opt);
+                              }
+                            }
+                            setEditingTrip({ ...editingTrip, strWithWho: newCompanions.join("-") });
+                          }}
+                          className={clsx(
+                            "px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all",
+                            isSelected ? "bg-[#7a28fa] text-white" : "bg-white text-[#666] border border-[#e5ebf2]"
+                          )}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* [ADD] 동행자 기타 입력창 */}
+                  {(editingTrip.strWithWho?.split("-").some(s => !COMPANION_OPTIONS.includes(s.trim())) || editingTrip.strWithWho?.split("-").includes("기타")) && (
+                    <input
+                      type="text"
+                      placeholder="동행자를 직접 입력하세요"
+                      value={editingTrip.strWithWho.split("-").find(s => !COMPANION_OPTIONS.includes(s.trim())) || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const currentCompanions = editingTrip.strWithWho.split("-").map(s => s.trim()).filter(Boolean);
+                        const knownCompanions = currentCompanions.filter(s => COMPANION_OPTIONS.includes(s) && s !== "기타");
+                        const newCompanions = val ? [...knownCompanions, val] : knownCompanions;
+                        setEditingTrip({ ...editingTrip, strWithWho: newCompanions.join("-") });
+                      }}
+                      className="mt-2 h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  )}
                 </div>
 
-                {/* 여행 스타일 / 교통수단 */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex flex-col gap-1.5 flex-1">
-                    <label className="text-[13px] font-semibold text-[#6e6e6e]">✈️ 여행 스타일</label>
-                    <input
-                      type="text"
-                      value={editingTrip.strTripStyle}
-                      onChange={(e) => setEditingTrip({ ...editingTrip, strTripStyle: e.target.value })}
-                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
-                    />
+                {/* 여행 스타일 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#6e6e6e]">✈️ 여행 스타일</label>
+                  <div className="flex flex-wrap gap-2 p-3 bg-[#f5f7f9] rounded-xl border-2 border-transparent">
+                    {STYLE_OPTIONS.map(opt => {
+                      const currentStyles = editingTrip.strTripStyle ? editingTrip.strTripStyle.split("-").map(s => s.trim()).filter(Boolean) : [];
+                      // [MOD] '기타' 버튼은 목록에 없는 커스텀 스타일이 있거나 '기타' 글자가 포함된 경우 활성화된 것으로 판단
+                      const isSelected = opt === "기타"
+                        ? currentStyles.some(s => !STYLE_OPTIONS.includes(s) || s === "기타")
+                        : currentStyles.includes(opt);
+
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => {
+                            let newStyles = [...currentStyles];
+                            if (opt === "기타") {
+                              // [MOD] 기타 버튼 클릭 시: 커스텀 스타일이나 '기타'가 있으면 모두 제거, 없으면 '기타' 추가
+                              const hasOther = currentStyles.some(s => !STYLE_OPTIONS.includes(s) || s === "기타");
+                              if (hasOther) {
+                                newStyles = currentStyles.filter(s => STYLE_OPTIONS.includes(s) && s !== "기타");
+                              } else {
+                                newStyles.push("기타");
+                              }
+                            } else {
+                              if (newStyles.includes(opt)) {
+                                newStyles = newStyles.filter(s => s !== opt);
+                              } else {
+                                newStyles.push(opt);
+                              }
+                            }
+                            setEditingTrip({ ...editingTrip, strTripStyle: newStyles.join("-") });
+                          }}
+                          className={clsx(
+                            "px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all",
+                            isSelected ? "bg-[#7a28fa] text-white" : "bg-white text-[#666] border border-[#e5ebf2]"
+                          )}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-1">
-                    <label className="text-[13px] font-semibold text-[#6e6e6e]">🚗 교통수단</label>
+                  {/* [ADD] 여행 스타일 기타 입력창 */}
+                  {(editingTrip.strTripStyle?.split("-").some(s => !STYLE_OPTIONS.includes(s.trim())) || editingTrip.strTripStyle?.split("-").includes("기타")) && (
                     <input
                       type="text"
-                      value={editingTrip.strTransport}
+                      placeholder="원하시는 테마를 입력하세요"
+                      value={editingTrip.strTripStyle.split("-").find(s => !STYLE_OPTIONS.includes(s.trim())) || ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const currentStyles = editingTrip.strTripStyle.split("-").map(s => s.trim()).filter(Boolean);
+                        const knownStyles = currentStyles.filter(s => STYLE_OPTIONS.includes(s) && s !== "기타");
+                        const newStyles = val ? [...knownStyles, val] : knownStyles;
+                        setEditingTrip({ ...editingTrip, strTripStyle: newStyles.join("-") });
+                      }}
+                      className="mt-2 h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                    />
+                  )}
+                </div>
+
+                {/* 교통수단 */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] font-semibold text-[#6e6e6e]">🚗 교통수단</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {TRANSPORT_OPTIONS.map(opt => {
+                      const isSelected = editingTrip.strTransport === opt || (!TRANSPORT_OPTIONS.includes(editingTrip.strTransport) && opt === "기타");
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => setEditingTrip({ ...editingTrip, strTransport: opt === "기타" ? "" : opt })}
+                          className={clsx(
+                            "h-11 rounded-xl text-[14px] font-medium transition-all border-2",
+                            isSelected ? "border-[#7a28fa] bg-[#f8f6ff] text-[#7a28fa]" : "border-transparent bg-[#f5f7f9] text-[#666]"
+                          )}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* [ADD] 교통수단 기타 입력창 */}
+                  {(!TRANSPORT_OPTIONS.includes(editingTrip.strTransport) || editingTrip.strTransport === "기타") && (
+                    <input
+                      type="text"
+                      placeholder="교통수단을 입력하세요"
+                      value={editingTrip.strTransport === "기타" ? "" : editingTrip.strTransport}
                       onChange={(e) => setEditingTrip({ ...editingTrip, strTransport: e.target.value })}
-                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
+                      className="mt-2 h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
                     />
-                  </div>
-                </div>
-
-                {/* 인원 / 예산 */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex flex-col gap-1.5 flex-1">
-                    <label className="text-[13px] font-semibold text-[#6e6e6e]">👤 인원</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={editingTrip.nTotalPeople}
-                      onChange={(e) => setEditingTrip({ ...editingTrip, nTotalPeople: parseInt(e.target.value) || 1 })}
-                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5 flex-1">
-                    <label className="text-[13px] font-semibold text-[#6e6e6e]">💰 예산</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={editingTrip.nTotalBudget}
-                      onChange={(e) => setEditingTrip({ ...editingTrip, nTotalBudget: parseInt(e.target.value) || 0 })}
-                      className="h-12 px-4 bg-[#f5f7f9] rounded-xl border-2 border-transparent focus:border-[#7a28fa] focus:bg-white outline-none text-[15px] text-[#111111] font-medium transition-all"
-                    />
-                  </div>
+                  )}
                 </div>
               </div>
 
