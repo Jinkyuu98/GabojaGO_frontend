@@ -2087,7 +2087,13 @@ export default function TripDetailPage() {
                     {isOwner && (
                       <button
                         className="bg-transparent border-none p-0 cursor-pointer"
-                        onClick={() => setEditingBudget({ total: trip.budget.total })}
+                        onClick={() => setEditingBudget({
+                          total: trip.budget.total,
+                          lodgingRatio: trip.budget.lodgingRatio || 25,
+                          foodRatio: trip.budget.foodRatio || 25,
+                          transportRatio: trip.budget.transportRatio || 25,
+                          alarmRatio: trip.budget.alarmRatio || 25
+                        })}
                       >
                         <div
                           className="w-[15px] h-[15px] bg-[#7a28fa]"
@@ -3104,37 +3110,130 @@ export default function TripDetailPage() {
         </div>
       )}
 
-      {/* [ADD] 예산 수정 모달 */}
+      {/* [MOD] 예산 수정 모달 - 슬라이더(비율) 설정 추가 (Onboarding 참고) */}
       {editingBudget && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-sm bg-white rounded-xl p-5 shadow-lg">
-            <h3 className="text-[17px] font-bold text-[#111] mb-4">예산 수정</h3>
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className="text-sm font-semibold text-[#555] mb-1 block">총 예산 (원)</label>
-                <input
-                  type="text" // [MOD] 천 단위 콤마 표현을 위해 text 타입으로 변경
-                  inputMode="numeric"
-                  value={editingBudget.total === 0 ? "" : editingBudget.total.toLocaleString("ko-KR")} // [MOD] 화면 출력 시 콤마 추가
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/[^0-9]/g, ""); // [MOD] 숫자만 추출
-                    const numVal = val === "" ? 0 : parseInt(val, 10);
-                    setEditingBudget({ ...editingBudget, total: numVal });
-                  }}
-                  placeholder="0"
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-[15px]"
-                />
+          <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden shadow-xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#f2f4f6] bg-white sticky top-0 z-10">
+              <h3 className="text-[17px] font-bold text-[#111]">예산 및 비율 수정</h3>
+              <button onClick={() => setEditingBudget(null)} className="text-[#8e8e93]">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-8">
+              {/* Total Budget */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-[#8b95a1]">예산 총액 (원)</label>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-[#f1f1f5] rounded-xl px-4 py-3.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editingBudget.total === 0 ? "" : editingBudget.total.toLocaleString("ko-KR")}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "");
+                        const numVal = val === "" ? 0 : parseInt(val, 10);
+                        setEditingBudget({ ...editingBudget, total: numVal });
+                      }}
+                      placeholder="0"
+                      className="w-full bg-transparent text-base font-bold text-[#111] outline-none"
+                    />
+                  </div>
+                  <span className="text-base font-medium text-[#8b95a1]">원</span>
+                </div>
+              </div>
+
+              {/* Ratio Settings */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-[#8b95a1]">카테고리 비율 설정</label>
+                  <span className={`text-xs font-bold ${(editingBudget.lodgingRatio + editingBudget.foodRatio + editingBudget.transportRatio) > 100 ? "text-red-500" : "text-[#7a28fa]"}`}>
+                    합계: {editingBudget.lodgingRatio + editingBudget.foodRatio + editingBudget.transportRatio}%
+                  </span>
+                </div>
+
+                {/* Lodging */}
+                <div className="bg-[#f9f9f9] rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center text-[13px] font-medium text-[#111]">
+                    <span>🏨 숙박비</span>
+                    <span>{editingBudget.lodgingRatio}%</span>
+                  </div>
+                  <input
+                    type="range" min="0" max="100" step="5"
+                    value={editingBudget.lodgingRatio}
+                    onChange={(e) => setEditingBudget({ ...editingBudget, lodgingRatio: parseInt(e.target.value) })}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#7a28fa]"
+                  />
+                </div>
+
+                {/* Food */}
+                <div className="bg-[#f9f9f9] rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center text-[13px] font-medium text-[#111]">
+                    <span>🍽️ 식비</span>
+                    <span>{editingBudget.foodRatio}%</span>
+                  </div>
+                  <input
+                    type="range" min="0" max="100" step="5"
+                    value={editingBudget.foodRatio}
+                    onChange={(e) => setEditingBudget({ ...editingBudget, foodRatio: parseInt(e.target.value) })}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#7a28fa]"
+                  />
+                </div>
+
+                {/* Transport */}
+                <div className="bg-[#f9f9f9] rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center text-[13px] font-medium text-[#111]">
+                    <span>🚗 교통비</span>
+                    <span>{editingBudget.transportRatio}%</span>
+                  </div>
+                  <input
+                    type="range" min="0" max="100" step="5"
+                    value={editingBudget.transportRatio}
+                    onChange={(e) => setEditingBudget({ ...editingBudget, transportRatio: parseInt(e.target.value) })}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#7a28fa]"
+                  />
+                </div>
+
+                {/* Etc (Auto) */}
+                <div className="flex items-center justify-between px-2">
+                  <span className="text-xs text-[#8b95a1]">📦 기타 (자동)</span>
+                  <span className="text-xs font-bold text-[#8b95a1]">{Math.max(0, 100 - editingBudget.lodgingRatio - editingBudget.foodRatio - editingBudget.transportRatio)}%</span>
+                </div>
+              </div>
+
+              {/* Alarm Threshold */}
+              <div className="space-y-4 pt-2">
+                <label className="text-sm font-semibold text-[#8b95a1]">경고 알림 임계값</label>
+                <div className="bg-[#f2eeff] rounded-xl p-4 space-y-3">
+                  <div className="flex justify-between items-center text-[13px] font-bold text-[#7a28fa]">
+                    <span>⚠️ 잔여 예산 {editingBudget.alarmRatio}% 시 알림</span>
+                  </div>
+                  <input
+                    type="range" min="0" max="100" step="1"
+                    value={editingBudget.alarmRatio}
+                    onChange={(e) => setEditingBudget({ ...editingBudget, alarmRatio: parseInt(e.target.value) })}
+                    className="w-full h-1.5 bg-white/50 rounded-lg appearance-none cursor-pointer accent-[#7a28fa]"
+                  />
+                </div>
+                <p className="text-[11px] text-[#8b95a1] px-1 italic">* 카테고리별 할당 예산 대비 잔여금이 이 비율 이하가 되면 차트에 빨간색으로 표시됩니다.</p>
               </div>
             </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => setEditingBudget(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">취소</button>
+
+            <div className="px-5 py-6 border-t border-[#f2f4f6] bg-white sticky bottom-0 z-10 flex gap-2">
               <button
+                onClick={() => setEditingBudget(null)}
+                className="flex-1 py-4 bg-gray-100 text-[#556574] font-bold rounded-xl active:scale-[0.98] transition-transform"
+              >
+                취소
+              </button>
+              <button
+                disabled={(editingBudget.lodgingRatio + editingBudget.foodRatio + editingBudget.transportRatio) > 100}
                 onClick={async () => {
                   try {
                     const { modifySchedule } = await import("../../../services/schedule");
-                    // [FIX] 서버 500 에러 방지를 위해 필수 필드 위주로 정밀하게 전송 (Ver 3.1)
                     const normalizeDate = (d) => {
-                      if (!d) return "2024-01-01"; // 최소 기본값
+                      if (!d) return "2024-01-01";
                       const s = String(d).split(" ")[0].split("T")[0].replace(/\./g, "-");
                       return s;
                     };
@@ -3151,10 +3250,10 @@ export default function TripDetailPage() {
                       strTransport: raw.strTransport || apiTrip?.transport || "대중교통",
                       nTotalPeople: parseInt(raw.nTotalPeople || apiTrip?.totalPeople || 1, 10),
                       nTotalBudget: parseInt(editingBudget.total, 10),
-                      nAlarmRatio: parseInt(raw.nAlarmRatio || 25, 10),
-                      nTransportRatio: parseInt(raw.nTransportRatio || 25, 10),
-                      nLodgingRatio: parseInt(raw.nLodgingRatio || 25, 10),
-                      nFoodRatio: parseInt(raw.nFoodRatio || 25, 10),
+                      nAlarmRatio: parseInt(editingBudget.alarmRatio, 10),
+                      nTransportRatio: parseInt(editingBudget.transportRatio, 10),
+                      nLodgingRatio: parseInt(editingBudget.lodgingRatio, 10),
+                      nFoodRatio: parseInt(editingBudget.foodRatio, 10),
                       chStatus: raw.chStatus || "A"
                     };
 
@@ -3165,29 +3264,39 @@ export default function TripDetailPage() {
                       }
                     }
 
-                    console.log("🚨 [예산 수정 페이로드]", payload);
                     await modifySchedule(payload);
 
-                    // [MOD] 로컬 상태 즉시 업데이트
                     setApiTrip(prev => {
                       if (!prev) return prev;
                       return {
                         ...prev,
-                        budget: { ...prev.budget, total: payload.nTotalBudget },
+                        budget: {
+                          ...prev.budget,
+                          total: payload.nTotalBudget,
+                          lodgingRatio: payload.nLodgingRatio,
+                          foodRatio: payload.nFoodRatio,
+                          transportRatio: payload.nTransportRatio,
+                          alarmRatio: payload.nAlarmRatio,
+                          etcRatio: Math.max(0, 100 - payload.nLodgingRatio - payload.nFoodRatio - payload.nTransportRatio)
+                        },
                         raw: { ...prev.raw, ...payload }
                       };
                     });
                     setEditingBudget(null);
-                    alert("✅ 예산이 수정되었습니다.");
+                    alert("✅ 예산 설정이 업데이트되었습니다.");
+                    await fetchTrip();
                   } catch (err) {
                     console.error("🚨 예산 수정 실패:", err);
-                    const errorDetail = err.response?.data;
-                    const errorMsg = errorDetail ? (typeof errorDetail === 'object' ? JSON.stringify(errorDetail, null, 2) : String(errorDetail)) : err.message;
-                    alert(`🚨 예산 수정 중 오류가 발생했습니다.\n\n[서버 응답 상세]\n${errorMsg}`);
+                    alert("🚨 예산 수정 중 오류가 발생했습니다.");
                   }
                 }}
-                className="flex-1 py-3 bg-[#7a28fa] text-white font-semibold rounded-lg hover:bg-[#6b22de]"
-              >저장</button>
+                className={`flex-[2] py-4 text-white font-bold rounded-xl active:scale-[0.98] transition-all ${(editingBudget.lodgingRatio + editingBudget.foodRatio + editingBudget.transportRatio) > 100
+                    ? "bg-[#d9d9d9] cursor-not-allowed"
+                    : "bg-[#7a28fa] hover:bg-[#6b22de]"
+                  }`}
+              >
+                설정 저장
+              </button>
             </div>
           </div>
         </div>
