@@ -847,6 +847,7 @@ export default function TripDetailPage() {
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
   const polylinesRef = useRef([]); // [ADD] 사진 동선(Polyline) 관리를 위한 Ref
+  const skipBoundsUpdateRef = useRef(false); // [ADD] 사진 클릭으로 인한 불필요한 bounds 조정을 막아 panTo 애니메이션 끊김(비정상 종료) 방지
   // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
   const dayTabsRef = useRef(null);
   const [isMouseDragging, setIsMouseDragging] = useState(false);
@@ -883,7 +884,8 @@ export default function TripDetailPage() {
   // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 및 중심 재보정
   // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 동기화
   useEffect(() => {
-    if (mapInstance.current && window.kakao) {
+    // [MOD] isMapLoaded 조건 추가하여 지도 생성 직후 relayout이 초기 실행되도록 함 (초기 렌더링 지연 해결)
+    if (mapInstance.current && window.kakao && isMapLoaded) {
       // 바텀시트 transition 300ms 재생 동안 여러 번 리사이징 갱신 (회색 화면, 깨짐 방지)
       let iterations = 0;
       const interval = setInterval(() => {
@@ -896,6 +898,9 @@ export default function TripDetailPage() {
         iterations++;
         if (iterations >= 20) {
           clearInterval(interval);
+
+          // [MOD] 사용자가 지도를 자유롭게 조작 중(panTo 등)일 때는 강제로 bounds를 재조정하지 않음 (충돌/크래시 방지)
+          if (skipBoundsUpdateRef.current) return;
 
           // 애니메이션이 완전히 끝난 후 한 번만 중심점을 잡아주어 마커가 온전히 보이게 위치 조정
           const places = trip?.days?.[selectedDay - 1]?.places || [];
@@ -923,7 +928,7 @@ export default function TripDetailPage() {
 
       return () => clearInterval(interval);
     }
-  }, [sheetHeight, selectedDay, trip]);
+  }, [sheetHeight, selectedDay, trip, isMapLoaded]); // [MOD] isMapLoaded 의존성 추가
 
   // [ADD] 마우스 드래그 핸들러
   const handleMouseDown = (e) => {
@@ -1012,25 +1017,26 @@ export default function TripDetailPage() {
       return;
     }
 
+    // [ADD] 이미 지도가 생성되어 있다면 재생성하지 않음 (다중 지도 노드 누적에 의한 렌더링 에러/백화현상 방지)
+    if (mapInstance.current) {
+      return;
+    }
+
     // [ADD] 지도가 재생성될 때 로드 상태를 명시적으로 false로 초기화하여 
     // 마커/폴라인을 그리는 useEffect가 새 인스턴스에 즉시 반응하도록 함
     setIsMapLoaded(false);
-    setMapInitCount(prev => prev + 1); // [ADD] 초기화 카운트 증가
-
-    // [MOD] 기존 맵이 있으면 마커 정리
-    if (mapInstance.current) {
-      try {
-        markersRef.current.forEach((m) => m.setMap(null));
-        markersRef.current = [];
-      } catch (e) { /* ignore */ }
-      mapInstance.current = null;
-    }
 
     // [MOD] SDK가 완전히 로드된 경우 (Map 생성자가 존재) → 직접 생성
     const createMap = () => {
       if (!mapRef.current) return;
+      if (mapInstance.current) return; // 중복 생성 방지 2차 체크
 
-      // [ADD] 초기 중심점 설정: 1일차 첫 번째 장소 우선, 없으면 전체 일정 중 첫 번째 장소
+      // [ADD] Map 렌더링 컨테이너 비우기 (기존에 찌꺼기 DOM이 남아있는 경우 백화현상 유발)
+      while (mapRef.current.firstChild) {
+        mapRef.current.removeChild(mapRef.current.firstChild);
+      }
+
+      // [ADD] 초기 중심점 설정: 지도 초기 로딩 시 임의의 디폴트값 대신 부드러운 시작을 위해
       let initialLat = 37.5665;
       let initialLng = 126.978;
 
@@ -1062,6 +1068,7 @@ export default function TripDetailPage() {
       });
 
       setIsMapLoaded(true); // [ADD] 로드 완료 시점 상태 갱신
+      setMapInitCount(prev => prev + 1); // [ADD] 초기화 카운트 증가를 완료 직후로 이동
     };
 
     if (window.kakao.maps?.Map) {
@@ -1073,9 +1080,11 @@ export default function TripDetailPage() {
     }
   };
 
-  // [MOD] 컴포넌트 마운트 시 맵 초기화 + 언마운트 시 정리
+  // [MOD] 컴포넌트 마운트 시 맵 초기화 + 언마운트 시 정리. 
+  // trip이 불러와진 뒤에 initMap이 한 번만 실행되도록 의존성 배열에 trip 유지, 그러나 mapInstance.current 여부로 중복 방어
   useEffect(() => {
-    mapInstance.current = null;
+    // [MOD] trip 데이터가 들어오기 전에는 맵 초기화를 보류하여 첫 렌더링에 올바른 초기 중심선을 잡음
+    if (!trip) return;
 
     // SDK가 이미 있으면 바로 초기화, 없으면 Script onLoad가 처리
     if (window.kakao) {
@@ -1083,22 +1092,21 @@ export default function TripDetailPage() {
       const timer = setTimeout(initMap, 50);
       return () => {
         clearTimeout(timer);
-        markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
-        markersRef.current = [];
-        polylinesRef.current.forEach((p) => { try { p.setMap(null); } catch (e) { } }); // [ADD] 폴라인 초기화
-        polylinesRef.current = [];
-        mapInstance.current = null;
       };
     }
+  }, [tripId, trip]); // [MOD] trip 의존성 유지하되 내부적으로 1회만 초기화되도록 수정
 
+  useEffect(() => {
     return () => {
+      // unmount 시 완전 파기
       markersRef.current.forEach((m) => { try { m.setMap(null); } catch (e) { } });
       markersRef.current = [];
-      polylinesRef.current.forEach((p) => { try { p.setMap(null); } catch (e) { } }); // [ADD] 폴라인 초기화
+      polylinesRef.current.forEach((p) => { try { p.setMap(null); } catch (e) { } });
       polylinesRef.current = [];
       mapInstance.current = null;
+      setIsMapLoaded(false);
     };
-  }, [tripId, trip]); // [MOD] trip 데이터가 로드된 시점에 지도를 확실히 초기화하기 위해 의존성 추가
+  }, []);
 
   useEffect(() => {
     // [MOD] mapInstance뿐 아니라 isMapLoaded 상태 및 trip 데이터 존재 여부도 체크하여 에러 방지
@@ -1279,7 +1287,9 @@ export default function TripDetailPage() {
 
     const hasValidMarkers = markersRef.current.length > 0;
 
-    if (hasValidMarkers) {
+    // [MOD] 사용자가 사진 클릭을 통해 특정 위치로 이동(panTo) 애니메이션 중일 때는 전체 영역(setBounds) 조정을 건너뜀
+    // 이를 통해 panTo 이동 중간에 setBounds가 개입하여 지도가 하얗게 변하는 크래시 현상을 방지
+    if (hasValidMarkers && !skipBoundsUpdateRef.current) {
       if (markersRef.current.length === 1) {
         map.setCenter(bounds.getSouthWest());
         map.setLevel(isMobile ? 3 : 4);
@@ -1505,13 +1515,13 @@ export default function TripDetailPage() {
       return;
     }
     if (window.kakao && window.kakao.maps && mapInstance.current) {
+      skipBoundsUpdateRef.current = true; // [ADD] panTo와 setBounds 충돌 방지 락 활성화
       const moveLatLon = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
       mapInstance.current.panTo(moveLatLon);
       setSelectedPhoto(photo); // [ADD] 선택된 사진 상태 업데이트 (말풍선 표시용)
-      // 모바일의 경우 바텀시트를 조금 내려줌 (지도 가독성)
-      if (window.innerWidth < 1024) {
-        setSheetHeight(minHeight + 100);
-      }
+
+      // 약간의 지연 후 락 해제 (마커 재렌더링 후 발생할 수 있는 bounds 조정 막기 위함)
+      setTimeout(() => { skipBoundsUpdateRef.current = false; }, 800);
     }
   };
 
