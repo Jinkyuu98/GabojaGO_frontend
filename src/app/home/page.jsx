@@ -9,7 +9,7 @@ import { getPlaceReviews } from "../../services/review";
 import { BottomNavigation } from "../../components/layout/BottomNavigation";
 import { MobileContainer } from "../../components/layout/MobileContainer";
 import { ActionSheet } from "../../components/common/ActionSheet";
-import { ChevronRight, Filter, TrendingUp, TrendingDown, Minus } from "lucide-react"; // [MOD] 아이콘 추가
+import { ChevronRight, Filter, TrendingUp, TrendingDown, Minus, Camera, ImageIcon, MapPin } from "lucide-react"; // [MOD] 아이콘 추가
 import { useOnboardingStore } from "../../store/useOnboardingStore";
 import { clsx } from "clsx";
 
@@ -285,15 +285,8 @@ export default function HomePage() {
                       )}
                     </div>
                     <div className="flex items-center justify-end w-14">
-                      {index % 4 === 0 ? (
-                        <div className="flex items-center gap-1 font-black text-[#ef4444] text-[15px]">
-                          <TrendingUp size={18} strokeWidth={4} />
-                        </div>
-                      ) : index % 3 === 0 ? (
-                        <span className="text-[12px] font-black text-[#ef4444] tracking-tighter bg-[#ef4444]/5 px-2 py-0.5 rounded">NEW</span>
-                      ) : (
-                        <Minus size={18} className="text-gray-200" strokeWidth={4} />
-                      )}
+                      {/* [MOD] 실제 기능이 없는 mock 트렌드 아이콘 대신 대시(-) 표시 */}
+                      <Minus size={18} className="text-gray-200" strokeWidth={4} />
                     </div>
                   </div>
                 ))}
@@ -393,7 +386,41 @@ export default function HomePage() {
                         </div>
                       </div>
 
-                      {/* [DEL] 사진/영수증/지도 버튼 제거 (예정일정 높이 축소를 위함) */}
+                      {/* [ADD] 사진/영수증/지도 버튼 복구 (대표 일정에만 노출) */}
+                      {idx === 0 && (
+                        <div className="flex gap-3">
+                          <button
+                            className="flex-1 bg-white hover:bg-gray-50 text-[#111] py-3 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/trips/${trip.iPK}?tab=사진&action=uploadPhoto`);
+                            }}
+                          >
+                            <ImageIcon size={20} className="text-[#7a28fa]" />
+                            <span className="text-[11px] font-bold">사진 등록</span>
+                          </button>
+                          <button
+                            className="flex-1 bg-white hover:bg-gray-50 text-[#111] py-3 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/trips/${trip.iPK}?tab=비용&action=receipt`);
+                            }}
+                          >
+                            <Camera size={20} className="text-[#3b82f6]" />
+                            <span className="text-[11px] font-bold">영수증 등록</span>
+                          </button>
+                          <button
+                            className="flex-1 bg-white hover:bg-gray-50 text-[#111] py-3 rounded-xl border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-1.5 transition-all active:scale-95"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/trips/${trip.iPK}?tab=일정`);
+                            }}
+                          >
+                            <MapPin size={20} className="text-[#10b981]" />
+                            <span className="text-[11px] font-bold">지도 보기</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -443,17 +470,8 @@ export default function HomePage() {
                         )}
                       </div>
                       <div className="flex items-center justify-end w-10">
-                        {index % 4 === 0 ? (
-                          <div className="flex items-center gap-0.5 animate-pulse">
-                            <TrendingUp size={14} className="text-[#f12d2d]" strokeWidth={3} />
-                          </div>
-                        ) : index % 3 === 0 ? (
-                          <div className="flex items-center">
-                            <span className="text-[11px] font-black text-[#f12d2d] leading-none tracking-tighter">NEW</span>
-                          </div>
-                        ) : (
-                          <Minus size={14} className="text-[#8e8e93]/20" strokeWidth={3} />
-                        )}
+                        {/* [MOD] 실제 기능이 없는 mock 트렌드 아이콘 대신 대시(-) 표시 */}
+                        <Minus size={14} className="text-[#8e8e93]/20" strokeWidth={3} />
                       </div>
                     </div>
                   ))}
@@ -533,13 +551,8 @@ export default function HomePage() {
                       )}
                     </div>
                     <div className="flex items-center justify-end w-12 mr-2">
-                      {index % 4 === 0 ? (
-                        <TrendingUp size={16} className="text-[#ef4444]" strokeWidth={3} />
-                      ) : index % 3 === 0 ? (
-                        <span className="text-[11px] font-black text-[#ef4444] tracking-tighter">NEW</span>
-                      ) : (
-                        <Minus size={16} className="text-gray-300" strokeWidth={3} />
-                      )}
+                      {/* [MOD] 실제 기능이 없는 mock 트렌드 아이콘 대신 대시(-) 표시 */}
+                      <Minus size={16} className="text-gray-300" strokeWidth={3} />
                     </div>
                   </div>
                 ))}
