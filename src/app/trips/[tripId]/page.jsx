@@ -622,7 +622,7 @@ export default function TripDetailPage() {
 
     try {
       const newCheckStatus = !prep.checked;
-      
+
       const payload = {
         iPK: prep.id,
         iScheduleFK: prep.scheduleFK || parseInt(tripId, 10),
@@ -639,7 +639,7 @@ export default function TripDetailPage() {
         if (!prev) return prev;
         return {
           ...prev,
-          checklist: prev.checklist.map(item => 
+          checklist: prev.checklist.map(item =>
             item.id === prep.id ? { ...item, checked: newCheckStatus } : item
           )
         };
@@ -2442,10 +2442,11 @@ export default function TripDetailPage() {
                       return <p className="text-[13px] text-[#8e8e93] text-center py-2">아직 등록된 준비물이 없습니다.</p>;
                     }
                     return myItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
+                      <div key={item.id} className="flex items-start justify-between gap-2">
+                        {/* [MOD] flex-1 min-w-0 추가하여 텍스트 줄바꿈 허용 */}
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
                           <div
-                            className="w-[18px] h-[18px] rounded cursor-pointer flex-shrink-0"
+                            className="w-[18px] h-[18px] rounded cursor-pointer flex-shrink-0 mt-1"
                             onClick={() => onTogglePreparation(item)}
                           >
                             <Image
@@ -2455,8 +2456,9 @@ export default function TripDetailPage() {
                               height={18}
                             />
                           </div>
+                          {/* [MOD] break-all 추가하여 긴 단어 줄바꿈 보장 */}
                           <span className={clsx(
-                            "text-base tracking-[-0.4px]",
+                            "text-base tracking-[-0.4px] break-all",
                             item.checked ? "line-through text-[#c7c8d8]" : "text-[#111111]"
                           )}>
                             {item.name}
@@ -2551,8 +2553,9 @@ export default function TripDetailPage() {
                           return <p className="text-[13px] text-[#8e8e93] text-center py-2">등록된 준비물이 없습니다.</p>;
                         }
                         return companionItems.map((item) => (
-                          <div key={item.id} className="flex items-center gap-3">
-                            <div className="w-[18px] h-[18px] rounded opacity-60 flex-shrink-0">
+                          /* [MOD] items-start 및 min-w-0 추가 */
+                          <div key={item.id} className="flex items-start gap-3 min-w-0">
+                            <div className="w-[18px] h-[18px] rounded opacity-60 flex-shrink-0 mt-1">
                               <Image
                                 src={item.checked ? "/icons/checkbox-checked.svg" : "/icons/checkbox-unchecked.svg"}
                                 alt="checkbox"
@@ -2560,8 +2563,9 @@ export default function TripDetailPage() {
                                 height={18}
                               />
                             </div>
+                            {/* [MOD] break-all 추가 */}
                             <span className={clsx(
-                              "text-base tracking-[-0.4px]",
+                              "text-base tracking-[-0.4px] break-all",
                               item.checked ? "line-through text-[#c7c8d8]" : "text-[#555]"
                             )}>
                               {item.name}
