@@ -889,7 +889,7 @@ export default function TripDetailPage() {
   // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 동기화
   useEffect(() => {
     // [MOD] isMapLoaded 조건 추가하여 지도 생성 직후 relayout이 초기 실행되도록 함 (초기 렌더링 지연 해결)
-    if (mapInstance.current && window.kakao && isMapLoaded) {
+    if (mapInstance.current && window.kakao && isMapLoaded && ["\uc77c\uc815", "\uc0ac\uc9c4"].includes(selectedTab)) {
       // 바텀시트 transition 300ms 재생 동안 여러 번 리사이징 갱신 (회색 화면, 깨짐 방지)
       let iterations = 0;
       const interval = setInterval(() => {
@@ -932,7 +932,7 @@ export default function TripDetailPage() {
 
       return () => clearInterval(interval);
     }
-  }, [sheetHeight, selectedDay, trip, isMapLoaded]); // [MOD] isMapLoaded 의존성 추가
+  }, [sheetHeight, selectedDay, trip, isMapLoaded, selectedTab]); // [MOD] selectedTab 의존성 추가
 
   // [ADD] 마우스 드래그 핸들러
   const handleMouseDown = (e) => {
@@ -1116,7 +1116,13 @@ export default function TripDetailPage() {
     // [MOD] mapInstance뿐 아니라 isMapLoaded 상태 및 trip 데이터 존재 여부도 체크하여 에러 방지
     if (!isMapLoaded || !mapInstance.current || !window.kakao || !trip) return;
 
+    // [ADD] 비용, 준비물, 동행자 탭에서는 지도 갱신 불필요 - 마커 드로잉 스킵
+    if (!["\uc77c\uc815", "\uc0ac\uc9c4"].includes(selectedTab)) return;
+
     const map = mapInstance.current;
+
+    // [ADD] 탭 전환 후 지도 뷰포트 크기 동기화 (비지도 탭에서 돌아올 때 필수)
+    map.relayout();
 
     // 기존 마커 및 폴라인 제거
     markersRef.current.forEach((m) => m.setMap(null));
