@@ -3113,11 +3113,11 @@ export default function TripDetailPage() {
               <div>
                 <label className="text-sm font-semibold text-[#555] mb-1 block">총 예산 (원)</label>
                 <input
-                  type="number"
+                  type="text" // [MOD] 천 단위 콤마 표현을 위해 text 타입으로 변경
                   inputMode="numeric"
-                  value={editingBudget.total === 0 ? "" : editingBudget.total} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                  value={editingBudget.total === 0 ? "" : editingBudget.total.toLocaleString("ko-KR")} // [MOD] 화면 출력 시 콤마 추가
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = e.target.value.replace(/[^0-9]/g, ""); // [MOD] 숫자만 추출
                     const numVal = val === "" ? 0 : parseInt(val, 10);
                     setEditingBudget({ ...editingBudget, total: numVal });
                   }}
@@ -3215,11 +3215,11 @@ export default function TripDetailPage() {
               <div>
                 <label className="text-sm font-semibold text-[#555] mb-1 block">지출 금액 (원)</label>
                 <input
-                  type="number"
+                  type="text" // [MOD] 천 단위 콤마 표현을 위해 text 타입으로 변경
                   inputMode="numeric"
-                  value={editingExpense.nMoney === 0 ? "" : editingExpense.nMoney} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                  value={editingExpense.nMoney === 0 ? "" : editingExpense.nMoney.toLocaleString("ko-KR")} // [MOD] 화면 출력 시 콤마 추가
                   onChange={(e) => {
-                    const val = e.target.value;
+                    const val = e.target.value.replace(/[^0-9]/g, ""); // [MOD] 숫자만 추출
                     const numVal = val === "" ? 0 : parseInt(val, 10);
                     setEditingExpense({ ...editingExpense, nMoney: numVal });
                   }}
@@ -3354,11 +3354,11 @@ export default function TripDetailPage() {
                 <label className="text-sm font-semibold text-[#555] mb-1 block">지출 금액 (원)</label>
                 <div className="relative">
                   <input
-                    type="number"
+                    type="text" // [MOD] 천 단위 콤마 표현을 위해 text 타입으로 변경
                     inputMode="numeric"
-                    value={newExpense.nMoney === 0 ? "" : newExpense.nMoney} // [MOD] 0일 때 빈 문자열로 표시하여 삭제 용이하게 개선
+                    value={newExpense.nMoney === 0 ? "" : newExpense.nMoney.toLocaleString("ko-KR")} // [MOD] 화면 출력 시 콤마 추가
                     onChange={(e) => {
-                      const val = e.target.value;
+                      const val = e.target.value.replace(/[^0-9]/g, ""); // [MOD] 숫자만 추출
                       const numVal = val === "" ? 0 : parseInt(val, 10);
                       setNewExpense({ ...newExpense, nMoney: numVal });
                     }}

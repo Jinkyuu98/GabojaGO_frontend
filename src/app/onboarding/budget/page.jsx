@@ -178,9 +178,9 @@ export default function BudgetInputPage() {
                 type="text"
                 inputMode="numeric"
                 placeholder="숫자 입력 ex)500000"
-                value={totalBudget}
+                value={totalBudget ? parseInt(totalBudget, 10).toLocaleString("ko-KR") : ""} // [MOD] 화면 출력 시 콤마 추가
                 onChange={(e) =>
-                  setTotalBudget(e.target.value.replace(/[^0-9]/g, ""))
+                  setTotalBudget(e.target.value.replace(/[^0-9]/g, "")) // [MOD] 상태값은 숫자만 유지
                 }
                 className="w-full bg-transparent text-base font-medium text-[#111111] placeholder:text-[#999999] outline-none"
               />

@@ -119,11 +119,14 @@ export default function ManualExpensePage() {
                         <label className="text-[14px] font-semibold text-[#111]">금액</label>
                         <div className="relative">
                             <input
-                                type="number"
+                                type="text" // [MOD] 천 단위 콤마 표현을 위해 text 타입으로 변경
                                 inputMode="numeric"
                                 placeholder="0"
-                                value={money}
-                                onChange={(e) => setMoney(e.target.value)}
+                                value={money ? parseInt(money, 10).toLocaleString("ko-KR") : ""} // [MOD] 화면 출력 시 콤마 추가
+                                onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9]/g, ""); // [MOD] 숫자만 추출
+                                    setMoney(val);
+                                }}
                                 className="w-full px-4 py-3.5 pr-10 border border-[#d1d5db] rounded-xl text-[16px] text-[#111] focus:outline-none focus:border-[#7a28fa] focus:ring-1 focus:ring-[#7a28fa] transition-colors"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[15px] font-medium text-[#8e8e93]">
