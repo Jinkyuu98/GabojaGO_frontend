@@ -1827,23 +1827,9 @@ export default function TripDetailPage() {
             ) : (
               <div className="flex flex-col items-center justify-center py-6 px-6 bg-white mt-4">
                 <p className="text-[16px] font-semibold text-[#111111] mb-2">{getActualDateText(selectedDay)}</p>
-                <p className="text-[14px] text-[#8e8e93] text-center mb-6 whitespace-pre-wrap">
+                <p className="text-[14px] text-[#8e8e93] text-center mb-0 whitespace-pre-wrap">
                   {"방문할 장소를 추가해 일정을 채워보세요"}
                 </p>
-                <div className="flex gap-2">
-                  {/* [MOD] 일정 수정 권한 체크 */}
-                  {isOwner && (
-                    <>
-                      <button
-                        onClick={handleAddPlaceClick}
-                        className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors"
-                      >
-                        장소 추가
-                      </button>
-                      <button className="px-5 py-2.5 bg-white border border-[#d1d5db] text-[#111111] text-[14px] font-semibold rounded-md hover:bg-gray-50 transition-colors">찜한 장소로 추가</button>
-                    </>
-                  )}
-                </div>
               </div>
             )}
           </div>
