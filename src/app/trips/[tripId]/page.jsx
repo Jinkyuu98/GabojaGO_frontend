@@ -2323,7 +2323,7 @@ export default function TripDetailPage() {
                                   }
                                   const ratioMap = { "식비": trip.budget.foodRatio || 0, "교통비": trip.budget.transportRatio || 0, "숙박비": trip.budget.lodgingRatio || 0, "기타": trip.budget.etcRatio || 0 };
                                   const ratio = ratioMap[item.category] || 0;
-                                  const budgetForCategory = trip.budget.total > 0 ? (trip.budget.total * ratio / 100) : 0;
+                                  const budgetForCategory = trip.budget.total > 0 ? Math.round(trip.budget.total * ratio / 100) : 0;
                                   return (trip.budget.total > 0 && item.amount > budgetForCategory)
                                     ? "text-[#ff0909]"
                                     : "text-[#111111]";
@@ -2335,7 +2335,7 @@ export default function TripDetailPage() {
                             {trip.budget.total > 0 && (() => {
                               const ratioMap = { "식비": trip.budget.foodRatio || 0, "교통비": trip.budget.transportRatio || 0, "숙박비": trip.budget.lodgingRatio || 0, "기타": trip.budget.etcRatio || 0 };
                               const ratio = ratioMap[item.category] || 0;
-                              const budgetForCategory = (trip.budget.total * ratio / 100);
+                              const budgetForCategory = Math.round(trip.budget.total * ratio / 100);
                               const remaining = budgetForCategory - item.amount;
 
                               return (
