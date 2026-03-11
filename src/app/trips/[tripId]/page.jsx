@@ -181,6 +181,8 @@ export default function TripDetailPage() {
   const [selectedChecklistUser, setSelectedChecklistUser] = useState(null);
   const [userChecklistStates, setUserChecklistStates] = useState({}); // { [userId]: { [prepId]: boolean } }
   const [isChecklistAccordionOpen, setIsChecklistAccordionOpen] = useState(false);
+  const [selectedPhotoUser, setSelectedPhotoUser] = useState(null); // [ADD] 사진 탭 선택된 동행자
+  const [isPhotoAccordionOpen, setIsPhotoAccordionOpen] = useState(false); // [ADD] 사진 탭 동행자 아코디언 상태
   const [openCompanionIds, setOpenCompanionIds] = useState({}); // [MOD] 사진 탭 동행자별 아코디언 상태 관리용 객체
 
   // [ADD] 현재 로그인한 사용자 정보를 selectedChecklistUser 초기값으로 설정
@@ -260,6 +262,18 @@ export default function TripDetailPage() {
         // 장소 (location_list -> days)
         const newDays = Array.from({ length: dayCount }, () => ({ places: [], records: [] }));
         const extraRecords = []; // [ADD] 여행 기간 외 사진(예: 2019년 사진)을 위한 그룹
+
+        // [ADD] 동행자 목록 파싱을 상단으로 이동하여 사진 매핑 등에서 활용
+        let parsedUserList = [];
+        if (userRes?.user_list) {
+          try {
+            parsedUserList = typeof userRes.user_list === "string"
+              ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
+              : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
+          } catch (e) {
+            console.error("User list parse error", e);
+          }
+        }
         if (locationRes?.location_list) {
           const list = Array.isArray(locationRes.location_list) ? locationRes.location_list :
             (typeof locationRes.location_list === "string" ? JSON.parse(locationRes.location_list.replace(/'/g, '"')) : []);
@@ -354,16 +368,16 @@ export default function TripDetailPage() {
               const ownerFK = found.iUserFK; // [MOD] iUserFK 사용
               const ownerName = found.user_model?.strName || "방장"; // [MOD] user_model 이름 사용
 
-              const uploader = userRes?.user_list?.find(u => (u.iUserFK || u.iPK) === imgItem.image?.iUserFK);
+              const uploader = parsedUserList.find(u => String(u.iUserFK || u.iPK) === String(imgItem.image?.iUserFK));
               const uploaderFK = imgItem.image?.iUserFK || 0; // [ADD] ReferenceError 방지
               const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerFK ? ownerName : `동행자 ${imgItem.image?.iUserFK}`);
               const groupName = uploaderName;
 
               if (isOutOfRange) {
                 // [ADD] 기간 외 사진 처리
-                let record = extraRecords.find(r => r.uploaderFK === uploaderFK);
+                let record = extraRecords.find(r => String(r.uploaderFK) === String(uploaderFK));
                 if (!record) {
-                  record = { name: groupName, uploaderFK, photos: [] };
+                  record = { name: groupName, uploaderFK, uploaderId: uploader?.strUserID || uploader?.userId || "", photos: [] };
                   extraRecords.push(record);
                 }
                 // [DEBUG] 기간 외 사진 매핑 데이터 확인
@@ -391,9 +405,9 @@ export default function TripDetailPage() {
                   iFavoriteImagePK: favoriteImagesMap.get(imgItem.iImageFK || imgItem.image?.iPK) || null
                 });
               } else {
-                let record = newDays[targetDayIdx].records.find(r => r.uploaderFK === uploaderFK);
+                let record = newDays[targetDayIdx].records.find(r => String(r.uploaderFK) === String(uploaderFK));
                 if (!record) {
-                  record = { name: groupName, uploaderFK, photos: [] };
+                  record = { name: groupName, uploaderFK, uploaderId: uploader?.strUserID || uploader?.userId || "", photos: [] };
                   newDays[targetDayIdx].records.push(record);
                 }
                 // [DEBUG] 매핑 데이터 확인
@@ -485,13 +499,9 @@ export default function TripDetailPage() {
         // [MOD] 동행자 (user_list -> companions), 스케줄 생성자를 기준으로 왕관 표시
         const ownerUserFK = found.iUserFK; // 스케줄 생성자의 userPK
         let newCompanions = [];
-        if (userRes?.user_list) {
+        if (parsedUserList.length > 0) {
           try {
-            const uList = typeof userRes.user_list === "string"
-              ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
-              : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
-
-            newCompanions = uList.map((usr) => ({
+            newCompanions = parsedUserList.map((usr) => ({
               id: `user-${usr.iPK}`,
               // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
               // schedule_user iPK는 /schedule/user/list에서 제공하지 않음
@@ -1948,40 +1958,70 @@ export default function TripDetailPage() {
                       )}
                     </div>
 
-                    {/* 2. 동행자 사진 섹션 (동행자별 개별 아코디언) */}
-                    {otherRecords.length > 0 && (
+                    {/* 2. 동행자 사진 섹션 (동행자 선택 드롭다운) */}
+                    {trip.companions?.filter(c => c.userFK !== currentUserId).length > 0 && (
                       <div className="mt-2 pt-4 border-t border-[#f2f2f7] flex flex-col gap-6">
-                        {otherRecords.map((record, rIdx) => {
-                          const isOpen = openCompanionIds[record.uploaderFK] || false;
-                          return (
-                            <div key={`other-comp-${rIdx}`} className="flex flex-col gap-3">
-                              <div className="flex items-center justify-between px-1">
-                                <button
-                                  onClick={() => setOpenCompanionIds(prev => ({ ...prev, [record.uploaderFK]: !isOpen }))}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-semibold text-[#555] hover:bg-gray-50 transition-all"
-                                >
-                                  <span>{record.name} 사진 보기</span>
-                                  <Image
-                                    src="/icons/arrow-left.svg"
-                                    alt="arrow"
-                                    width={10}
-                                    height={10}
-                                    className={clsx("transition-transform", isOpen ? "rotate-90" : "-rotate-90")}
-                                  />
-                                </button>
-                                <span className="text-[12px] font-medium text-[#8e8e93]">
-                                  {record.photos?.length || 0}장
+                        <div className="flex items-center justify-between px-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-[14px] font-bold text-[#666]">동행자 사진 확인</h3>
+                            <div className="relative">
+                              <button
+                                onClick={() => setIsPhotoAccordionOpen(!isPhotoAccordionOpen)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
+                              >
+                                <span>
+                                  {(() => {
+                                    const found = trip.companions?.find(c => String(c.userFK) === String(selectedPhotoUser) && String(c.userFK) !== String(currentUserId));
+                                    if (!found) return "동행자 선택";
+                                    return `${found.name}(${found.userId})`;
+                                  })()}
                                 </span>
-                              </div>
-
-                              {isOpen && (
-                                <div className="flex flex-wrap gap-2 px-1 pt-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                                  {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, false))}
+                                <Image
+                                  src="/icons/arrow-left.svg"
+                                  alt="arrow"
+                                  width={10}
+                                  height={10}
+                                  className={clsx("transition-transform", isPhotoAccordionOpen ? "rotate-90" : "-rotate-90")}
+                                />
+                              </button>
+                              {isPhotoAccordionOpen && (
+                                <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[100] py-1">
+                                  {trip.companions?.filter(c => String(c.userFK) !== String(currentUserId)).map((companion) => (
+                                    <div
+                                      key={companion.userFK}
+                                      onClick={() => {
+                                        setSelectedPhotoUser(companion.userFK);
+                                        setIsPhotoAccordionOpen(false);
+                                      }}
+                                      className={clsx(
+                                        "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
+                                        String(selectedPhotoUser) === String(companion.userFK) ? "text-[#7a28fa] font-bold" : "text-[#111]"
+                                      )}
+                                    >
+                                      {companion.name}({companion.userId})
+                                    </div>
+                                  ))}
                                 </div>
                               )}
                             </div>
-                          );
-                        })}
+                          </div>
+                        </div>
+
+                        {selectedPhotoUser && (
+                          <div className="flex flex-col gap-3 min-h-[50px]">
+                            {(() => {
+                              const userRecord = dayRecs.find(r => String(r.uploaderFK) === String(selectedPhotoUser));
+                              if (!userRecord || userRecord.photos.length === 0) {
+                                return <div className="py-8 text-center bg-[#fbfbfb] border border-dashed border-[#e5e5e5] rounded-xl mx-1"><p className="text-[13px] text-[#8e8e93]">해당 동행자가 올린 사진이 없습니다.</p></div>;
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-2 px-1">
+                                  {userRecord.photos.map((photo, pIdx) => renderPhotoItem(photo, 0, pIdx, false))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -2498,7 +2538,11 @@ export default function TripDetailPage() {
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
                         >
                           <span>
-                            {trip.companions?.find(c => c.userFK === selectedChecklistUser && c.userFK !== currentUserId)?.name || "동행자 선택"}
+                            {(() => {
+                              const found = trip.companions?.find(c => c.userFK === selectedChecklistUser && c.userFK !== currentUserId);
+                              if (!found) return "동행자 선택";
+                              return `${found.name}(${found.userId})`;
+                            })()}
                           </span>
                           <Image
                             src="/icons/arrow-left.svg"
@@ -2522,7 +2566,7 @@ export default function TripDetailPage() {
                                   selectedChecklistUser === companion.userFK ? "text-[#7a28fa] font-bold" : "text-[#111]"
                                 )}
                               >
-                                {companion.name}
+                                {companion.name}({companion.userId})
                               </div>
                             ))}
                           </div>
