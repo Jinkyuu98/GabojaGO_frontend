@@ -15,11 +15,8 @@ export default function LocationInputPage() {
   const handleNext = () => {
     if (location.trim()) {
       setTravelData({ location });
-      if (travelData.creationType === "manual") {
-        router.push("/onboarding/date");
-      } else {
-        router.push("/onboarding/accommodation");
-      }
+      // [MOD] 숙소 입력 화면만 건너뛰고 바로 날짜 선택으로 이동
+      router.push("/onboarding/date");
     }
   };
 

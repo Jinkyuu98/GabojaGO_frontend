@@ -36,11 +36,8 @@ export default function DateSelectionPage() {
     <StepLayout
       title="여행 기간을 선택해 주세요"
       onBack={() => {
-        if (travelData.creationType === "manual") {
-          router.push("/onboarding/location");
-        } else {
-          router.push("/onboarding/accommodation");
-        }
+        // [MOD] 숙소 입력 화면을 건너뛰었으므로 바로 장소 입력으로 이동
+        router.push("/onboarding/location");
       }}
       contentBgColor="bg-[#fafafa]"
       showDivider={true}
