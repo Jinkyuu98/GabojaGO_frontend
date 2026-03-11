@@ -6,10 +6,12 @@ import Image from "next/image";
 import Script from "next/script"; // [ADD] Script import for Kakao Map
 import { clsx } from "clsx";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
+import { useCurrentUser } from "../../../hooks/useCurrentUser";
 
 export default function ResultPage() {
   const router = useRouter();
   const { saveTrip, generatedTripData } = useOnboardingStore();
+  const { userId } = useCurrentUser(); // [ADD] 로그인 상태 확인용
   const [selectedTab, setSelectedTab] = useState("일정");
   const [selectedDay, setSelectedDay] = useState(1);
   const [sheetHeight, setSheetHeight] = useState(478);
@@ -647,7 +649,7 @@ export default function ResultPage() {
           {/* Header */}
           <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-[#f2f4f6] shrink-0">
             <div className="flex items-center gap-4">
-              <button onClick={() => router.push("/login")}>
+              <button onClick={() => router.push(userId ? "/home" : "/login")}>
                 <Image
                   src="/icons/close-icon.svg"
                   alt="back"
@@ -765,10 +767,9 @@ export default function ResultPage() {
           <div ref={mapRef} className="w-full h-full" />
         </div>
 
-        {/* Mobile Header (Hidden on Desktop) */}
         <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-10 shadow-sm">
           <div className="flex items-center gap-4">
-            <button onClick={() => router.push("/login")}>
+            <button onClick={() => router.push(userId ? "/home" : "/login")}>
               <Image
                 src="/icons/close-icon.svg"
                 alt="close"

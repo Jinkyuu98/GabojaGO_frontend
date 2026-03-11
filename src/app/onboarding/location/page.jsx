@@ -6,6 +6,7 @@ import { StepLayout } from "../../../components/common/StepLayout";
 import { TextInput } from "../../../components/common/TextInput";
 import { BottomCTAButton } from "../../../components/common/Button";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
+import { useCurrentUser } from "../../../hooks/useCurrentUser"; // [ADD]
 
 export default function LocationInputPage() {
   const router = useRouter();
@@ -24,7 +25,10 @@ export default function LocationInputPage() {
     <StepLayout
       title="어디로 여행 가시나요?"
       isFirstStep={true}
-      onBack={() => router.push("/login")}
+      onBack={() => {
+        const token = localStorage.getItem("token");
+        router.push(token ? "/home" : "/login");
+      }}
       footer={
         <BottomCTAButton onClick={handleNext} disabled={!location.trim()}>
           다음
