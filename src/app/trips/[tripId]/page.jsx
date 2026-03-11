@@ -1954,96 +1954,107 @@ export default function TripDetailPage() {
                       </span>
                     </div>
 
-                    {/* 1. 내 사진 섹션 (기본 노출) */}
+                    {/* 1. 통합 사진 섹션 (기본은 내 사진) */}
                     <div className="flex flex-col gap-5">
-                      <div className="flex items-center gap-2.5 px-1">
-                        <div className="w-5 h-5 rounded-md bg-[#7a28fa] flex items-center justify-center">
-                          <ImageIcon size={12} className="text-white" />
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-5 h-5 rounded-md bg-[#7a28fa] flex items-center justify-center">
+                            <ImageIcon size={12} className="text-white" />
+                          </div>
+                          <h3 className="text-[15px] font-bold text-[#111111]">
+                            {String(selectedPhotoUser || currentUserId) === String(currentUserId) ? "내 사진" : "동행자 사진"}
+                          </h3>
                         </div>
-                        <h3 className="text-[15px] font-bold text-[#111111]">내 사진</h3>
-                      </div>
 
-                      {myRecords.length > 0 ? (
-                        <div className="flex flex-col gap-6 px-1">
-                          {myRecords.map((record, rIdx) => (
-                            <div key={`my-rec-${rIdx}`} className="flex flex-wrap gap-2">
-                              {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, true))}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="py-8 text-center bg-[#fbfbfb] border border-dashed border-[#e5e5e5] rounded-xl mx-1">
-                          <p className="text-[13px] text-[#8e8e93]">아직 올린 사진이 없습니다.</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 2. 동행자 사진 섹션 (동행자 선택 드롭다운) */}
-                    {trip.companions?.filter(c => c.userFK !== currentUserId).length > 0 && (
-                      <div className="mt-2 pt-4 border-t border-[#f2f2f7] flex flex-col gap-6">
-                        <div className="flex items-center justify-between px-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-[14px] font-bold text-[#666]">동행자 사진 확인</h3>
-                            <div className="relative">
-                              <button
-                                onClick={() => setIsPhotoAccordionOpen(!isPhotoAccordionOpen)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
-                              >
-                                <span>
-                                  {(() => {
-                                    const found = trip.companions?.find(c => String(c.userFK) === String(selectedPhotoUser) && String(c.userFK) !== String(currentUserId));
-                                    if (!found) return "동행자 선택";
-                                    return `${found.name}(${found.userId})`;
-                                  })()}
-                                </span>
-                                <Image
-                                  src="/icons/arrow-left.svg"
-                                  alt="arrow"
-                                  width={10}
-                                  height={10}
-                                  className={clsx("transition-transform", isPhotoAccordionOpen ? "rotate-90" : "-rotate-90")}
-                                />
-                              </button>
-                              {isPhotoAccordionOpen && (
-                                <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[100] py-1">
-                                  {trip.companions?.filter(c => String(c.userFK) !== String(currentUserId)).map((companion) => (
+                        {/* 동행자 선택 아코디언 컴포넌트 */}
+                        {trip.companions?.filter(c => c.userFK !== currentUserId).length > 0 && (
+                          <div className="relative">
+                            <button
+                              onClick={() => setIsPhotoAccordionOpen(!isPhotoAccordionOpen)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#e5ebf2] rounded-md text-[12px] font-medium text-[#555] hover:bg-gray-50 transition-colors"
+                            >
+                              <span>
+                                {(() => {
+                                  const targetUserFK = selectedPhotoUser || currentUserId;
+                                  const found = trip.companions?.find(c => String(c.userFK) === String(targetUserFK));
+                                  if (!found) return String(targetUserFK) === String(currentUserId) ? "나" : "동행자 선택";
+                                  return String(targetUserFK) === String(currentUserId) ? `${found.name} (나)` : `${found.name}(${found.userId})`;
+                                })()}
+                              </span>
+                              <Image
+                                src="/icons/arrow-left.svg"
+                                alt="arrow"
+                                width={10}
+                                height={10}
+                                className={clsx("transition-transform", isPhotoAccordionOpen ? "rotate-90" : "-rotate-90")}
+                              />
+                            </button>
+                            {isPhotoAccordionOpen && (
+                              <div className="absolute top-full right-0 mt-1 w-32 bg-white border border-[#e5ebf2] rounded-lg shadow-lg z-[100] py-1">
+                                {(() => {
+                                  const me = trip.companions?.find(c => String(c.userFK) === String(currentUserId));
+                                  return (
                                     <div
-                                      key={companion.userFK}
                                       onClick={() => {
-                                        setSelectedPhotoUser(companion.userFK);
+                                        setSelectedPhotoUser(currentUserId);
                                         setIsPhotoAccordionOpen(false);
                                       }}
                                       className={clsx(
                                         "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
-                                        String(selectedPhotoUser) === String(companion.userFK) ? "text-[#7a28fa] font-bold" : "text-[#111]"
+                                        String(selectedPhotoUser || currentUserId) === String(currentUserId) ? "text-[#7a28fa] font-bold" : "text-[#111]"
                                       )}
                                     >
-                                      {companion.name}({companion.userId})
+                                      {me ? `${me.name} (나)` : "나"}
                                     </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {selectedPhotoUser && (
-                          <div className="flex flex-col gap-3 min-h-[50px]">
-                            {(() => {
-                              const userRecord = dayRecs.find(r => String(r.uploaderFK) === String(selectedPhotoUser));
-                              if (!userRecord || userRecord.photos.length === 0) {
-                                return <div className="py-8 text-center bg-[#fbfbfb] border border-dashed border-[#e5e5e5] rounded-xl mx-1"><p className="text-[13px] text-[#8e8e93]">해당 동행자가 올린 사진이 없습니다.</p></div>;
-                              }
-                              return (
-                                <div className="flex flex-wrap gap-2 px-1">
-                                  {userRecord.photos.map((photo, pIdx) => renderPhotoItem(photo, 0, pIdx, false))}
-                                </div>
-                              );
-                            })()}
+                                  );
+                                })()}
+                                {trip.companions?.filter(c => String(c.userFK) !== String(currentUserId)).map((companion) => (
+                                  <div
+                                    key={companion.userFK}
+                                    onClick={() => {
+                                      setSelectedPhotoUser(companion.userFK);
+                                      setIsPhotoAccordionOpen(false);
+                                    }}
+                                    className={clsx(
+                                      "px-3 py-2 text-[12px] cursor-pointer hover:bg-[#f5f0ff] transition-colors",
+                                      String(selectedPhotoUser || currentUserId) === String(companion.userFK) ? "text-[#7a28fa] font-bold" : "text-[#111]"
+                                    )}
+                                  >
+                                    {companion.name}({companion.userId})
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
-                    )}
+
+                      {(() => {
+                        const targetUserFK = selectedPhotoUser || currentUserId;
+                        const targetRecords = dayRecs.filter(r => String(r.uploaderFK) === String(targetUserFK));
+
+                        // 사용자가 지정되었는데 사진이 없으면 표시할 메시지 설정
+                        if (targetRecords.length === 0 || targetRecords.every(r => !r.photos || r.photos.length === 0)) {
+                          return (
+                            <div className="py-8 text-center bg-[#fbfbfb] border border-dashed border-[#e5e5e5] rounded-xl mx-1">
+                              <p className="text-[13px] text-[#8e8e93]">
+                                {String(targetUserFK) === String(currentUserId) ? "아직 올린 사진이 없습니다." : "해당 동행자가 올린 사진이 없습니다."}
+                              </p>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div className="flex flex-col gap-6 px-1">
+                            {targetRecords.map((record, rIdx) => (
+                              <div key={`rec-${rIdx}`} className="flex flex-wrap gap-2">
+                                {record.photos.map((photo, pIdx) => renderPhotoItem(photo, rIdx, pIdx, String(targetUserFK) === String(currentUserId)))}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
 
                   </>
                 );
