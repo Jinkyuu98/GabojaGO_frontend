@@ -80,11 +80,15 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
         const fetchMissingUsers = async () => {
             const missingIds = reviews
                 .filter(r => {
-                    const hasName = r.strUserID || r.strUserId || r.strUserName || r.userId || r.name || r.user?.strUserID || r.user?.strName;
-                    const isMe = currentUserId !== null && String(r.iUserFK) === String(currentUserId);
-                    return !hasName && !isMe && !userCache[r.iUserFK];
+                    // [MOD] 더 많은 필드명을 확인하여 정보 유무 판별
+                    const userFk = r.iUserFK || r.iUserPK || r.userId;
+                    const hasIdInfo = r.strUserID || r.strUserId || r.userId || r.user?.strUserID || r.user?.strUserId;
+                    const isMe = currentUserId !== null && String(userFk) === String(currentUserId);
+                    
+                    // ID 정보가 없고, 내가 아니며, 캐시에도 없는 경우만 페치
+                    return userFk && !hasIdInfo && !isMe && !userCache[userFk];
                 })
-                .map(r => r.iUserFK);
+                .map(r => r.iUserFK || r.iUserPK || r.userId);
 
             if (missingIds.length === 0) return;
 
@@ -93,12 +97,19 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
             
             for (const iPK of uniqueMissingIds) {
                 try {
-                    const userInfo = await getUserInfo(iPK);
-                    if (userInfo) {
-                        setUserCache(prev => ({
-                            ...prev,
-                            [iPK]: userInfo.strUserID || userInfo.strName
-                        }));
+                    const res = await getUserInfo(iPK);
+                    if (res) {
+                        // [MOD] 백엔드 응답 구조에 따라 데이터 추출 (평탄화 vs 중첩 구조)
+                        const userData = res.user || res.user_model || res;
+                        const id = userData.strUserID || userData.strUserId || userData.userId;
+                        const name = userData.strName || userData.name || userData.strUserName;
+                        
+                        if (id || name) {
+                            setUserCache(prev => ({
+                                ...prev,
+                                [iPK]: id || name
+                            }));
+                        }
                     }
                 } catch (err) {
                     console.error(`유저(${iPK}) 정보 조회 실패:`, err);
@@ -343,17 +354,25 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
 
                     <div className="flex flex-col gap-6">
                         {reviews.length > 0 ? reviews.map((r, i) => {
-                            // [MOD] 리뷰 작성자 이름 표시 (strUserID 우선, 없으면 기본값)
-                            let strName = r.strUserID || r.strUserId || r.strUserName || r.userId || r.name || r.user?.strUserID || r.user?.strName;
-                            // [MOD] 내 리뷰라면 훅에서 가져온 userLoginId/userName 우선 사용
-                            if (!strName && currentUserId !== null && String(r.iUserFK) === String(currentUserId)) {
+                            // [MOD] 리뷰 작성자 정보 추출 우선순위: ID 최우선 -> 이름 -> 캐시 -> 기본값
+                            const userFk = r.iUserFK || r.iUserPK || r.userId;
+                            let strName = r.strUserID || r.strUserId || r.userId || r.user?.strUserID || r.user?.strUserId;
+                            
+                            // ID가 없으면 이름이라도 시도
+                            if (!strName) {
+                                strName = r.strUserName || r.name || r.user?.strName || r.user?.name;
+                            }
+
+                            // [MOD] 내 리뷰라면 훅에서 가져온 userLoginId 우선 사용
+                            if (!strName && currentUserId !== null && userFk && String(userFk) === String(currentUserId)) {
                                 strName = userLoginId || currentUserName;
                             }
+                            
                             // [MOD] 캐시된 정보가 있으면 사용
-                            strName = strName || userCache[r.iUserFK] || `유저 [${r.iUserFK}]`;
+                            strName = strName || (userFk ? userCache[userFk] : null) || (userFk ? `유저 [${userFk}]` : "알 수 없는 유저");
 
-                            // [MOD] 현재 유저 ID(훅의 iPK)와 리뷰의 iUserFK 비교로 본인 확인
-                            const isMine = currentUserId !== null && String(r.iUserFK) === String(currentUserId);
+                            // [MOD] 현재 유저 ID(훅의 iPK)와 리뷰의 iUserFK 비교로 본인 확인 (이름뿐만 아니라 PK도 고려)
+                            const isMine = currentUserId !== null && userFk && String(userFk) === String(currentUserId);
 
                             return (
                                 <div key={r.iPK || i} className="flex flex-col gap-2 pb-2">
