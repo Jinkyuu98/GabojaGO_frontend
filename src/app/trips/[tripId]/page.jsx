@@ -269,11 +269,11 @@ export default function TripDetailPage() {
 
         // [ADD] 동행자 목록 파싱을 상단으로 이동하여 사진 매핑 등에서 활용
         let parsedUserList = [];
-        if (userRes?.user_list) {
+        if (userRes?.schedule_user_list) {
           try {
-            parsedUserList = typeof userRes.user_list === "string"
-              ? JSON.parse(userRes.user_list.replace(/'/g, '"'))
-              : (Array.isArray(userRes.user_list) ? userRes.user_list : []);
+            parsedUserList = typeof userRes.schedule_user_list === "string"
+              ? JSON.parse(userRes.schedule_user_list.replace(/'/g, '"'))
+              : (Array.isArray(userRes.schedule_user_list) ? userRes.schedule_user_list : []);
           } catch (e) {
             console.error("User list parse error", e);
           }
@@ -372,9 +372,9 @@ export default function TripDetailPage() {
               const ownerFK = found.iUserFK; // [MOD] iUserFK 사용
               const ownerName = found.user_model?.strName || "방장"; // [MOD] user_model 이름 사용
 
-              const uploader = parsedUserList.find(u => String(u.iUserFK || u.iPK) === String(imgItem.image?.iUserFK));
-              const uploaderFK = imgItem.image?.iUserFK || 0; // [ADD] ReferenceError 방지
-              const uploaderName = uploader?.strName || (imgItem.image?.iUserFK === ownerFK ? ownerName : `동행자 ${imgItem.image?.iUserFK}`);
+              const uploader = parsedUserList.find(u => String(u.iUserFK) === String(imgItem.image?.iUserFK));
+              const uploaderFK = imgItem.image?.iUserFK || 0;
+              const uploaderName = uploader?.user?.strName || (imgItem.image?.iUserFK === ownerFK ? ownerName : `동행자 ${imgItem.image?.iUserFK}`);
               const groupName = uploaderName;
 
               if (isOutOfRange) {
@@ -505,22 +505,22 @@ export default function TripDetailPage() {
         let newCompanions = [];
         if (parsedUserList.length > 0) {
           try {
-            newCompanions = parsedUserList.map((usr) => ({
-              id: `user-${usr.iPK}`,
+            newCompanions = parsedUserList.map((schedule_user_model) => ({
+              id: `user-${schedule_user_model.iUserFK}`,
               // [MOD] usr.iPK는 user 테이블 PK이므로 scheduleUserPK로 사용 불가
               // schedule_user iPK는 /schedule/user/list에서 제공하지 않음
-              scheduleUserPK: undefined,
-              userFK: usr.iUserFK || usr.iPK,
-              userId: usr.strUserID || "",
-              name: usr.strName || `유저 ${usr.iUserFK || usr.iPK}`,
-              isOwner: (usr.iUserFK || usr.iPK) === ownerUserFK
+              scheduleUserPK: schedule_user_model.iPK,
+              userFK: schedule_user_model.iUserFK || 0,
+              userId: schedule_user_model.user.strUserID || "",
+              name: schedule_user_model.user.strName || `user-${schedule_user_model.iUserFK}`,
+              isOwner: schedule_user_model.iUserFK === ownerUserFK
             }));
           } catch (e) { console.error("User parse error", e); }
         }
 
         // [ADD] 스케줄 생성자가 동행자 목록에 없다면 항상 맨 앞에 추가 (왕관 표시)
         if (!newCompanions.some(c => c.userFK === ownerUserFK)) {
-          const ownerActualName = found.user_model?.strName || `유저 ${ownerUserFK}`;
+          const ownerActualName = found.user_model?.strName || `user-${ownerUserFK}`;
           const ownerActualUserId = found.user_model?.strUserID || "";
 
           newCompanions.unshift({
@@ -750,9 +750,9 @@ export default function TripDetailPage() {
   const onRemoveCompanion = async (companion) => {
     if (!window.confirm(`${companion.name}님을 동행자에서 삭제하시겠습니까?`)) return;
     const pkToDelete = companion.scheduleUserPK;
-    console.log("🗑️ 동행자 삭제 요청:", { companion, pkToDelete });
+    console.log("🗑️ 동행자 삭제 요청:", companion);
     if (!pkToDelete) {
-      alert("이 동행자는 현재 세션에서 추가되지 않아 삭제할 수 없습니다.\n페이지 새로고침 후 다시 추가하면 삭제가 가능합니다.");
+      alert(`${companion.name}님은 삭제할 수 없습니다. (iScheduleUserPK=${pkToDelete})`);
       return;
     }
     try {
