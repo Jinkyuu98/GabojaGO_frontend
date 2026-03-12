@@ -9,7 +9,7 @@ import Image from "next/image";
  * @param {Object}   place    - AI 일정의 place 객체 { name, originalName, kakaoList, kakao }
  * @param {Function} onClose  - 패널 닫기 콜백
  */
-export function KakaoSearchResultPanel({ place, onClose, onSelect }) {
+export function KakaoSearchResultPanel({ place, onClose, onSelect, onPreview }) {
     if (!place) return null;
 
     const kakaoList = place.kakaoList;
@@ -85,7 +85,8 @@ export function KakaoSearchResultPanel({ place, onClose, onSelect }) {
                                 return (
                                     <div
                                         key={itemId || idx}
-                                        className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+                                        onClick={() => onPreview && onPreview(item)} // [ADD] 클릭 시 미리보기 이동
+                                        className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer hover:border-[#7a28fa] ${
                                             isSelected
                                                 ? "border-[#7a28fa] bg-[#f9f5ff]"
                                                 : "border-[#e5ebf2] bg-white"
@@ -123,7 +124,10 @@ export function KakaoSearchResultPanel({ place, onClose, onSelect }) {
                                                 {/* [ADD] 선택 버튼 */}
                                                 {!isSelected && onSelect && (
                                                     <button
-                                                        onClick={() => onSelect(item)}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // 부모(미리보기) 이벤트 버블링 방지
+                                                            onSelect(item);
+                                                        }}
                                                         className="px-3 py-1 bg-[#7a28fa] text-white text-[11px] font-bold rounded-lg hover:bg-[#6620d6] transition-colors flex-shrink-0"
                                                     >
                                                         선택

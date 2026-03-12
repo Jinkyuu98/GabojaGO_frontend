@@ -29,6 +29,7 @@ export default function ResultPage() {
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
+  const skipSetBounds = useRef(false); // [ADD] 마커 업데이트 시 bounds 설정 방지용 플래그
 
   // Define 3-tier snap heights
   const SNAPS = {
@@ -160,10 +161,24 @@ export default function ResultPage() {
     if (!window.kakao || !mapRef.current) return;
     window.kakao.maps.load(() => {
       if (mapInstance.current) return;
-      const center = new window.kakao.maps.LatLng(37.5665, 126.978);
+      // 기본 위치 수정 (초기 로드시 1일차 장소 중 첫 번째 장소로 지정)
+      let initialLat = 33.385; // 제주 중심부 쯤으로 fallback
+      let initialLng = 126.54;
+
+      if (currentDayPlaces && currentDayPlaces.length > 0) {
+        const firstPlace = currentDayPlaces[0];
+        const lat = firstPlace.kakao?.y || firstPlace.kakao?.ptLatitude || firstPlace.y || firstPlace.ptLatitude;
+        const lng = firstPlace.kakao?.x || firstPlace.kakao?.ptLongitude || firstPlace.x || firstPlace.ptLongitude;
+        if (lat && lng) {
+          initialLat = parseFloat(lat);
+          initialLng = parseFloat(lng);
+        }
+      }
+
+      const center = new window.kakao.maps.LatLng(initialLat, initialLng);
       mapInstance.current = new window.kakao.maps.Map(mapRef.current, {
         center,
-        level: 4,
+        level: 8, // 전체적으로 보이게 넓게
       });
     });
   };
@@ -177,6 +192,11 @@ export default function ResultPage() {
   // [ADD] 일정에 따라 카카오맵 마커 동기화
   useEffect(() => {
     if (!mapInstance.current || !window.kakao) return;
+    
+    // [MOD] 장소를 단순히 살펴보고 있는 상태(selectedPlace가 존재하는 경우)에는 전체 마커 리렌더링을 방지
+    // 이렇게 하지 않으면 클릭 상태가 바뀔때마다 지도가 깜빡이거나 마커가 지워질 수 있음
+    if (selectedPlace) return;
+
     const map = mapInstance.current;
 
     // 기존 마커 제거
@@ -219,7 +239,7 @@ export default function ResultPage() {
       markersRef.current.push(overlay);
     });
 
-    if (markersRef.current.length > 0) {
+    if (markersRef.current.length > 0 && !skipSetBounds.current) {
       map.setBounds(bounds);
     }
   }, [currentDayPlaces]);
@@ -295,22 +315,51 @@ export default function ResultPage() {
     }
   };
 
+  // [ADD] 장소 클릭 시 창 열림과 함께 지도 이동
+  const handlePlaceClick = (place) => {
+    // 1. 먼저 장소 상태를 설정 (사이드 패널 애니메이션 동작 시작)
+    setSelectedPlace(place);
+    
+      // 2. 지도 이동 타이밍 늦춰서 리렌더링 깜빡임 회피
+    setTimeout(() => {
+      if (mapInstance.current && window.kakao) {
+        const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
+        const lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
+
+        if (lat && lng) {
+          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+          mapInstance.current.panTo(moveLatLng); // 부드러운 이동
+        }
+      }
+    }, 10);
+  };
+
   // [ADD] 검색 결과에서 장소 선택 시 스토어 업데이트
   const handleSelectLocation = (location, dayIndex, activityIndex) => {
+    skipSetBounds.current = true; // [ADD] 상태 업데이트 전에 true로 설정하여 setBounds 방지
     updateActivityLocation(dayIndex, activityIndex, location);
     // [MOD] 선택 시 창이 사라지지 않도록 null 처리를 제거하고, 상태를 업데이트하여 UI에 즉시 반영
     // setSelectedPlace(null);
     setSelectedPlace((prev) => (prev ? { ...prev, kakao: location } : null));
 
     // 지도를 해당 위치로 이동
-    if (mapInstance.current && window.kakao) {
-      const lat = location.y || location.ptLatitude;
-      const lng = location.x || location.ptLongitude;
-      if (lat && lng) {
-        const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
-        mapInstance.current.panTo(moveLatLng);
+    setTimeout(() => {
+      if (mapInstance.current && window.kakao) {
+        const lat = location.y || location.ptLatitude;
+        const lng = location.x || location.ptLongitude;
+        console.log('handleSelectLocation coords:', { lat, lng, location });
+        if (lat && lng) {
+          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+          mapInstance.current.panTo(moveLatLng); // 부드러운 이동
+        }
       }
-    }
+    }, 10);
+
+    setTimeout(() => {
+      skipSetBounds.current = false; // [ADD] 마커 업데이트가 완료된 후 다시 false로 복구
+    }, 500); // [MOD] 충분한 시간 확보
   };
 
   const renderTabContent = () => {
@@ -335,18 +384,11 @@ export default function ResultPage() {
                     <div className="flex items-center justify-between gap-5 mb-2">
                       <h3
                         className="text-base font-semibold text-[#111111] tracking-[-0.06px] cursor-pointer hover:text-[#7a28fa] transition-colors"
-                        onClick={() => setSelectedPlace(place)}
+                        onClick={() => handlePlaceClick(place)} // [MOD] 장소 클릭 시 handlePlaceClick 사용
                       >
                         {place.name}
                       </h3>
-                      <Image
-                        src="/icons/dots-menu.svg"
-                        alt="menu"
-                        width={18}
-                        height={4}
-                        className="flex-shrink-0 cursor-pointer"
-                        onClick={() => setSelectedPlace(place)}
-                      />
+                      {/* [DEL] 장소 변경 위해 존재했던 dots-menu 마크 제거 */}
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-2">
                       <div className="flex items-center gap-2">
@@ -359,7 +401,7 @@ export default function ResultPage() {
                       </div>
                       <button 
                         className="text-[12px] text-[#7a28fa] border border-[#7a28fa] rounded-full px-2 py-0.5 hover:bg-[#7a28fa] hover:text-white transition-colors"
-                        onClick={() => setSelectedPlace(place)}
+                        onClick={() => handlePlaceClick(place)} // [MOD] 장소 클릭 시 handlePlaceClick 사용
                       >
                         장소 변경
                       </button>
@@ -664,11 +706,14 @@ export default function ResultPage() {
 
   return (
     <div className="relative w-full h-screen bg-white overflow-hidden lg:flex lg:flex-row">
-      <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
-        strategy="afterInteractive"
-        onLoad={initMap}
-      />
+      {/* [MOD] Script loaded only once, strategy "beforeInteractive" or "afterInteractive" is fine, but make sure it doesn't cause re-renders. */}
+      {typeof window !== "undefined" && !window.kakao && (
+        <Script
+          src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${process.env.NEXT_PUBLIC_KAKAO_API_KEY}&autoload=false&libraries=services`}
+          strategy="afterInteractive"
+          onLoad={initMap}
+        />
+      )}
 
       {/* ----------------- Desktop Left Panel ----------------- */}
       <div
@@ -810,6 +855,17 @@ export default function ResultPage() {
             place={selectedPlace}
             onClose={() => setSelectedPlace(null)}
             onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
+            onPreview={(loc) => {
+              if (mapInstance.current && window.kakao) {
+                const lat = loc.y || loc.ptLatitude;
+                const lng = loc.x || loc.ptLongitude;
+                if (lat && lng) {
+                  const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+                  mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+                  mapInstance.current.panTo(moveLatLng);
+                }
+              }
+            }}
           />
         )}
       </div>
@@ -817,7 +873,8 @@ export default function ResultPage() {
       {/* ----------------- Right Map & Mobile Area ----------------- */}
       <div className="relative flex-1 h-full overflow-hidden">
         {/* Actual Map Render Target */}
-        <div className="absolute inset-0 w-full h-full bg-[#f5f5f5]">
+        {/* [MOD] bg-[#f5f5f5]를 고정하고 절대 unmount 되지 않도록 유지 */}
+        <div className="absolute inset-0 w-full h-full bg-[#f5f5f5] z-0">
           <div ref={mapRef} className="w-full h-full" />
         </div>
         <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-10 shadow-sm">
@@ -888,6 +945,17 @@ export default function ResultPage() {
               place={selectedPlace}
               onClose={() => setSelectedPlace(null)}
               onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
+              onPreview={(loc) => {
+                if (mapInstance.current && window.kakao) {
+                  const lat = loc.y || loc.ptLatitude;
+                  const lng = loc.x || loc.ptLongitude;
+                  if (lat && lng) {
+                    const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+                    mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+                    mapInstance.current.panTo(moveLatLng);
+                  }
+                }
+              }}
             />
           </div>
         ) : (
