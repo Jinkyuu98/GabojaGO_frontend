@@ -1135,6 +1135,22 @@ export default function TripDetailPage() {
     if (currentDayPlaces.length === 0 && !hasPhotos) return;
 
     const bounds = new window.kakao.maps.LatLngBounds();
+    let isBoundsEmpty = true; // [ADD] bounds에 하나라도 좌표가 추가되었는지 추적
+
+    // [ADD] 사진 탭이 선택된 경우, 실제로 그려질 사진 목록을 먼저 계산하여 일정 bounds 폴백 여부 결정
+    let targetUserFK = currentUserId;
+    let targetRecords = [];
+    let photosToShow = [];
+    let hasSelectedUserPhotos = false;
+
+    if (selectedTab === "사진") {
+      targetUserFK = selectedPhotoUser || currentUserId;
+      const dayRecs = selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [];
+      targetRecords = dayRecs.filter(r => String(r.uploaderFK) === String(targetUserFK));
+      photosToShow = targetRecords.flatMap(r => r.photos) || [];
+      const validPhotos = photosToShow.filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude));
+      hasSelectedUserPhotos = validPhotos.length > 0;
+    }
 
     // [MOD] 장소 마커 생성 및 표시
     currentDayPlaces.forEach((place, idx) => {
@@ -1142,9 +1158,10 @@ export default function TripDetailPage() {
 
       const position = new window.kakao.maps.LatLng(place.latitude, place.longitude);
 
-      // 사진 탭이 아니거나 사진이 없는 경우에만 일정 위치를 bounds에 포함하여 포커스 최적화
-      if (selectedTab !== "사진" || !hasPhotos) {
+      // [MOD] 사진 탭이 아니거나 선택된 사람의 유효한 사진 위치가 없을 때는 현재 일정의 장소들을 지도 기준으로 삼음
+      if (selectedTab !== "사진" || !hasSelectedUserPhotos) {
         bounds.extend(position);
+        isBoundsEmpty = false;
       }
 
       // [MOD] Vercel 배포 시 CSS Minification이나 DOM 깨짐을 우회하기 위해 
@@ -1172,11 +1189,7 @@ export default function TripDetailPage() {
 
     // [ADD] 사진 탭일 경우 사진 마커 표시
     if (selectedTab === "사진") {
-      const photosToShow = selectedDay === "기타"
-        ? trip.extraRecords?.flatMap(r => r.photos) || []
-        : currentDayRecords?.flatMap(r => r.photos) || [];
-
-      console.log("📸 [Debug] Photos to show on map:", photosToShow.length, photosToShow);
+      console.log("📸 [Debug] Photos to show on map (Filtered):", photosToShow.length, photosToShow);
 
       photosToShow.forEach((photo) => {
         if (!photo.latitude || !photo.longitude || isNaN(photo.latitude) || isNaN(photo.longitude)) {
@@ -1185,6 +1198,7 @@ export default function TripDetailPage() {
 
         const photoPos = new window.kakao.maps.LatLng(photo.latitude, photo.longitude);
         bounds.extend(photoPos);
+        isBoundsEmpty = false;
 
         const isSelected = selectedPhoto && (selectedPhoto.id === photo.id || selectedPhoto.iImagePK === photo.iImagePK);
 
@@ -1265,13 +1279,16 @@ export default function TripDetailPage() {
 
       });
 
-      // [MOD] 모든 사용자의 사진을 하나의 동선(Polyline)으로 그리기
-      const photosToLink = (selectedDay === "기타" ? trip.extraRecords || [] : currentDayRecords || [])
+      // [MOD] 선택된 사용자의 사진만 하나의 동선(Polyline)으로 그리기 (내 사진일 때는 숨김)
+      const photosToLink = targetRecords
         .flatMap(record => record.photos)
         .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
         .sort((a, b) => (a.dtImage || "").localeCompare(b.dtImage || ""));
 
-      if (photosToLink.length >= 2) {
+      const isMe = String(targetUserFK) === String(currentUserId);
+
+      // [MOD] 내 사진이 아닐 때만 동선을 그림
+      if (!isMe && photosToLink.length >= 2) {
         const pathPoints = photosToLink.map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
         const polyline = new window.kakao.maps.Polyline({
           path: pathPoints,
@@ -1299,7 +1316,7 @@ export default function TripDetailPage() {
 
     // [MOD] 사용자가 사진 클릭을 통해 특정 위치로 이동(panTo) 애니메이션 중일 때는 전체 영역(setBounds) 조정을 건너뜀
     // 이를 통해 panTo 이동 중간에 setBounds가 개입하여 지도가 하얗게 변하는 크래시 현상을 방지
-    if (hasValidMarkers && !skipBoundsUpdateRef.current) {
+    if (hasValidMarkers && !isBoundsEmpty && !skipBoundsUpdateRef.current) {
       if (markersRef.current.length === 1) {
         map.setCenter(bounds.getSouthWest());
         map.setLevel(isMobile ? 3 : 4);
@@ -1314,7 +1331,7 @@ export default function TripDetailPage() {
         }
       }
     }
-  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount, selectedPhoto]); // [MOD] selectedPhoto 의존성 추가
+  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount, selectedPhoto, selectedPhotoUser]); // [MOD] selectedPhotoUser 요소 추가
 
   // Define 3-tier snap heights
   const SNAPS = {
@@ -1928,15 +1945,13 @@ export default function TripDetailPage() {
                       </button>
                     )}
 
-                    {/* 찜하기 버튼 (내 사진일 때만) */}
-                    {isMyPhoto && (
-                      <button
-                        onClick={(e) => handleToggleFavoriteImage(e, photo)}
-                        className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
-                      >
-                        <Heart size={14} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
-                      </button>
-                    )}
+                    {/* [MOD] 찜하기 버튼 (모든 사진) 내 사진 여부 검사 제거 */}
+                    <button
+                      onClick={(e) => handleToggleFavoriteImage(e, photo)}
+                      className="absolute bottom-1 left-1 p-1.5 bg-black/30 hover:bg-black/50 rounded-full transition-all z-10"
+                    >
+                      <Heart size={14} fill={photo.isFavorite ? "#ff3b3b" : "transparent"} color={photo.isFavorite ? "#ff3b3b" : "white"} />
+                    </button>
                   </div>
                 );
 
