@@ -27,7 +27,8 @@ export async function POST(req) {
         console.log(`[일정 생성 완료] 시간: ${duration}초`);
         console.log(`[AI 응답 구조체 점검] day_schedules 존재 여부:`, !!aiRes.day_schedules);
         if (aiRes.day_schedules) {
-            console.log(`[AI 응답 구조체 점검] Day 1 활동 수:`, aiRes.day_schedules[0]?.activities?.length);
+            aiRes.day_schedules.map((day) => console.log(day.activities));
+            // console.log(`[AI 응답 구조체 점검] Day 1 활동 수:`, aiRes.day_schedules[0]?.activities?.length);
         } else {
             console.log(`[AI 응답 구조체 점검] aiRes 전체:`, JSON.stringify(aiRes).substring(0, 300));
         }

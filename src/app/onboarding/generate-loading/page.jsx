@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MobileContainer } from "../../../components/layout/MobileContainer";
 import { LoadingIndicator } from "../../../components/common/LoadingIndicator";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
-import { requestScheduleLocations } from "../../../services/schedule";
+import { requestScheduleLocations, searchScheduleLocation } from "../../../services/schedule";
 
 // 헬퍼: Store 로직과 동일하게 날짜/예산 맵핑
 const formatDate = (dateStr) => {
@@ -117,18 +117,28 @@ export default function GenerateLoadingPage() {
           if (aiSchedule?.day_schedules) {
             aiSchedule.day_schedules.forEach((day) => {
               if (day.activities) {
-                day.activities.forEach((act) => {
+                day.activities.forEach(async (act) => {
                   if (act.place_name) {
-                    rawPlaces.push({
-                      place_name: cleanPlaceName(act.place_name), // 카카오엔 정제된 이름으로 검색
-                      category_group_code: act.category_group_code || null, // [MOD] 사용자의 요청에 따라 복구 (단, LLM 프롬프트에서 제어함)
-                    });
+                    const search_params = {
+                      query: act.place_name
+                    }
+                    const res_data = await searchScheduleLocation(search_params);
+                    console.log("카카오지도 API 검색 결과: ", search_params, res_data.location_list);
+                    if (res_data.location_list.length > 0) {
+                      act.kakao_loccation_list = res_data.location_list;
+                      act.kakao_location = res_data.location_list[0];
+                      console.log(res_data.location_list[0])
+                    }
+                    else {
+                      act.kakao_loccation_list = null;
+                      act.kakao_location = null;
+                    }
                   }
                 });
               }
             });
           }
-
+          /*
           if (rawPlaces.length > 0) {
             console.log("[로딩화면] 장소 맵핑 파이프라인 시작:", rawPlaces.length, "건");
             const locationResult = await requestScheduleLocations({ request_list: rawPlaces });
@@ -243,6 +253,7 @@ export default function GenerateLoadingPage() {
               console.log("[로딩화면] 카카오 API 검색 결과가 비어 있습니다.");
             }
           }
+          */
         } catch (locErr) {
           console.error("[치명적 에러] 백엔드 /location/request 통신 실패:", locErr);
         }

@@ -26,6 +26,7 @@ export const ScheduleRequestSchema = z.object({
 export const ScheduleActivitySchema = z.object({
     dtSchedule: z.string().describe("일정 시간 (YYYY-MM-DD HH:MM:SS)"),
     place_name: z.string().describe("방문 장소 명칭 (지도 API 검색이 가능한 공식 명칭)"),
+    place_address: z.string().optional().describe("방문 장소의 주소"),
     category_group_code: z.string().optional().describe("장소 성격에 맞는 카카오 카테고리 그룹 코드 (예: CT1, AT4, FD6, CE7 등)"),
     strMemo: z.string().describe("짧은 활동 요약 (필요 없으면 빈 값)"),
 });
@@ -43,6 +44,7 @@ export const ScheduleResponseSchema = z.object({
 
 export const LocationRequestItemModelSchema = z.object({
     place_name: z.string().describe("장소 명칭"),
+    place_address: z.string().optional().describe("장소의 주소"),
     category_group_code: z.string().optional().describe("카카오톡 지도API에 해당하는 카테고리 그룹 코드"),
 });
 
