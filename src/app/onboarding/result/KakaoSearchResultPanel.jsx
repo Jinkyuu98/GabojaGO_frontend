@@ -9,11 +9,14 @@ import Image from "next/image";
  * @param {Object}   place    - AI 일정의 place 객체 { name, originalName, kakaoList, kakao }
  * @param {Function} onClose  - 패널 닫기 콜백
  */
-export function KakaoSearchResultPanel({ place, onClose }) {
+export function KakaoSearchResultPanel({ place, onClose, onSelect }) {
     if (!place) return null;
 
     const kakaoList = place.kakaoList;
     const originalName = place.originalName || place.name;
+
+    // 현재 일정에 연결된 카카오 장소 ID (비교용)
+    const currentKakaoId = place.kakao?.iPK || place.kakao?.id;
 
     // [ADD] 카테고리 코드 → 한국어 라벨 매핑
     const CATEGORY_LABEL = {
@@ -45,7 +48,7 @@ export function KakaoSearchResultPanel({ place, onClose }) {
         // [ADD] 전체 오버레이 컨테이너 (PlaceDetailPanel과 동일한 구조)
         <div className="flex flex-col h-full bg-white relative w-full overflow-y-auto scrollbar-hide pt-2 lg:px-2">
             {/* 상단 헤더 */}
-            <div className="bg-white flex items-center mb-4 pb-2 px-4 pt-4">
+            <div className="bg-white flex items-center mb-4 pb-2 px-4 pt-4 shrink-0">
                 <button
                     onClick={onClose}
                     className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -60,7 +63,7 @@ export function KakaoSearchResultPanel({ place, onClose }) {
                 </div>
             </div>
 
-            <div className="px-4 flex flex-col gap-3">
+            <div className="px-4 flex flex-col gap-3 pb-8">
                 {/* [ADD] 검색 결과 개수 안내 */}
                 {kakaoList && kakaoList.length > 0 ? (
                     <>
@@ -71,14 +74,17 @@ export function KakaoSearchResultPanel({ place, onClose }) {
                         {/* [ADD] 검색 결과 목록 */}
                         <div className="flex flex-col gap-2">
                             {kakaoList.map((item, idx) => {
-                                const isSelected = idx === 0; // 첫 번째(가장 관련성 높은) 항목 강조
+                                // 현재 장소와 ID가 일치하는지 확인
+                                const itemId = item.iPK || item.id;
+                                const isSelected = currentKakaoId && itemId && String(itemId) === String(currentKakaoId);
+
                                 const name = item.strName || item.place_name || `결과 ${idx + 1}`;
                                 const address = item.strAddress || item.road_address_name || item.address_name || "";
                                 const categoryLabel = getCategoryLabel(item);
 
                                 return (
                                     <div
-                                        key={item.iPK || idx}
+                                        key={itemId || idx}
                                         className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
                                             isSelected
                                                 ? "border-[#7a28fa] bg-[#f9f5ff]"
@@ -98,18 +104,30 @@ export function KakaoSearchResultPanel({ place, onClose }) {
 
                                         {/* [ADD] 장소 정보 */}
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span
-                                                    className={`text-[14px] font-bold truncate ${
-                                                        isSelected ? "text-[#7a28fa]" : "text-[#111111]"
-                                                    }`}
-                                                >
-                                                    {name}
-                                                </span>
-                                                {isSelected && (
-                                                    <span className="text-[11px] font-semibold text-[#7a28fa] bg-[#f0e8ff] px-1.5 py-0.5 rounded flex-shrink-0">
-                                                        AI 선택
+                                            <div className="flex items-center gap-2 flex-wrap justify-between">
+                                                <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                                                    <span
+                                                        className={`text-[14px] font-bold truncate ${
+                                                            isSelected ? "text-[#7a28fa]" : "text-[#111111]"
+                                                        }`}
+                                                    >
+                                                        {name}
                                                     </span>
+                                                    {isSelected && (
+                                                        <span className="text-[11px] font-semibold text-[#7a28fa] bg-[#f0e8ff] px-1.5 py-0.5 rounded flex-shrink-0">
+                                                            적용됨
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* [ADD] 선택 버튼 */}
+                                                {!isSelected && onSelect && (
+                                                    <button
+                                                        onClick={() => onSelect(item)}
+                                                        className="px-3 py-1 bg-[#7a28fa] text-white text-[11px] font-bold rounded-lg hover:bg-[#6620d6] transition-colors flex-shrink-0"
+                                                    >
+                                                        선택
+                                                    </button>
                                                 )}
                                             </div>
 

@@ -11,7 +11,7 @@ import { KakaoSearchResultPanel } from "./KakaoSearchResultPanel"; // [ADD] 카�
 
 export default function ResultPage() {
   const router = useRouter();
-  const { saveTrip, generatedTripData } = useOnboardingStore();
+  const { saveTrip, generatedTripData, updateActivityLocation } = useOnboardingStore();
   const { userId } = useCurrentUser(); // [ADD] 로그인 상태 확인용
   const [selectedTab, setSelectedTab] = useState("일정");
   const [selectedPlace, setSelectedPlace] = useState(null); // [ADD] 카카오 검색 결과 패널 표시용
@@ -127,14 +127,16 @@ export default function ResultPage() {
   // Transform AI Data to UI mockup structure
   const trip = generatedTripData ? {
     ...MOCK_TRIP,
-    days: generatedTripData.day_schedules?.map((dayObj) => ({
-      places: dayObj.activities?.map((act) => ({
+    days: generatedTripData.day_schedules?.map((dayObj, dayIdx) => ({
+      places: dayObj.activities?.map((act, actIdx) => ({
         name: act.kakao_location?.strName || act.place_name,
         time: act.dtSchedule ? act.dtSchedule.split(' ')[1]?.substring(0, 5) : "",
         duration: act.strMemo || "방문",
         kakao: act.kakao_location || null, // 실제 지도 렌더링에 사용할 카카오 API 데이터
-        kakaoList: act.kakao_loccation_list || null, // [ADD] 카카오 검색 결과 전체 목록
+        kakaoList: act.kakao_location_list || null, // [ADD] 카카오 검색 결과 전체 목록
         originalName: act.place_name || null,         // [ADD] LLM이 생성한 원본 장소명
+        dayIdx, // [ADD]
+        actIdx, // [ADD]
       })) || [],
       records: dayObj.records?.map(rec => ({
         ...rec,
@@ -293,6 +295,24 @@ export default function ResultPage() {
     }
   };
 
+  // [ADD] 검색 결과에서 장소 선택 시 스토어 업데이트
+  const handleSelectLocation = (location, dayIndex, activityIndex) => {
+    updateActivityLocation(dayIndex, activityIndex, location);
+    // [MOD] 선택 시 창이 사라지지 않도록 null 처리를 제거하고, 상태를 업데이트하여 UI에 즉시 반영
+    // setSelectedPlace(null);
+    setSelectedPlace((prev) => (prev ? { ...prev, kakao: location } : null));
+
+    // 지도를 해당 위치로 이동
+    if (mapInstance.current && window.kakao) {
+      const lat = location.y || location.ptLatitude;
+      const lng = location.x || location.ptLongitude;
+      if (lat && lng) {
+        const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
+        mapInstance.current.panTo(moveLatLng);
+      }
+    }
+  };
+
   const renderTabContent = () => {
     return (
       <>
@@ -328,13 +348,21 @@ export default function ResultPage() {
                         onClick={() => setSelectedPlace(place)}
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-[#7a28fa] tracking-[-0.06px]">
-                        {place.time || "10:00"}
-                      </span>
-                      <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
-                        {place.duration || "1시간"}
-                      </span>
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-[#7a28fa] tracking-[-0.06px] font-medium">
+                          {place.time || "10:00"}
+                        </span>
+                        <span className="text-sm text-[#6e6e6e] tracking-[-0.06px]">
+                          {place.duration || "1시간"}
+                        </span>
+                      </div>
+                      <button 
+                        className="text-[12px] text-[#7a28fa] border border-[#7a28fa] rounded-full px-2 py-0.5 hover:bg-[#7a28fa] hover:text-white transition-colors"
+                        onClick={() => setSelectedPlace(place)}
+                      >
+                        장소 변경
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -781,6 +809,7 @@ export default function ResultPage() {
           <KakaoSearchResultPanel
             place={selectedPlace}
             onClose={() => setSelectedPlace(null)}
+            onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
           />
         )}
       </div>
@@ -858,6 +887,7 @@ export default function ResultPage() {
             <KakaoSearchResultPanel
               place={selectedPlace}
               onClose={() => setSelectedPlace(null)}
+              onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
             />
           </div>
         ) : (

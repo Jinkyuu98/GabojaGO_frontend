@@ -26,6 +26,30 @@ export const useOnboardingStore = create(
           travelData: { ...state.travelData, ...data },
         })),
       setGeneratedTripData: (data) => set({ generatedTripData: data }),
+      // [ADD] 특정 일차의 활동 장소 정보 업데이트
+      updateActivityLocation: (dayIndex, activityIndex, location) => {
+        set((state) => {
+          const newGeneratedTripData = { ...state.generatedTripData };
+          if (!newGeneratedTripData.day_schedules) return state;
+
+          const newSchedules = [...newGeneratedTripData.day_schedules];
+          const newActivities = [...newSchedules[dayIndex].activities];
+
+          newActivities[activityIndex] = {
+            ...newActivities[activityIndex],
+            kakao_location: location
+          };
+
+          newSchedules[dayIndex] = {
+            ...newSchedules[dayIndex],
+            activities: newActivities
+          };
+
+          newGeneratedTripData.day_schedules = newSchedules;
+
+          return { generatedTripData: newGeneratedTripData };
+        });
+      },
       setUser: (user) => set({ user }),
       saveTrip: async () => {
         const state = get();

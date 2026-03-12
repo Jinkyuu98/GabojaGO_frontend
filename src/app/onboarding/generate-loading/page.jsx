@@ -124,15 +124,15 @@ export default function GenerateLoadingPage() {
                     }
                     const res_data = await searchScheduleLocation(search_params);
                     console.log("카카오지도 API 검색 결과: ", search_params, res_data.location_list);
-                    if (res_data.location_list.length > 0) {
-                      act.kakao_loccation_list = res_data.location_list;
-                      act.kakao_location = res_data.location_list[0];
-                      console.log(res_data.location_list[0])
-                    }
-                    else {
-                      act.kakao_loccation_list = null;
-                      act.kakao_location = null;
-                    }
+                      if (res_data.location_list.length > 0) {
+                        act.kakao_location_list = res_data.location_list;
+                        act.kakao_location = res_data.location_list[0];
+                        console.log(res_data.location_list[0])
+                      }
+                      else {
+                        act.kakao_location_list = null;
+                        act.kakao_location = null;
+                      }
                   }
                 });
               }
