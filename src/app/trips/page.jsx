@@ -11,6 +11,8 @@ import { Trash2 } from "lucide-react";
 import { clsx } from "clsx";
 // [MOD] removeSchedule, modifySchedule 함수 import 추가
 import { getScheduleList, removeSchedule, modifySchedule } from "../../services/schedule";
+// [ADD] 현재 사용자 정보를 가져오는 훅 추가
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 
 // [ADD] 온보딩 옵션 데이터
 const COMPANION_OPTIONS = ["혼자", "연인과", "친구와", "가족과", "부모님과", "기타"];
@@ -21,10 +23,13 @@ const STYLE_OPTIONS = [
   "야시장/노점", "쇼핑", "효도 관광", "기타"
 ];
 
-// [MOD] onDelete, onEdit props 추가
-const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
+// [MOD] onDelete, onEdit props 추가, currentUserId 추가
+const TripCard = ({ trip, onClick, onDelete, onEdit, isLast, currentUserId }) => {
   // [MOD] strWithWho 값을 그대로 표시 (불필요한 '함께' 접미사 제거)
   const companionText = trip.strWithWho || "나홀로";
+
+  // [ADD] 일정의 방장(생성자)인지 권한 체크
+  const isOwner = currentUserId ? String(trip.iUserFK) === String(currentUserId) : false;
 
   const dateText = (() => {
     if (!trip.dtDate1) return "날짜 없음";
@@ -63,29 +68,32 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
               <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
                 {dateText}
               </span>
-              <div className="flex items-center gap-1">
-                {/* [ADD] 모바일용 수정 버튼 */}
-                <button
-                  className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(trip);
-                  }}
-                  title="일정 수정"
-                >
-                  <div className="w-[14px] h-[14px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-                </button>
-                {/* [ADD] 모바일용 삭제 버튼 */}
-                <button
-                  className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(trip.iPK);
-                  }}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+              {/* [MOD] 방장일 경우에만 수정/삭제 버튼 노출 */}
+              {isOwner && (
+                <div className="flex items-center gap-1">
+                  {/* [ADD] 모바일용 수정 버튼 */}
+                  <button
+                    className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(trip);
+                    }}
+                    title="일정 수정"
+                  >
+                    <div className="w-[14px] h-[14px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                  </button>
+                  {/* [ADD] 모바일용 삭제 버튼 */}
+                  <button
+                    className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(trip.iPK);
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -124,29 +132,32 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
             <span className="text-[14px] font-normal text-[#969696] tracking-[-0.5px] whitespace-nowrap">
               {dateText}
             </span>
-            <div className="flex items-center gap-1">
-              {/* [ADD] 데스크톱용 수정 버튼 */}
-              <button
-                className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(trip);
-                }}
-                title="일정 수정"
-              >
-                <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
-              </button>
-              {/* [ADD] 데스크톱용 삭제 버튼 */}
-              <button
-                className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(trip.iPK);
-                }}
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
+            {/* [MOD] 방장일 경우에만 수정/삭제 버튼 노출 */}
+            {isOwner && (
+              <div className="flex items-center gap-1">
+                {/* [ADD] 데스크톱용 수정 버튼 */}
+                <button
+                  className="flex items-center justify-center p-1 text-[#969696] hover:text-[#7a28fa] transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(trip);
+                  }}
+                  title="일정 수정"
+                >
+                  <div className="w-[18px] h-[18px] bg-current" style={{ WebkitMaskImage: "url('/icons/edit.svg')", maskImage: "url('/icons/edit.svg')", WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center" }} />
+                </button>
+                {/* [ADD] 데스크톱용 삭제 버튼 */}
+                <button
+                  className="flex items-center justify-center p-1 text-[#969696] hover:text-[#ff4d4f] transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(trip.iPK);
+                  }}
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -160,6 +171,7 @@ const TripCard = ({ trip, onClick, onDelete, onEdit, isLast }) => {
 export default function TripsListPage() {
   const router = useRouter();
   const { setTravelData, resetTravelData } = useOnboardingStore();
+  const { userId: currentUserId } = useCurrentUser(); // [ADD] 권한 확인을 위해 현재 사용자 ID 불러오기
   const [activeTab, setActiveTab] = useState("itinerary"); // 'itinerary' | 'records'
   const [scheduleList, setScheduleList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -387,6 +399,7 @@ export default function TripsListPage() {
                         onClick={() => router.push(`/trips/${trip.iPK}`)}
                         onDelete={handleDeleteSchedule} // [MOD] 삭제 핸들러 전달 추가
                         onEdit={handleEditSchedule} // [ADD] 수정 핸들러 전달 추가
+                        currentUserId={currentUserId} // [ADD] 현재 사용자 ID 전달하여 권한 체크
                       />
                     </div>
                   ))}
