@@ -7,12 +7,14 @@ import Script from "next/script"; // [ADD] Script import for Kakao Map
 import { clsx } from "clsx";
 import { useOnboardingStore } from "../../../store/useOnboardingStore";
 import { useCurrentUser } from "../../../hooks/useCurrentUser";
+import { KakaoSearchResultPanel } from "./KakaoSearchResultPanel"; // [ADD] 카카오 검색 결과 패널
 
 export default function ResultPage() {
   const router = useRouter();
   const { saveTrip, generatedTripData } = useOnboardingStore();
   const { userId } = useCurrentUser(); // [ADD] 로그인 상태 확인용
   const [selectedTab, setSelectedTab] = useState("일정");
+  const [selectedPlace, setSelectedPlace] = useState(null); // [ADD] 카카오 검색 결과 패널 표시용
   const [selectedDay, setSelectedDay] = useState(1);
   const [sheetHeight, setSheetHeight] = useState(478);
   const [isDragging, setIsDragging] = useState(false);
@@ -130,7 +132,9 @@ export default function ResultPage() {
         name: act.kakao_location?.strName || act.place_name,
         time: act.dtSchedule ? act.dtSchedule.split(' ')[1]?.substring(0, 5) : "",
         duration: act.strMemo || "방문",
-        kakao: act.kakao_location || null // 실제 지도 렌더링에 사용할 카카오 API 데이터
+        kakao: act.kakao_location || null, // 실제 지도 렌더링에 사용할 카카오 API 데이터
+        kakaoList: act.kakao_loccation_list || null, // [ADD] 카카오 검색 결과 전체 목록
+        originalName: act.place_name || null,         // [ADD] LLM이 생성한 원본 장소명
       })) || [],
       records: dayObj.records?.map(rec => ({
         ...rec,
@@ -306,9 +310,13 @@ export default function ResultPage() {
                     )}
                   </div>
 
+                  {/* [MOD] 장소명 클릭 시 카카오 검색 결과 패널 표시 */}
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-5 mb-2">
-                      <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
+                      <h3
+                        className="text-base font-semibold text-[#111111] tracking-[-0.06px] cursor-pointer hover:text-[#7a28fa] transition-colors"
+                        onClick={() => setSelectedPlace(place)}
+                      >
                         {place.name}
                       </h3>
                       <Image
@@ -316,7 +324,8 @@ export default function ResultPage() {
                         alt="menu"
                         width={18}
                         height={4}
-                        className="flex-shrink-0"
+                        className="flex-shrink-0 cursor-pointer"
+                        onClick={() => setSelectedPlace(place)}
                       />
                     </div>
                     <div className="flex items-center gap-2">
@@ -761,12 +770,27 @@ export default function ResultPage() {
       </div>
 
       {/* ----------------- Right Map & Mobile Area ----------------- */}
+      {/* [ADD] 카카오 검색 결과 패널 (데스크톱) — 지도 오른쪽에 flex 패널로 표시 */}
+      <div
+        className={clsx(
+          "hidden lg:flex flex-col h-full bg-white shadow-[-4px_0_24px_rgba(0,0,0,0.08)] z-20 transition-all duration-300 ease-in-out shrink-0 overflow-hidden",
+          selectedPlace ? "w-[360px]" : "w-0"
+        )}
+      >
+        {selectedPlace && (
+          <KakaoSearchResultPanel
+            place={selectedPlace}
+            onClose={() => setSelectedPlace(null)}
+          />
+        )}
+      </div>
+
+      {/* ----------------- Right Map & Mobile Area ----------------- */}
       <div className="relative flex-1 h-full overflow-hidden">
         {/* Actual Map Render Target */}
         <div className="absolute inset-0 w-full h-full bg-[#f5f5f5]">
           <div ref={mapRef} className="w-full h-full" />
         </div>
-
         <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-10 shadow-sm">
           <div className="flex items-center gap-4">
             <button onClick={() => router.push(userId ? "/home" : "/login")}>
@@ -807,6 +831,7 @@ export default function ResultPage() {
         )}
       </div>
 
+
       {/* ----------------- Mobile Bottom Sheet (Hidden on Desktop) ----------------- */}
       <div
         ref={sheetRef}
@@ -826,66 +851,80 @@ export default function ResultPage() {
           <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto" />
         </div>
 
-        {/* Mobile Tabs */}
-        {!isCollapsed && (
-          <div className="border-b border-[#e5ebf2] px-5">
-            <div className="flex items-center gap-4">
-              {tabs.map((tab) => (
+        {/* [MOD] 블랙시트 콘텐츠: selectedPlace가 있으면 카카오 검색 결과, 없으면 기존 일정 탭 */}
+        {selectedPlace ? (
+          // [ADD] 장소 클릭 시: 바로 바로가기 버튼이 있는 검색 결과를 바로시트 내부에 표시
+          <div className="flex-1 overflow-hidden flex flex-col">
+            <KakaoSearchResultPanel
+              place={selectedPlace}
+              onClose={() => setSelectedPlace(null)}
+            />
+          </div>
+        ) : (
+          // [MOD] 기존: 탭 + 일차 + 콘텐츠 영역
+          <>
+            {/* Mobile Tabs */}
+            {!isCollapsed && (
+              <div className="border-b border-[#e5ebf2] px-5">
+                <div className="flex items-center gap-4">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setSelectedTab(tab)}
+                      className={clsx(
+                        "text-[15px] font-semibold tracking-[-0.3px] py-3 transition-all relative",
+                        selectedTab === tab ? "text-[#111111]" : "text-[#898989]",
+                      )}
+                    >
+                      {tab}
+                      {selectedTab === tab && (
+                        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[2px] bg-[#111111]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Day Tabs */}
+            <div className="px-5 pt-4 pb-3 flex gap-1 overflow-x-auto scrollbar-hide">
+              {days.map((day, index) => (
                 <button
-                  key={tab}
-                  onClick={() => setSelectedTab(tab)}
+                  key={index}
+                  onClick={() => setSelectedDay(index + 1)}
                   className={clsx(
-                    "text-[15px] font-semibold tracking-[-0.3px] py-3 transition-all relative",
-                    selectedTab === tab ? "text-[#111111]" : "text-[#898989]",
+                    "px-4 py-2 rounded-full text-[15px] font-semibold whitespace-nowrap transition-colors",
+                    selectedDay === index + 1
+                      ? "bg-[#111111] text-white"
+                      : "bg-transparent text-[#111111] font-normal border border-[#DBDBDB]",
                   )}
                 >
-                  {tab}
-                  {selectedTab === tab && (
-                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-[2px] bg-[#111111]" />
-                  )}
+                  {day}
                 </button>
               ))}
             </div>
-          </div>
-        )}
 
-        {/* Mobile Day Tabs */}
-        <div className="px-5 pt-4 pb-3 flex gap-1 overflow-x-auto scrollbar-hide">
-          {days.map((day, index) => (
-            <button
-              key={index}
-              onClick={() => setSelectedDay(index + 1)}
-              className={clsx(
-                "px-4 py-2 rounded-full text-[15px] font-semibold whitespace-nowrap transition-colors",
-                selectedDay === index + 1
-                  ? "bg-[#111111] text-white"
-                  : "bg-transparent text-[#111111] font-normal border border-[#DBDBDB]",
-              )}
-            >
-              {day}
-            </button>
-          ))}
-        </div>
+            {/* Mobile Content Area */}
+            {!isCollapsed && (
+              <>
+                <div
+                  className="px-5 pb-24 overflow-y-auto"
+                  style={{ maxHeight: `${sheetHeight - 160}px` }}
+                >
+                  {renderTabContent()}
+                </div>
 
-        {/* Mobile Content Area */}
-        {!isCollapsed && (
-          <>
-            <div
-              className="px-5 pb-24 overflow-y-auto"
-              style={{ maxHeight: `${sheetHeight - 160}px` }}
-            >
-              {renderTabContent()}
-            </div>
-
-            {/* Bottom Form Action */}
-            <div className="absolute bottom-0 left-0 right-0 p-5 bg-white z-30">
-              <button
-                onClick={handleSaveSchedule}
-                className="w-full py-[14px] bg-[#111111] rounded-xl text-base font-semibold text-white tracking-[-0.06px]"
-              >
-                일정 저장 및 편집
-              </button>
-            </div>
+                {/* Bottom Form Action */}
+                <div className="absolute bottom-0 left-0 right-0 p-5 bg-white z-30">
+                  <button
+                    onClick={handleSaveSchedule}
+                    className="w-full py-[14px] bg-[#111111] rounded-xl text-base font-semibold text-white tracking-[-0.06px]"
+                  >
+                    일정 저장 및 편집
+                  </button>
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
