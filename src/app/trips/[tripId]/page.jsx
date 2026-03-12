@@ -1279,16 +1279,14 @@ export default function TripDetailPage() {
 
       });
 
-      // [MOD] 선택된 사용자의 사진만 하나의 동선(Polyline)으로 그리기 (내 사진일 때는 숨김)
+      // [MOD] 선택된 사용자의 사진만 하나의 동선(Polyline)으로 그리기 (내 사진 여부 관계없이)
       const photosToLink = targetRecords
         .flatMap(record => record.photos)
         .filter(p => p.latitude && p.longitude && !isNaN(p.latitude) && !isNaN(p.longitude))
         .sort((a, b) => (a.dtImage || "").localeCompare(b.dtImage || ""));
 
-      const isMe = String(targetUserFK) === String(currentUserId);
-
-      // [MOD] 내 사진이 아닐 때만 동선을 그림
-      if (!isMe && photosToLink.length >= 2) {
+      // [MOD] 사용자가 누구든 사진이 2개 이상이면 동선을 그림
+      if (photosToLink.length >= 2) {
         const pathPoints = photosToLink.map(p => new window.kakao.maps.LatLng(p.latitude, p.longitude));
         const polyline = new window.kakao.maps.Polyline({
           path: pathPoints,
