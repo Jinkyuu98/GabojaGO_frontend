@@ -3463,6 +3463,13 @@ export default function TripDetailPage() {
                         grouped[label] += (e.nMoney || 0);
                       });
 
+                      const totalSpent = Object.values(grouped).reduce((s, v) => s + v, 0);
+                      const newSpent = Object.entries(grouped).map(([label, amount]) => ({
+                        category: label, amount,
+                        color: categoryColors[label] || "#b115fa",
+                        percentage: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0
+                      })).sort((a, b) => b.amount - a.amount);
+
                       return { ...prev, budget: { ...prev.budget, spent: newSpent } };
                     });
 
