@@ -37,3 +37,13 @@ export const searchUserByName = async (strUserName) => {
   const res = await api.get("/auth/user/search", { params: { strUserName } });
   return res.data;
 };
+
+// [ADD] 사용자 iPK로 정보 검색 API
+/**
+ * @param {number} iUserPK - 유저의 고유 PK
+ * @returns {Promise} - { iPK, strUserID, strName, strEmail ... }
+ */
+export const getUserInfo = async (iUserPK) => {
+  const res = await api.get(`/auth/user/get?iUserPK=${iUserPK}`);
+  return res.data;
+};

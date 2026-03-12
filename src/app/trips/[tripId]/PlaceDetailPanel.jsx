@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { getPlaceReviews, addPlaceReview, modifyPlaceReview, removePlaceReview } from "../../../services/review";
+import { getUserInfo } from "../../../services/auth"; // [ADD] 유저 정보 조회 추가
 import { appendFavoriteLocation, getFavoriteList } from "../../../services/favorite";
 import { registerPlace } from "../../../services/place";
 import { Trash2 } from "lucide-react";
@@ -21,6 +22,7 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
     // 즐겨찾기 그룹 선택 관련 상태
     const [showGroupSelector, setShowGroupSelector] = useState(false);
     const [favoriteGroups, setFavoriteGroups] = useState([]);
+    const [userCache, setUserCache] = useState({}); // [ADD] 유저 정보 캐시
 
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
@@ -72,6 +74,42 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
             setLoading(false);
         }
     };
+    
+    // [ADD] 리뷰 작성자 정보 보완 로직
+    useEffect(() => {
+        const fetchMissingUsers = async () => {
+            const missingIds = reviews
+                .filter(r => {
+                    const hasName = r.strUserID || r.strUserId || r.strUserName || r.userId || r.name || r.user?.strUserID || r.user?.strName;
+                    const isMe = currentUserId !== null && String(r.iUserFK) === String(currentUserId);
+                    return !hasName && !isMe && !userCache[r.iUserFK];
+                })
+                .map(r => r.iUserFK);
+
+            if (missingIds.length === 0) return;
+
+            // 중복 제거
+            const uniqueMissingIds = [...new Set(missingIds)];
+            
+            for (const iPK of uniqueMissingIds) {
+                try {
+                    const userInfo = await getUserInfo(iPK);
+                    if (userInfo) {
+                        setUserCache(prev => ({
+                            ...prev,
+                            [iPK]: userInfo.strUserID || userInfo.strName
+                        }));
+                    }
+                } catch (err) {
+                    console.error(`유저(${iPK}) 정보 조회 실패:`, err);
+                }
+            }
+        };
+
+        if (reviews.length > 0) {
+            fetchMissingUsers();
+        }
+    }, [reviews, currentUserId]); // reviews가 로드된 후 실행
 
     useEffect(() => {
         if (normalizedPlace) {
@@ -311,7 +349,8 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
                             if (!strName && currentUserId !== null && String(r.iUserFK) === String(currentUserId)) {
                                 strName = userLoginId || currentUserName;
                             }
-                            strName = strName || `유저 [${r.iUserFK}]`;
+                            // [MOD] 캐시된 정보가 있으면 사용
+                            strName = strName || userCache[r.iUserFK] || `유저 [${r.iUserFK}]`;
 
                             // [MOD] 현재 유저 ID(훅의 iPK)와 리뷰의 iUserFK 비교로 본인 확인
                             const isMine = currentUserId !== null && String(r.iUserFK) === String(currentUserId);
