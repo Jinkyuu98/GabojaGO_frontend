@@ -429,8 +429,19 @@ export default function ResultPage() {
         {selectedTab === "일정" && (
           <div className="flex flex-col gap-6">
             {currentDayPlaces.length > 0 ? (
-              currentDayPlaces.map((place, idx) => (
-                <div key={idx} className="flex items-start gap-3.5">
+              currentDayPlaces.map((place, idx) => {
+                const isSelected = selectedPlace && selectedPlace.dayIdx === place.dayIdx && selectedPlace.actIdx === place.actIdx;
+                return (
+                <div
+                  key={idx}
+                  className={clsx(
+                    "flex items-start gap-3.5 cursor-pointer rounded-xl px-3 py-3 -mx-3 transition-all",
+                    isSelected
+                      ? "bg-[#f5f3ff] border-2 border-[#7a28fa]"
+                      : "border-2 border-transparent hover:bg-[#f9f8fc]"
+                  )}
+                  onClick={() => handlePlaceClick(place)}
+                >
                   <div className="flex flex-col items-center gap-2 pt-1">
                     <div className="w-6 h-6 rounded-full bg-[#7a28fa] text-white text-sm font-bold flex items-center justify-center">
                       {idx + 1}
@@ -440,16 +451,11 @@ export default function ResultPage() {
                     )}
                   </div>
 
-                  {/* [MOD] 장소명 클릭 시 카카오 검색 결과 패널 표시 */}
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-5 mb-2">
-                      <h3
-                        className="text-base font-semibold text-[#111111] tracking-[-0.06px] cursor-pointer hover:text-[#7a28fa] transition-colors"
-                        onClick={() => handlePlaceClick(place)} // [MOD] 장소 클릭 시 handlePlaceClick 사용
-                      >
+                      <h3 className="text-base font-semibold text-[#111111] tracking-[-0.06px]">
                         {place.name}
                       </h3>
-                      {/* [DEL] 장소 변경 위해 존재했던 dots-menu 마크 제거 */}
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-2">
                       <div className="flex items-center gap-2">
@@ -460,16 +466,10 @@ export default function ResultPage() {
                           {place.duration || "1시간"}
                         </span>
                       </div>
-                      <button
-                        className="text-[12px] text-[#7a28fa] border border-[#7a28fa] rounded-full px-2 py-0.5 hover:bg-[#7a28fa] hover:text-white transition-colors"
-                        onClick={() => handlePlaceClick(place)} // [MOD] 장소 클릭 시 handlePlaceClick 사용
-                      >
-                        장소 변경
-                      </button>
                     </div>
                   </div>
                 </div>
-              ))
+              );})
             ) : (
               <div className="text-center py-10 text-[#8e8e93]">
                 일정이 없습니다.
@@ -834,7 +834,7 @@ export default function ResultPage() {
               {days.map((day, index) => (
                 <button
                   key={index}
-                  onClick={() => setSelectedDay(index + 1)}
+                  onClick={() => { setSelectedDay(index + 1); setSelectedPlace(null); }}
                   className={clsx(
                     "whitespace-nowrap px-4 py-1.5 rounded-full text-[14px] font-medium transition-all border",
                     selectedDay === index + 1
@@ -1055,7 +1055,7 @@ export default function ResultPage() {
               {days.map((day, index) => (
                 <button
                   key={index}
-                  onClick={() => setSelectedDay(index + 1)}
+                  onClick={() => { setSelectedDay(index + 1); setSelectedPlace(null); }}
                   className={clsx(
                     "px-4 py-2 rounded-full text-[15px] font-semibold whitespace-nowrap transition-colors",
                     selectedDay === index + 1
