@@ -156,6 +156,8 @@ export default function ResultPage() {
   const dayCount = trip.days?.length || 1;
   const days = Array.from({ length: dayCount }, (_, i) => `${i + 1}일차`);
 
+  const [mapInitCount, setMapInitCount] = useState(0); // [ADD] 지도 로드 후 리렌더링 유발용
+
   // [ADD] 카카오맵 초기화 로직
   const initMap = () => {
     if (!window.kakao || !mapRef.current) return;
@@ -180,6 +182,8 @@ export default function ResultPage() {
         center,
         level: 8, // 전체적으로 보이게 넓게
       });
+
+      setMapInitCount(prev => prev + 1); // [ADD] 맵 인스턴스 할당 후 리렌더링 강제
     });
   };
 
@@ -192,11 +196,8 @@ export default function ResultPage() {
   // [ADD] 일정에 따라 카카오맵 마커 동기화
   useEffect(() => {
     if (!mapInstance.current || !window.kakao) return;
-    
-    // [MOD] 장소를 단순히 살펴보고 있는 상태(selectedPlace가 존재하는 경우)에는 전체 마커 리렌더링을 방지
-    // 이렇게 하지 않으면 클릭 상태가 바뀔때마다 지도가 깜빡이거나 마커가 지워질 수 있음
-    if (selectedPlace) return;
 
+    // 장소를 단순히 살펴보고 있는 상태에서도 검색 결과로 장소가 바뀌면 마커가 갱신되어야 함
     const map = mapInstance.current;
 
     // 기존 마커 제거
@@ -208,31 +209,31 @@ export default function ResultPage() {
     const bounds = new window.kakao.maps.LatLngBounds();
 
     currentDayPlaces.forEach((place, idx) => {
-      const lat = place.kakao?.y || place.kakao?.ptLatitude;
-      const lng = place.kakao?.x || place.kakao?.ptLongitude;
+      const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
+      const lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
+
+      console.log('📌 Rendering Marker:', { idx, lat, lng, place });
 
       if (!lat || !lng) return;
 
       const position = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
 
-      const marker = new window.kakao.maps.Marker({
-        position: position,
-        map: map
-      });
 
-      markersRef.current.push(marker);
       bounds.extend(position);
 
-      const content = `
-        <div class="bg-[#7a28fa] text-white w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md text-[13px] font-bold mb-10">
-          ${idx + 1}
-        </div>
-      `;
+      const markerEl = document.createElement("div");
+      markerEl.className = "flex items-center justify-center bg-[#7a28fa] text-white font-bold border-2 border-white shadow-md rounded-full";
+      markerEl.style.width = "28px";
+      markerEl.style.height = "28px";
+      markerEl.style.fontSize = "13px";
+      markerEl.style.zIndex = "10";
+      markerEl.innerText = idx + 1;
 
       const overlay = new window.kakao.maps.CustomOverlay({
         position: position,
-        content: content,
-        yAnchor: 1.2
+        content: markerEl,
+        yAnchor: 0.5,
+        zIndex: 10
       });
 
       overlay.setMap(map);
@@ -242,7 +243,7 @@ export default function ResultPage() {
     if (markersRef.current.length > 0 && !skipSetBounds.current) {
       map.setBounds(bounds);
     }
-  }, [currentDayPlaces]);
+  }, [currentDayPlaces, mapInitCount]);
 
   useEffect(() => {
     const h = window.innerHeight;
@@ -319,8 +320,8 @@ export default function ResultPage() {
   const handlePlaceClick = (place) => {
     // 1. 먼저 장소 상태를 설정 (사이드 패널 애니메이션 동작 시작)
     setSelectedPlace(place);
-    
-      // 2. 지도 이동 타이밍 늦춰서 리렌더링 깜빡임 회피
+
+    // 2. 지도 이동 타이밍 늦춰서 리렌더링 깜빡임 회피
     setTimeout(() => {
       if (mapInstance.current && window.kakao) {
         const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
@@ -346,8 +347,8 @@ export default function ResultPage() {
     // 지도를 해당 위치로 이동
     setTimeout(() => {
       if (mapInstance.current && window.kakao) {
-        const lat = location.y || location.ptLatitude;
-        const lng = location.x || location.ptLongitude;
+        const lat = location.y || location.ptLatitude || location.latitude;
+        const lng = location.x || location.ptLongitude || location.longitude;
         console.log('handleSelectLocation coords:', { lat, lng, location });
         if (lat && lng) {
           const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
@@ -399,7 +400,7 @@ export default function ResultPage() {
                           {place.duration || "1시간"}
                         </span>
                       </div>
-                      <button 
+                      <button
                         className="text-[12px] text-[#7a28fa] border border-[#7a28fa] rounded-full px-2 py-0.5 hover:bg-[#7a28fa] hover:text-white transition-colors"
                         onClick={() => handlePlaceClick(place)} // [MOD] 장소 클릭 시 handlePlaceClick 사용
                       >
@@ -813,8 +814,8 @@ export default function ResultPage() {
                 if (markersRef.current.length > 0) {
                   const bounds = new window.kakao.maps.LatLngBounds();
                   currentDayPlaces.forEach((place) => {
-                    const lat = place.kakao?.y || place.kakao?.ptLatitude;
-                    const lng = place.kakao?.x || place.kakao?.ptLongitude;
+                    const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
+                    const lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
                     if (lat && lng) {
                       bounds.extend(new window.kakao.maps.LatLng(lat, lng));
                     }

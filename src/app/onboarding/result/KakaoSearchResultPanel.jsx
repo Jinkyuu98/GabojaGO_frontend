@@ -41,7 +41,7 @@ export function KakaoSearchResultPanel({ place, onClose, onSelect, onPreview }) 
     const getCategoryLabel = (item) => {
         // strGroupCode 또는 chCategory에서 라벨 추출
         const code = item.strGroupCode || item.chCategory;
-        return CATEGORY_LABEL[code] || item.strGroupName || item.strCategory || code || "기타";
+        return CATEGORY_LABEL[code] || item.strGroupName || "";
     };
 
     return (
@@ -85,32 +85,22 @@ export function KakaoSearchResultPanel({ place, onClose, onSelect, onPreview }) 
                                 return (
                                     <div
                                         key={itemId || idx}
-                                        onClick={() => onPreview && onPreview(item)} // [ADD] 클릭 시 미리보기 이동
-                                        className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer hover:border-[#7a28fa] ${
-                                            isSelected
-                                                ? "border-[#7a28fa] bg-[#f9f5ff]"
-                                                : "border-[#e5ebf2] bg-white"
-                                        }`}
-                                    >
-                                        {/* [ADD] 순서 번호 */}
-                                        <div
-                                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 mt-0.5 ${
-                                                isSelected
-                                                    ? "bg-[#7a28fa] text-white"
-                                                    : "bg-[#f2f4f6] text-[#6e6e6e]"
+                                        onClick={() => {
+                                            if (onPreview) onPreview(item);
+                                            if (!isSelected && onSelect) onSelect(item);
+                                        }}
+                                        className={`flex items-start gap-3 p-3 rounded-xl border transition-colors cursor-pointer hover:border-[#7a28fa] ${isSelected
+                                            ? "border-[#7a28fa] bg-[#f9f5ff]"
+                                            : "border-[#e5ebf2] bg-white"
                                             }`}
-                                        >
-                                            {idx + 1}
-                                        </div>
-
+                                    >
                                         {/* [ADD] 장소 정보 */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap justify-between">
                                                 <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
                                                     <span
-                                                        className={`text-[14px] font-bold truncate ${
-                                                            isSelected ? "text-[#7a28fa]" : "text-[#111111]"
-                                                        }`}
+                                                        className={`text-[14px] font-bold truncate ${isSelected ? "text-[#7a28fa]" : "text-[#111111]"
+                                                            }`}
                                                     >
                                                         {name}
                                                     </span>
@@ -120,19 +110,6 @@ export function KakaoSearchResultPanel({ place, onClose, onSelect, onPreview }) 
                                                         </span>
                                                     )}
                                                 </div>
-
-                                                {/* [ADD] 선택 버튼 */}
-                                                {!isSelected && onSelect && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation(); // 부모(미리보기) 이벤트 버블링 방지
-                                                            onSelect(item);
-                                                        }}
-                                                        className="px-3 py-1 bg-[#7a28fa] text-white text-[11px] font-bold rounded-lg hover:bg-[#6620d6] transition-colors flex-shrink-0"
-                                                    >
-                                                        선택
-                                                    </button>
-                                                )}
                                             </div>
 
                                             {/* [ADD] 카테고리 */}
