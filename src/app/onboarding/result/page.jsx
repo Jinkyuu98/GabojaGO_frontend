@@ -858,8 +858,8 @@ export default function ResultPage() {
             onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
             onPreview={(loc) => {
               if (mapInstance.current && window.kakao) {
-                const lat = loc.y || loc.ptLatitude;
-                const lng = loc.x || loc.ptLongitude;
+                const lat = loc.y || loc.ptLatitude || loc.latitude;
+                const lng = loc.x || loc.ptLongitude || loc.longitude;
                 if (lat && lng) {
                   const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
                   mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
@@ -948,8 +948,8 @@ export default function ResultPage() {
               onSelect={(loc) => handleSelectLocation(loc, selectedPlace.dayIdx, selectedPlace.actIdx)}
               onPreview={(loc) => {
                 if (mapInstance.current && window.kakao) {
-                  const lat = loc.y || loc.ptLatitude;
-                  const lng = loc.x || loc.ptLongitude;
+                  const lat = loc.y || loc.ptLatitude || loc.latitude;
+                  const lng = loc.x || loc.ptLongitude || loc.longitude;
                   if (lat && lng) {
                     const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
                     mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
