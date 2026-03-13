@@ -324,11 +324,19 @@ export default function ResultPage() {
     // 2. 지도 이동 타이밍 늦춰서 리렌더링 깜빡임 회피
     setTimeout(() => {
       if (mapInstance.current && window.kakao) {
-        const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
-        const lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
+        let lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
+        let lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
 
         if (lat && lng) {
-          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          lat = parseFloat(lat);
+          lng = parseFloat(lng);
+          
+          // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
+          if (window.innerWidth < 1024) {
+             lat = lat - 0.005; // 대략적인 위도 오프셋 (지도를 아래로 밀어서 마커를 위로 올림)
+          }
+
+          const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
           mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
           mapInstance.current.panTo(moveLatLng); // 부드러운 이동
         }
@@ -347,11 +355,19 @@ export default function ResultPage() {
     // 지도를 해당 위치로 이동
     setTimeout(() => {
       if (mapInstance.current && window.kakao) {
-        const lat = location.y || location.ptLatitude || location.latitude;
-        const lng = location.x || location.ptLongitude || location.longitude;
+        let lat = location.y || location.ptLatitude || location.latitude;
+        let lng = location.x || location.ptLongitude || location.longitude;
         console.log('handleSelectLocation coords:', { lat, lng, location });
         if (lat && lng) {
-          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          lat = parseFloat(lat);
+          lng = parseFloat(lng);
+          
+          // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
+          if (window.innerWidth < 1024) {
+             lat = lat - 0.005; // 대략적인 위도 오프셋
+          }
+
+          const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
           mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
           mapInstance.current.panTo(moveLatLng); // 부드러운 이동
         }
@@ -861,7 +877,12 @@ export default function ResultPage() {
                 const lat = loc.y || loc.ptLatitude || loc.latitude;
                 const lng = loc.x || loc.ptLongitude || loc.longitude;
                 if (lat && lng) {
-                  const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+                  let parsedLat = parseFloat(lat);
+                  const parsedLng = parseFloat(lng);
+                  if (window.innerWidth < 1024) {
+                    parsedLat -= 0.005;
+                  }
+                  const moveLatLng = new window.kakao.maps.LatLng(parsedLat, parsedLng);
                   mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
                   mapInstance.current.panTo(moveLatLng);
                 }
