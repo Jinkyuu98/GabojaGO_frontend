@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { createSchedule, addScheduleLocation } from "../services/schedule";
+import { registerPlace } from "../services/place";
 
 export const useOnboardingStore = create(
   persist(
@@ -192,11 +193,31 @@ export const useOnboardingStore = create(
                   const loc = act.kakao_location; // 파이프라인(generate-loading)에서 미리 합쳐진 객체
 
                   if (loc && loc.iPK) {
+                    // 1) 장소를 먼저 Location 테이블에 등록 (이미 등록된 경우 무시)
+                    try {
+                      await registerPlace({
+                        iPK: loc.iPK,
+                        strName: loc.strName || "",
+                        strAddress: loc.strAddress || "",
+                        strGroupName: loc.strGroupName || "",
+                        strGroupCode: loc.strGroupCode || "",
+                        strGroupDetail: loc.strGroupDetail || "",
+                        strPhone: loc.strPhone || "",
+                        strLink: loc.strLink || "",
+                        chCategory: loc.chCategory || "",
+                        ptLatitude: String(loc.ptLatitude || loc.y || "0"),
+                        ptLongitude: String(loc.ptLongitude || loc.x || "0"),
+                      });
+                    } catch {
+                      // 이미 등록된 장소일 수 있으므로 무시
+                    }
+
+                    // 2) 일정-장소 매핑 추가
                     try {
                       await addScheduleLocation({
                         iScheduleFK: iScheduleFK,
                         iLocationFK: loc.iPK,
-                        dtSchedule: act.dtSchedule, // [MOD] generate-loading 단계에서 완성된 최종 시간 그대로 사용
+                        dtSchedule: act.dtSchedule,
                         strMemo: act.strMemo || "방문",
                       });
                     } catch (innerErr) {
