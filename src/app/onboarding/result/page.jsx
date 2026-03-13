@@ -26,6 +26,7 @@ export default function ResultPage() {
 
   // [ADD] 데스크톱 레이아웃 및 카카오맵 관련 상태
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false); // [ADD] SSR 에러 방지를 위한 isMobile 상태 선언
   const mapRef = useRef(null);
   const mapInstance = useRef(null);
   const markersRef = useRef([]);
@@ -246,19 +247,70 @@ export default function ResultPage() {
   }, [currentDayPlaces, mapInitCount]);
 
   useEffect(() => {
-    const h = window.innerHeight;
-    const max = h * 0.95;
-    const mid = h * 0.6;
-    const min = 100;
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+      
+      const h = window.innerHeight;
+      const max = h * 0.95;
+      const mid = h * 0.6;
+      const min = 100;
 
-    setMaxHeight(max);
-    setSheetHeight(mid); // Start in Middle
+      setMaxHeight(max);
+      // setSheetHeight(mid); // Start in Middle (Do we reset sheetHeight on every resize? Better not, but we can update defaults)
+      
+      SNAPS.LOW = min;
+      SNAPS.MID = mid;
+      SNAPS.HIGH = max;
+    };
 
-    // Update SNAPS mapping
-    SNAPS.LOW = min;
-    SNAPS.MID = mid;
-    SNAPS.HIGH = max;
+    handleResize();
+    setSheetHeight(window.innerHeight * 0.6); // set initial sheet height
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // [ADD] 바텀시트 높이 변경 시 지도 리사이징(relayout) 동기화
+  useEffect(() => {
+    if (mapInstance.current && window.kakao) {
+      let iterations = 0;
+      const interval = setInterval(() => {
+        if (mapInstance.current) {
+          mapInstance.current.relayout();
+        }
+        iterations++;
+        // Stop after 20 iterations (approx 300ms)
+        if (iterations >= 20) {
+          clearInterval(interval);
+          
+          if (skipSetBounds.current) return;
+          
+          // Re-center logic
+          const places = currentDayPlaces;
+          if (mapInstance.current && places.length > 0) {
+            const bounds = new window.kakao.maps.LatLngBounds();
+            let hasValidCoords = false;
+            places.forEach(p => {
+              const lat = p.kakao?.y || p.kakao?.ptLatitude || p.y || p.ptLatitude;
+              const lng = p.kakao?.x || p.kakao?.ptLongitude || p.x || p.ptLongitude;
+              if (lat && lng) {
+                bounds.extend(new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng)));
+                hasValidCoords = true;
+              }
+            });
+            if (hasValidCoords) {
+              if (places.length === 1) {
+                mapInstance.current.setCenter(bounds.getSouthWest());
+                if (window.innerWidth < 1024) mapInstance.current.panBy(0, 150);
+              } else {
+                mapInstance.current.setBounds(bounds, 50, 50, 50, 50);
+              }
+            }
+          }
+        }
+      }, 16);
+      return () => clearInterval(interval);
+    }
+  }, [sheetHeight, currentDayPlaces, mapInitCount]);
 
   // Calculate sheet percentage (0-100%)
   const isCollapsed = sheetHeight <= SNAPS.LOW + 20;
@@ -324,21 +376,14 @@ export default function ResultPage() {
     // 2. 지도 이동 타이밍 늦춰서 리렌더링 깜빡임 회피
     setTimeout(() => {
       if (mapInstance.current && window.kakao) {
-        let lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
-        let lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
+        const lat = place.kakao?.y || place.kakao?.ptLatitude || place.y || place.ptLatitude;
+        const lng = place.kakao?.x || place.kakao?.ptLongitude || place.x || place.ptLongitude;
 
         if (lat && lng) {
-          lat = parseFloat(lat);
-          lng = parseFloat(lng);
-          
-          // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
-          if (window.innerWidth < 1024) {
-             lat = lat - 0.015; // 대략적인 위도 오프셋 (바텀시트 높이 고려하여 넉넉히 올림)
-          }
-
-          const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
-          mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
-          mapInstance.current.panTo(moveLatLng); // 부드러운 이동
+          // [MOD] 마커가 정중앙에 오도록 오프셋 제거 및 줌 레벨 조정 (6 -> 4)
+          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          mapInstance.current.setLevel(4, { animate: true });
+          mapInstance.current.panTo(moveLatLng);
         }
       }
     }, 10);
@@ -359,17 +404,10 @@ export default function ResultPage() {
         let lng = location.x || location.ptLongitude || location.longitude;
         console.log('handleSelectLocation coords:', { lat, lng, location });
         if (lat && lng) {
-          lat = parseFloat(lat);
-          lng = parseFloat(lng);
-          
-          // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
-          if (window.innerWidth < 1024) {
-             lat = lat - 0.015; // 대략적인 위도 오프셋 (바텀시트 높이 고려)
-          }
-
-          const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
-          mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
-          mapInstance.current.panTo(moveLatLng); // 부드러운 이동
+          // [MOD] 마커가 정중앙에 오도록 오프셋 제거 및 줌 레벨 조정 (6 -> 4)
+          const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+          mapInstance.current.setLevel(4, { animate: true });
+          mapInstance.current.panTo(moveLatLng);
         }
       }
     }, 10);
@@ -877,13 +915,9 @@ export default function ResultPage() {
                 const lat = loc.y || loc.ptLatitude || loc.latitude;
                 const lng = loc.x || loc.ptLongitude || loc.longitude;
                 if (lat && lng) {
-                  let parsedLat = parseFloat(lat);
-                  const parsedLng = parseFloat(lng);
-                  if (window.innerWidth < 1024) {
-                    parsedLat -= 0.015;
-                  }
-                  const moveLatLng = new window.kakao.maps.LatLng(parsedLat, parsedLng);
-                  mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+                  // [MOD] 마커가 정중앙에 오도록 오프셋 제거 및 줌 레벨 조정 (6 -> 4)
+                  const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
+                  mapInstance.current.setLevel(4, { animate: true });
                   mapInstance.current.panTo(moveLatLng);
                 }
               }
@@ -895,8 +929,11 @@ export default function ResultPage() {
       {/* ----------------- Right Map & Mobile Area ----------------- */}
       <div className="relative flex-1 h-full overflow-hidden">
         {/* Actual Map Render Target */}
-        {/* [MOD] bg-[#f5f5f5]를 고정하고 절대 unmount 되지 않도록 유지 */}
-        <div className="absolute inset-0 w-full h-full bg-[#f5f5f5] z-0">
+        {/* [MOD] bg-[#f5f5f5]를 고정하고 절대 unmount 되지 않도록 유지, 모바일에서 바텀 시트 높이만큼 하단 여백 추가 */}
+        <div 
+          className="absolute inset-0 w-full h-full bg-[#f5f5f5] z-0"
+          style={{ paddingBottom: isMobile ? `${sheetHeight}px` : '0px' }}
+        >
           <div ref={mapRef} className="w-full h-full" />
         </div>
         <div className="lg:hidden fixed top-0 left-0 right-0 px-6 pt-4 pb-4 flex items-center justify-between bg-white z-10 shadow-sm">
@@ -972,8 +1009,9 @@ export default function ResultPage() {
                   const lat = loc.y || loc.ptLatitude || loc.latitude;
                   const lng = loc.x || loc.ptLongitude || loc.longitude;
                   if (lat && lng) {
+                    // [MOD] 마커가 정중앙에 오도록 줌 레벨 조정 (6 -> 4)
                     const moveLatLng = new window.kakao.maps.LatLng(parseFloat(lat), parseFloat(lng));
-                    mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
+                    mapInstance.current.setLevel(4, { animate: true });
                     mapInstance.current.panTo(moveLatLng);
                   }
                 }
