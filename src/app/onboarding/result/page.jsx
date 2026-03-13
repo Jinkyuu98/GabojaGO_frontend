@@ -11,7 +11,7 @@ import { KakaoSearchResultPanel } from "./KakaoSearchResultPanel"; // [ADD] 카�
 
 export default function ResultPage() {
   const router = useRouter();
-  const { saveTrip, generatedTripData, updateActivityLocation } = useOnboardingStore();
+  const { saveTrip, generatedTripData, updateActivityLocation, travelData } = useOnboardingStore(); // [MOD] travelData 추가 (여행지명 표시용)
   const { userId } = useCurrentUser(); // [ADD] 로그인 상태 확인용
   const [selectedTab, setSelectedTab] = useState("일정");
   const [selectedPlace, setSelectedPlace] = useState(null); // [ADD] 카카오 검색 결과 패널 표시용
@@ -126,9 +126,15 @@ export default function ResultPage() {
     ],
   };
 
+  // [MOD] travelData.location을 기반으로 타이틀 동적 계산 (generatedTripData에는 strWhere 없음)
+  const tripTitle = travelData?.location
+    ? `${travelData.location} 여행`
+    : MOCK_TRIP.title;
+
   // Transform AI Data to UI mockup structure
   const trip = generatedTripData ? {
     ...MOCK_TRIP,
+    title: tripTitle, // [MOD] 동적 타이틀 적용
     days: generatedTripData.day_schedules?.map((dayObj, dayIdx) => ({
       places: dayObj.activities?.map((act, actIdx) => ({
         name: act.kakao_location?.strName || act.place_name,
@@ -796,7 +802,7 @@ export default function ResultPage() {
                 />
               </button>
               <h1 className="text-lg font-semibold text-[#111111] tracking-[-0.5px]">
-                {trip.title}
+                {tripTitle} {/* [MOD] 고정 타이틀 대신 동적 타이틀 표시 */}
               </h1>
             </div>
           </div>
@@ -948,7 +954,7 @@ export default function ResultPage() {
               />
             </button>
             <h1 className="text-lg font-semibold text-[#111111] tracking-[-0.5px]">
-              {trip.title}
+              {tripTitle} {/* [MOD] 고정 타이틀 대신 동적 타이틀 표시 */}
             </h1>
           </div>
         </div>

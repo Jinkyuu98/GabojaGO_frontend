@@ -809,10 +809,10 @@ export default function TripDetailPage() {
   const [selectedTab, setSelectedTab] = useState(initialTab);
   const [selectedDay, setSelectedDay] = useState(1);
 
-  // [ADD] 탭이나 날짜가 변경될 때 선택된 사진 초기화
+  // [MOD] 탭/날짜가 변경될 때 선택된 사진 초기화
   useEffect(() => {
     setSelectedPhoto(null);
-  }, [selectedDay, selectedTab]);
+  }, [selectedDay, selectedTab, selectedPhotoUser]);
 
   // [ADD] 홈 화면 등에서 '영수증 등록' 또는 '사진 등록' 버튼을 통해 진입했을 때 자동으로 파일 선택창을 띄워주는 로직
   useEffect(() => {
@@ -852,6 +852,10 @@ export default function TripDetailPage() {
   const markersRef = useRef([]);
   const polylinesRef = useRef([]); // [ADD] 사진 동선(Polyline) 관리를 위한 Ref
   const skipBoundsUpdateRef = useRef(false); // [ADD] 사진 클릭으로 인한 불필요한 bounds 조정을 막아 panTo 애니메이션 끊김(비정상 종료) 방지
+  // [MOD] photoBoundsSetRef 제거 → lastBoundsTriggerRef로 교체
+  // selectedPhoto만 변경되는 경우(말풍선 토글)에는 setBounds를 스킵하기 위해
+  // 탭+날짜+선택사용자 조합을 키로 저장하여, 키 변화 시에만 bounds 재조정하도로 컨트롤
+  const lastBoundsTriggerRef = useRef(null);
   // [ADD] 가로 스크롤 및 드래그 관련 Ref와 상태
   const dayTabsRef = useRef(null);
   const [isMouseDragging, setIsMouseDragging] = useState(false);
@@ -902,31 +906,6 @@ export default function TripDetailPage() {
         iterations++;
         if (iterations >= 20) {
           clearInterval(interval);
-
-          // [MOD] 사용자가 지도를 자유롭게 조작 중(panTo 등)일 때는 강제로 bounds를 재조정하지 않음 (충돌/크래시 방지)
-          if (skipBoundsUpdateRef.current) return;
-
-          // 애니메이션이 완전히 끝난 후 한 번만 중심점을 잡아주어 마커가 온전히 보이게 위치 조정
-          const places = trip?.days?.[selectedDay - 1]?.places || [];
-          if (mapInstance.current && places.length > 0) {
-            const bounds = new window.kakao.maps.LatLngBounds();
-            let hasValidCoords = false;
-            places.forEach(p => {
-              if (p.latitude && p.longitude) {
-                bounds.extend(new window.kakao.maps.LatLng(p.latitude, p.longitude));
-                hasValidCoords = true;
-              }
-            });
-            if (hasValidCoords) {
-              if (places.filter(p => p.latitude && p.longitude).length === 1) {
-                mapInstance.current.setCenter(bounds.getSouthWest());
-                if (window.innerWidth < 1024) mapInstance.current.panBy(0, 150);
-              } else {
-                // 하단 패딩은 CSS단에서 이미 sheetHeight로 잡혀 있으므로 API의 bottom 패딩은 여유분만 줌
-                mapInstance.current.setBounds(bounds, 50, 50, 50, 50);
-              }
-            }
-          }
         }
       }, 16);
 
@@ -1312,9 +1291,16 @@ export default function TripDetailPage() {
 
     const hasValidMarkers = markersRef.current.length > 0;
 
+    // [MOD] selectedPhoto만 변경된 경우(말풍선 선택/해제)에는 setBounds를 스킵하여 포커싱이 초기화되는 현상 방지
+    // triggerKey = 탭 + 날짜 + 선택사용자 조합. selectedPhoto는 키에 포함하지 않음
+    // → 탭/날짜/사용자가 바뀌면 키가 달라져 bounds 재계산 실행
+    // → 말풍선 토글(selectedPhoto만 변경)이면 키가 같으므로 setBounds 스킵
+    const currentTriggerKey = `${selectedTab}__${selectedDay}__${selectedPhotoUser ?? ""}`;
+    const shouldSkipBoundsUpdate = lastBoundsTriggerRef.current === currentTriggerKey;
+
     // [MOD] 사용자가 사진 클릭을 통해 특정 위치로 이동(panTo) 애니메이션 중일 때는 전체 영역(setBounds) 조정을 건너뜀
     // 이를 통해 panTo 이동 중간에 setBounds가 개입하여 지도가 하얗게 변하는 크래시 현상을 방지
-    if (hasValidMarkers && !isBoundsEmpty && !skipBoundsUpdateRef.current) {
+    if (hasValidMarkers && !isBoundsEmpty && !skipBoundsUpdateRef.current && !shouldSkipBoundsUpdate) {
       if (markersRef.current.length === 1) {
         map.setCenter(bounds.getSouthWest());
         map.setLevel(isMobile ? 3 : 4);
@@ -1324,12 +1310,11 @@ export default function TripDetailPage() {
         }
       } else {
         map.setBounds(bounds, 50, 50, paddingBottom, 50);
-        if (map.getLevel() > 7) {
-          map.setLevel(7);
-        }
       }
+      // [MOD] bounds를 실제로 적용한 triggerKey 기록 (같은 키로 재실행 시 setBounds 스킵)
+      lastBoundsTriggerRef.current = currentTriggerKey;
     }
-  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount, selectedPhoto, selectedPhotoUser]); // [MOD] selectedPhotoUser 요소 추가
+  }, [currentDayPlaces, currentDayRecords, trip?.extraRecords, selectedTab, selectedDay, isMapLoaded, mapInitCount, selectedPhoto, selectedPhotoUser]);
 
   // Define 3-tier snap heights
   const SNAPS = {

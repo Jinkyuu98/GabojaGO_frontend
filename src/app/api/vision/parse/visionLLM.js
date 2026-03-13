@@ -10,7 +10,7 @@ export class ExpenseGPT {
     constructor() {
         this.llm = new ChatOpenAI({
             modelName: process.env.LLM_MODEL_EXPENSE || "gpt-4o",
-            // temperature: 0, (일부 모델에서 미지원하여 제외)
+            temperature: 0, //일부 모델에서 미지원하여 제외
         });
 
         this.outputParser = StructuredOutputParser.fromZodSchema(ExpenseModelSchema);
