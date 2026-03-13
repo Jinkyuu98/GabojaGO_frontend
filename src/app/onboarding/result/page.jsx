@@ -333,7 +333,7 @@ export default function ResultPage() {
           
           // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
           if (window.innerWidth < 1024) {
-             lat = lat - 0.005; // 대략적인 위도 오프셋 (지도를 아래로 밀어서 마커를 위로 올림)
+             lat = lat - 0.015; // 대략적인 위도 오프셋 (바텀시트 높이 고려하여 넉넉히 올림)
           }
 
           const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
@@ -364,7 +364,7 @@ export default function ResultPage() {
           
           // [ADD] 모바일 환경(Bottom Sheet 적용)일 경우 마커가 가려지지 않도록 위도(lat)를 아래로 오프셋
           if (window.innerWidth < 1024) {
-             lat = lat - 0.005; // 대략적인 위도 오프셋
+             lat = lat - 0.015; // 대략적인 위도 오프셋 (바텀시트 높이 고려)
           }
 
           const moveLatLng = new window.kakao.maps.LatLng(lat, lng);
@@ -880,7 +880,7 @@ export default function ResultPage() {
                   let parsedLat = parseFloat(lat);
                   const parsedLng = parseFloat(lng);
                   if (window.innerWidth < 1024) {
-                    parsedLat -= 0.005;
+                    parsedLat -= 0.015;
                   }
                   const moveLatLng = new window.kakao.maps.LatLng(parsedLat, parsedLng);
                   mapInstance.current.setLevel(6); // 줌 레벨 살짝 축소
