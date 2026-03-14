@@ -1797,7 +1797,7 @@ export default function TripDetailPage() {
                 {currentDayPlaces.map((place, idx) => (
                   <div key={`place-${idx}-${place.id}`} className="relative">
                     <div
-                      className="ml-6 flex items-start gap-4 cursor-pointer"
+                      className="flex items-start gap-4 cursor-pointer"
                       onClick={() => handlePlaceClick(place, idx)}
                     >
                       <div className="flex flex-col items-center gap-2 pt-1">
