@@ -1284,10 +1284,11 @@ export default function TripDetailPage() {
     // [MOD] 모든 마커가 보이도록 지도 범위 조정
     const isMobile = window.innerWidth < 1024;
 
-    // 모바일에서는 바텀시트가 하단 절반을 가리므로, 마커가 화면 "상단"에 몰리도록 하단 패딩을 매우 크게 줍니다.
-    // 지도 컨테이너 자체가 바텀시트 위치에 따라 transform-y 로 통째로 이동하므로,
-    // 초기 렌더링 시 이렇게 위로 몰아주면 바텀시트가 오르내릴 때 자연스럽게 같이 상하로 움직입니다.
-    const paddingBottom = isMobile ? 550 : 50;
+    // 모바일에서는 모바일 뷰포트 자체(h-full + pb-[sheetHeight])가 
+    // 이미 바텀시트를 제외한 상단 영역에만 딱 맞게 그려지므로,
+    // bounds 설정 시 추가적인 큰 하단 패딩(550px 등)을 주면 지도 영역이 찌그러져 
+    // 엄청나게 축소(줌아웃)되는 문제가 발생합니다. 따라서 통일된 기본 패딩만 사용합니다.
+    const paddingBottom = 50;
 
     const hasValidMarkers = markersRef.current.length > 0;
 
@@ -1304,10 +1305,6 @@ export default function TripDetailPage() {
       if (markersRef.current.length === 1) {
         map.setCenter(bounds.getSouthWest());
         map.setLevel(isMobile ? 3 : 4);
-        if (isMobile) {
-          // 단일 마커일 때 화면 최상단으로 조금 올려줌 (지도 컨테이너 전체 이동과 시너지)
-          setTimeout(() => map.panBy(0, 150), 50);
-        }
       } else {
         map.setBounds(bounds, 50, 50, paddingBottom, 50);
       }
