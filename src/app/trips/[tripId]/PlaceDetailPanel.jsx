@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom"; // [FIX] 그룹 선택 모달을 DOM 최상위로 렌더링하여 부모 스크롤 컨텍스트 회피
 import Image from "next/image";
 import { getPlaceReviews, addPlaceReview, modifyPlaceReview, removePlaceReview } from "../../../services/review";
 import { getUserInfo } from "../../../services/auth"; // [ADD] 유저 정보 조회 추가
@@ -190,7 +191,8 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
     if (!normalizedPlace) return null;
 
     return (
-        <div className="flex flex-col h-full bg-white relative w-full overflow-y-auto scrollbar-hide pt-2 lg:px-2">
+        <div className={`flex flex-col h-full bg-white relative w-full scrollbar-hide pt-2 lg:px-2 ${showGroupSelector ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+            {/* [FIX] 그룹 선택 모달이 열리면 부모 스크롤 차단하여 터치 이벤트 충돌 방지 */}
             {/* 상단 닫기/뒤로가기 헤더 */}
             <div className="bg-white flex items-center mb-6 pb-2 px-4 pt-4">
                 <button
@@ -264,16 +266,32 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
                     </button>
                 </div>
 
-                {showGroupSelector && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/50 sm:items-center p-4">
-                        <div className="w-full max-w-[400px] bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden animate-slide-up">
+                {/* [FIX] 그룹 선택 모달 - createPortal로 document.body에 렌더링하여 부모 스크롤 컨텍스트 완전 회피 */}
+                {showGroupSelector && mounted && createPortal(
+                    <div
+                        className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50 sm:items-center p-4"
+                        onClick={() => setShowGroupSelector(false)}
+                        onTouchMove={(e) => e.stopPropagation()}
+                    >
+                        <div
+                            className="w-full max-w-[400px] bg-white rounded-t-[20px] sm:rounded-[20px] overflow-hidden animate-slide-up"
+                            onClick={(e) => e.stopPropagation()}
+                        >
                             <div className="px-5 py-4 border-b border-[#f2f4f6] flex items-center justify-between">
                                 <h3 className="text-[17px] font-bold text-[#111]">저장할 그룹 선택</h3>
                                 <button onClick={() => setShowGroupSelector(false)} className="text-[#abb1b9]">
                                     <Image src="/icons/close-icon.svg" alt="close" width={24} height={24} />
                                 </button>
                             </div>
-                            <div className="max-h-[300px] overflow-y-auto px-2 py-2">
+                            {/* [FIX] 앱 환경 스크롤 대응: overflow-y-scroll + touch 관련 스타일 */}
+                            <div
+                                className="max-h-[60vh] overflow-y-scroll px-2 py-2"
+                                style={{
+                                    WebkitOverflowScrolling: 'touch',
+                                    touchAction: 'pan-y',
+                                    overscrollBehavior: 'contain',
+                                }}
+                            >
                                 {favoriteGroups.map((group) => (
                                     <button
                                         key={group.iPK}
@@ -324,7 +342,8 @@ export function PlaceDetailPanel({ place, onClose, onFavoriteSaved }) {
                                 ))}
                             </div>
                         </div>
-                    </div>
+                    </div>,
+                    document.body
                 )}
 
                 <div className="h-[1px] bg-[#f2f4f6] mt-2" />
