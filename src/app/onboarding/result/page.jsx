@@ -984,9 +984,10 @@ export default function ResultPage() {
 
 
       {/* ----------------- Mobile Bottom Sheet (Hidden on Desktop) ----------------- */}
+      {/* [MOD] flex flex-col 추가 — 자식 flex-1이 정상 동작하도록 수정 */}
       <div
         ref={sheetRef}
-        className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20"
+        className="lg:hidden fixed left-0 right-0 bg-white rounded-t-xl shadow-[0px_-4px_12px_rgba(0,0,0,0.04)] transition-all z-20 flex flex-col"
         style={{
           height: `${sheetHeight}px`,
           bottom: 0,
@@ -1004,8 +1005,8 @@ export default function ResultPage() {
 
         {/* [MOD] 블랙시트 콘텐츠: selectedPlace가 있으면 카카오 검색 결과, 없으면 기존 일정 탭 */}
         {selectedPlace ? (
-          // [ADD] 장소 클릭 시: 바로 바로가기 버튼이 있는 검색 결과를 바로시트 내부에 표시
-          <div className="flex-1 overflow-hidden flex flex-col">
+          // [FIX] overflow-y-auto로 변경하여 모바일에서 스크롤 가능하도록 수정
+          <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
             <KakaoSearchResultPanel
               place={selectedPlace}
               onClose={() => setSelectedPlace(null)}
