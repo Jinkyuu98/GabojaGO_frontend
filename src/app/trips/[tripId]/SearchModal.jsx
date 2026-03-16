@@ -118,17 +118,26 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
     const markerRef = useRef(null);
     const inputRef = useRef(null);
 
-    // Initialize Map
+    // [FIX] Initialize Map - SDK가 이미 완전히 로드된 경우와 아닌 경우를 분기하여 지도 생성
     useEffect(() => {
         if (isOpen && window.kakao && mapRef.current && !mapInstance.current) {
-            window.kakao.maps.load(() => {
+            const createMap = () => {
+                if (!mapRef.current || mapInstance.current) return;
                 const options = {
                     center: new window.kakao.maps.LatLng(37.5665, 126.978),
                     level: 3,
                 };
                 const map = new window.kakao.maps.Map(mapRef.current, options);
                 mapInstance.current = map;
-            });
+            };
+
+            // [FIX] SDK가 이미 완전 로드된 경우 (Map 생성자가 존재) → 직접 생성
+            // autoload=false로 로드 후 이미 load() 완료된 상태에서는 다시 load()를 호출해도 콜백이 실행되지 않을 수 있음
+            if (window.kakao.maps?.Map) {
+                createMap();
+            } else {
+                window.kakao.maps.load(createMap);
+            }
         }
 
         if (isOpen && mapInstance.current) {
@@ -147,6 +156,8 @@ export default function SearchModal({ isOpen, onClose, tripId, day, formattedDat
             setSelectedCategory("전체"); // [ADD] 닫힐 때 카테고리 초기화
             if (markerRef.current) markerRef.current.setMap(null);
             markerRef.current = null;
+            // [FIX] 모달 닫힐 때 mapInstance 초기화하여 다음 열림 시 새로 생성되도록 보장
+            mapInstance.current = null;
         }
     }, [isOpen]);
 
